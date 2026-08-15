@@ -1,0 +1,874 @@
+/* Use local system fonts (no external dependency — prevents WebView2 black
+   screen when fonts.googleapis.com is slow or unreachable) */
+@import "tailwindcss";
+
+@theme {
+  /* ============================================
+     SEMANTIC COLOR SYSTEM (Material Design)
+     Light/Dark variants designed together for consistency
+     ============================================ */
+  
+  /* Primary - Indigo (Professional, works for education) */
+  --color-primary: #4F46E5;          /* Indigo 600 */
+  --color-primary-hover: #4338CA;    /* Indigo 700 */
+  --color-primary-light: #818CF8;    /* Indigo 400 */
+  --color-primary-foreground: #FFFFFF;
+  
+  /* Secondary */
+  --color-secondary: #F1F5F9;        /* Slate 100 */
+  --color-secondary-foreground: #334155; /* Slate 700 */
+  
+  /* Accent - Amber (CTA color) */
+  --color-accent: #D97706;           /* Amber 600 */
+  --color-accent-foreground: #FFFFFF;
+  
+  /* Semantic colors */
+  --color-destructive: #DC2626;      /* Red 600 */
+  --color-destructive-foreground: #FFFFFF;
+  --color-success: #16A34A;          /* Green 600 */
+  --color-success-foreground: #FFFFFF;
+  --color-warning: #D97706;          /* Amber 600 */
+  --color-warning-foreground: #FFFFFF;
+  --color-info: #2563EB;             /* Blue 600 */
+  --color-info-foreground: #FFFFFF;
+
+  /* ============================================
+     Tailwind palette bridge — @theme overrides Tailwind's default variable namespace,
+     so utilities like .bg-yellow-50 / .text-yellow-700 that are not explicitly listed here
+     reference a var(--color-yellow-*) that resolves to undefined → the element turns transparent/disappears (e.g. the
+     "Due Soon" hint on the assignments page is nearly invisible in light mode). The following fills in the common red/yellow/green/amber/
+     sky/indigo/purple/pink/emerald steps, with values taken from the tailwindcss default palette.
+     ============================================ */
+  --color-red-50: #FEF2F2;
+  --color-red-100: #FEE2E2;
+  --color-red-200: #FECACA;
+  --color-red-300: #FCA5A5;
+  --color-red-400: #F87171;
+  --color-red-500: #EF4444;
+  --color-red-600: #DC2626;
+  --color-red-700: #B91C1C;
+  --color-red-800: #991B1B;
+  --color-red-900: #7F1D1D;
+
+  --color-yellow-50: #FEFCE8;
+  --color-yellow-100: #FEF9C3;
+  --color-yellow-200: #FEF08A;
+  --color-yellow-300: #FDE047;
+  --color-yellow-400: #FACC15;
+  --color-yellow-500: #EAB308;
+  --color-yellow-600: #CA8A04;
+  --color-yellow-700: #A16207;
+  --color-yellow-800: #854D0E;
+  --color-yellow-900: #713F12;
+
+  --color-amber-50: #FFFBEB;
+  --color-amber-100: #FEF3C7;
+  --color-amber-200: #FDE68A;
+  --color-amber-300: #FCD34D;
+  --color-amber-400: #FBBF24;
+  --color-amber-500: #F59E0B;
+  --color-amber-600: #D97706;
+  --color-amber-700: #B45309;
+  --color-amber-800: #92400E;
+  --color-amber-900: #78350F;
+
+  --color-green-50: #F0FDF4;
+  --color-green-100: #DCFCE7;
+  --color-green-200: #BBF7D0;
+  --color-green-300: #86EFAC;
+  --color-green-400: #4ADE80;
+  --color-green-500: #22C55E;
+  --color-green-600: #16A34A;
+  --color-green-700: #15803D;
+  --color-green-800: #166534;
+  --color-green-900: #14532D;
+
+  --color-emerald-50: #ECFDF5;
+  --color-emerald-100: #D1FAE5;
+  --color-emerald-200: #A7F3D0;
+  --color-emerald-300: #6EE7B7;
+  --color-emerald-400: #34D399;
+  --color-emerald-500: #10B981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065F46;
+  --color-emerald-900: #064E3B;
+
+  --color-blue-50: #EFF6FF;
+  --color-blue-100: #DBEAFE;
+  --color-blue-200: #BFDBFE;
+  --color-blue-300: #93C5FD;
+  --color-blue-400: #60A5FA;
+  --color-blue-500: #3B82F6;
+  --color-blue-600: #2563EB;
+  --color-blue-700: #1D4ED8;
+  --color-blue-800: #1E40AF;
+  --color-blue-900: #1E3A8A;
+
+  --color-sky-50: #F0F9FF;
+  --color-sky-100: #E0F2FE;
+  --color-sky-200: #BAE6FD;
+  --color-sky-300: #7DD3FC;
+  --color-sky-400: #38BDF8;
+  --color-sky-500: #0EA5E9;
+  --color-sky-600: #0284C7;
+
+  --color-indigo-50: #EEF2FF;
+  --color-indigo-100: #E0E7FF;
+  --color-indigo-200: #C7D2FE;
+  --color-indigo-300: #A5B4FC;
+  --color-indigo-400: #818CF8;
+  --color-indigo-500: #6366F1;
+  --color-indigo-600: #4F46E5;
+  --color-indigo-700: #4338CA;
+
+  --color-purple-50: #FAF5FF;
+  --color-purple-100: #F3E8FF;
+  --color-purple-300: #D8B4FE;
+  --color-purple-500: #A855F7;
+  --color-purple-600: #9333EA;
+  --color-purple-700: #7E22CE;
+
+  --color-pink-500: #EC4899;
+  --color-pink-600: #DB2777;
+
+  --color-orange-500: #F97316;
+  --color-orange-600: #EA580C;
+
+  --color-teal-500: #14B8A6;
+  --color-teal-600: #0D9488;
+  --color-teal-700: #0F766E;
+
+  --color-cyan-500: #06B6D4;
+  --color-cyan-600: #0891B2;
+  
+  /* ============================================
+     LIGHT MODE (Default)
+     Pure white backgrounds, pure black text
+     ============================================ */
+  
+  /* Background layers - Pure white */
+  --color-background: #FFFFFF;       /* Pure white */
+  --color-surface: #FFFFFF;          /* Pure white */
+  --color-surface-elevated: #FFFFFF; /* Pure white */
+  
+  /* Text colors - Pure black on white */
+  --color-foreground: #111111;       /* Near-black - 18.7:1 on white, still well past AAA.
+                                        Softened from pure #000 so body text stops vibrating
+                                        against the pure-white surface. */
+  --color-muted-foreground: #666666; /* Dark gray - 5.7:1 on white */
+  
+  /* Card - Pure white */
+  --color-card: #FFFFFF;
+  --color-card-foreground: #000000;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #000000;
+  
+  /* Muted - Light gray */
+  --color-muted: #F5F5F5;            /* Light gray */
+  
+  /* Border & Input */
+  --color-border: #E0E0E0;           /* Light gray */
+  --color-input: #E0E0E0;
+  --color-ring: #4F46E5;             /* Focus ring matches primary */
+  
+  /* Border radius - Consistent scale */
+  --radius-sm: 0.375rem;   /* 6px */
+  --radius: 0.75rem;       /* 12px */
+  --radius-lg: 1rem;       /* 16px */
+  --radius-xl: 1.25rem;    /* 20px */
+  --radius-2xl: 1.5rem;    /* 24px */
+  
+  /* Shadows - Light mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.25);
+  
+  /* ============================================
+     EASING CURVES (Emil Kowalski's standards)
+     ============================================ */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  
+  /* ============================================
+     DURATION SCALE
+     ============================================ */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+}
+
+/* ============================================
+   DARK MODE
+   Pure black backgrounds, pure white text
+   ============================================ */
+.dark {
+  /* Primary - Lighter indigo for dark backgrounds */
+  --color-primary: #818CF8;          /* Indigo 400 */
+  --color-primary-hover: #6366F1;    /* Indigo 500 */
+  --color-primary-light: #A5B4FC;    /* Indigo 300 */
+  --color-primary-foreground: #000000;
+  
+  /* Secondary */
+  --color-secondary: #1A1A1A;        /* Dark gray */
+  --color-secondary-foreground: #E0E0E0; /* Light gray */
+  
+  /* Accent */
+  --color-accent: #FBBF24;           /* Amber 400 */
+  --color-accent-foreground: #000000;
+  
+  /* Semantic colors - Adjusted for dark mode */
+  --color-destructive: #EF4444;      /* Red 500 */
+  --color-destructive-foreground: #FFFFFF;
+  --color-success: #22C55E;          /* Green 500 */
+  --color-success-foreground: #FFFFFF;
+  --color-warning: #FBBF24;          /* Amber 400 */
+  --color-warning-foreground: #000000;
+  --color-info: #3B82F6;             /* Blue 500 */
+  --color-info-foreground: #FFFFFF;
+  
+  /* Background layers - Pure black */
+  --color-background: #000000;       /* Pure black */
+  --color-surface: #000000;          /* Pure black */
+  --color-surface-elevated: #1A1A1A; /* Slightly lighter for elevation */
+  
+  /* Text colors - Pure white on black */
+  --color-foreground: #FFFFFF;       /* Pure white - 21:1 on black */
+  --color-muted-foreground: #999999; /* Light gray - 5.7:1 on black */
+  
+  /* Card - Near black */
+  --color-card: #000000;
+  --color-card-foreground: #FFFFFF;
+  --color-popover: #000000;
+  --color-popover-foreground: #FFFFFF;
+  
+  /* Muted */
+  --color-muted: #1A1A1A;            /* Dark gray */
+  
+  /* Border & Input */
+  --color-border: #4D4D4D;           /* Dark gray - 2.5:1 on black. Lifted from #333333
+                                        (1.66:1) because card and background are both pure
+                                        black and the shadows are black-on-black, so this
+                                        1px line is the only thing that defines a card. */
+  --color-input: #595959;            /* Exactly 3:1 on black. Form controls are where
+                                        WCAG 1.4.11 actually bites, and a field the user
+                                        must find and click needs more edge than a divider. */
+  --color-ring: #818CF8;
+  
+  /* Shadows - Darker for dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.6), 0 4px 6px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6), 0 10px 10px rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.7);
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* 1.5 for interface text. 1.6 belongs to running prose and made every label, card
+     title and badge taller than it needed to be; long-form copy opts back in via
+     .line-length. */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   AUTOFILL STYLES (Fix white background on autofill)
+   ============================================ */
+
+/* Light mode autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--color-background) inset !important;
+  -webkit-text-fill-color: var(--color-foreground) !important;
+  caret-color: var(--color-foreground) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Dark mode autofill */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--color-background) inset !important;
+  -webkit-text-fill-color: var(--color-foreground) !important;
+  caret-color: var(--color-foreground) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ============================================
+   ACCESSIBILITY (CRITICAL)
+   ============================================ */
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.skip-link {
+  position: fixed;
+  top: -9999px;
+  left: 16px;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  padding: 8px 16px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-100%);
+  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus-visible {
+  top: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--color-card) !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-border: var(--color-foreground);
+  }
+  .glass {
+    border-width: 2px;
+  }
+}
+
+/* ============================================
+   TOUCH & INTERACTION (CRITICAL)
+   ============================================ */
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.touch-spacing {
+  gap: 8px;
+}
+
+[role="button"],
+button,
+a,
+input[type="submit"],
+input[type="button"],
+.clickable,
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* ============================================
+   GLASS MORPHISM (Apple Materials & Depth)
+   ============================================ */
+
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: var(--shadow-md);
+}
+
+.dark .glass {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================
+   CARD INTERACTIONS
+   ============================================ */
+
+/* P3: remove the global will-change, only create a compositing layer dynamically on :hover, to lower GPU memory usage */
+/* Course cards (square/large blocks) keep a noticeable scale; long list cards (the ones with buttons)
+   only get a slight translateY + deeper shadow, since too large a scale makes the embedded buttons "jump" */
+.card-hover {
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.card-hover:hover {
+  will-change: transform;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-hover:active {
+  transform: translateY(0);
+}
+
+/* Large block cards in the course card grid — keep the scale animation to boost visual appeal */
+.card-hover-scale {
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.card-hover-scale:hover {
+  will-change: transform;
+  transform: scale(1.02);
+  box-shadow: var(--shadow-lg);
+}
+
+.hover-lift {
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+
+.nav-active {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+}
+
+.nav-item {
+  transition: background-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.nav-item:hover {
+  background-color: var(--color-secondary);
+  color: var(--color-secondary-foreground);
+}
+
+
+/* ============================================
+   ANIMATIONS (Emil Kowalski's standards)
+   ============================================ */
+
+.fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp var(--duration-normal) var(--ease-out);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scale-in {
+  animation: scaleIn var(--duration-normal) var(--ease-out);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pop-in {
+  animation: popIn var(--duration-slow) var(--ease-spring);
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Stagger animation - 50ms per item */
+.stagger-item {
+  opacity: 0;
+  animation: staggerFadeIn var(--duration-normal) var(--ease-out) forwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0ms; }
+.stagger-item:nth-child(2) { animation-delay: 50ms; }
+.stagger-item:nth-child(3) { animation-delay: 100ms; }
+.stagger-item:nth-child(4) { animation-delay: 150ms; }
+.stagger-item:nth-child(5) { animation-delay: 200ms; }
+.stagger-item:nth-child(6) { animation-delay: 250ms; }
+.stagger-item:nth-child(7) { animation-delay: 300ms; }
+.stagger-item:nth-child(8) { animation-delay: 350ms; }
+.stagger-item:nth-child(9) { animation-delay: 400ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   Long list notes (the original content-visibility list virtualization has been removed)
+   ============================================
+   content-visibility: auto was once used on .resources-list / .announcements-list / .assignments-list
+   as a first-paint optimization, but it implicitly enables paint containment
+   (contain: layout paint size), clipping the scale-up and box-shadow that child cards overflow the
+   container with on hover, producing a "picture frame covering the card" visual bug. These lists are short
+   (a few dozen items at most) and the optimization gain is minimal, so the property was removed in favor of on-demand rendering on the React side.
+   ============================================ */
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+.skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--color-muted) 0%,
+    var(--color-border) 50%,
+    var(--color-muted) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   SCROLLBAR
+
+   Goal: **visible by default**. The thumb used to be 8px wide + 20% white, which on the near-black background
+   (#02182B) blended almost completely into it; users reported "there seems to be no scrollbar".
+   It is now widened to 10px with the default opacity raised to a clearly visible level.
+
+   Note that Chromium 121+ also supports the standard `scrollbar-color` property, and **the standard property takes
+   precedence over `::-webkit-scrollbar-*`**. So both sets of values must match, otherwise the standard property
+   overrides the webkit styling entirely and the changes are wasted.
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 5px;
+  /* With very long content the thumb gets squeezed into a few-pixel line, so set a floor to keep it grabbable */
+  min-height: 44px;
+  /* Use a transparent border for an inset effect, so the thumb does not look flush against the edge */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.55);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.7);
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.38);
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.58);
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.75);
+  background-clip: padding-box;
+}
+
+/* Standard properties: values must match the webkit ones above (see the precedence note at the top of this section) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.35) transparent;
+}
+
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.38) transparent;
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-ring);
+  border-color: var(--color-primary);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled,
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   RESPONSIVE UTILITIES
+   ============================================ */
+
+.line-length {
+  max-width: 65ch;
+  /* Running prose opts back into the looser measure the body no longer applies. */
+  line-height: 1.6;
+}
+
+.spacing-xs { gap: 4px; }
+.spacing-sm { gap: 8px; }
+.spacing-md { gap: 16px; }
+.spacing-lg { gap: 24px; }
+.spacing-xl { gap: 32px; }
+.spacing-2xl { gap: 48px; }
+
+/* Prevent layout jump/jitter on scrollbar toggle */
+html {
+  scrollbar-gutter: stable;
+}
+
+
+/* AI streaming output cursor: blinks at the end while generating */
+@keyframes ai-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.ai-stream-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  /* Violet rather than the app accent — the streaming caret belongs to the AI
+     surface, which carries its own blue-to-violet identity. */
+  color: #7C3AED;
+  font-weight: 700;
+  animation: ai-cursor-blink 0.9s steps(1) infinite;
+}
+/* ============================================================
+   Rich content from Moodle (unit info / schedule / overview):
+   Tailwind preflight strips default typography, so re-apply
+   readable spacing, list markers and table borders.
+   ============================================================ */
+.cms-content {
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+.cms-content p {
+  margin: 0 0 0.9em;
+}
+.cms-content p:last-child {
+  margin-bottom: 0;
+}
+.cms-content h1,
+.cms-content h2,
+.cms-content h3,
+.cms-content h4,
+.cms-content h5,
+.cms-content h6 {
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.1em 0 0.45em;
+  color: var(--color-foreground, inherit);
+}
+.cms-content h1 { font-size: 1.35em; }
+.cms-content h2 { font-size: 1.25em; }
+.cms-content h3 { font-size: 1.15em; }
+.cms-content h4 { font-size: 1.05em; }
+.cms-content ul {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0 0 0.9em;
+}
+.cms-content ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0 0 0.9em;
+}
+.cms-content li {
+  margin: 0 0 0.35em;
+}
+.cms-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  font-size: 0.92em;
+}
+.cms-content th,
+.cms-content td {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  padding: 6px 10px;
+  vertical-align: top;
+  text-align: left;
+}
+.cms-content th {
+  background: rgba(128, 128, 128, 0.12);
+  font-weight: 600;
+}
+.cms-content a {
+  color: var(--color-primary, #4f46e5);
+  text-decoration: none;
+  font-weight: 500;
+}
+.cms-content a:hover {
+  text-decoration: underline;
+}
+.schedule-cell-html a {
+  color: var(--color-primary, #4f46e5);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: opacity 0.15s;
+}
+.schedule-cell-html a:hover {
+  opacity: 0.75;
+}
+.cms-content blockquote {
+  border-left: 3px solid rgba(128, 128, 128, 0.4);
+  margin: 0 0 0.9em;
+  padding: 0.1em 0 0.1em 0.9em;
+  color: var(--color-muted-foreground, #64748b);
+}
+.cms-content pre {
+  background: rgba(128, 128, 128, 0.12);
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0 0 0.9em;
+}
+.cms-content code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+  background: rgba(128, 128, 128, 0.14);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.cms-content pre code {
+  background: transparent;
+  padding: 0;
+}
+.cms-content img {
+  max-width: 100%;
+  height: auto;
+}
+.cms-content hr {
+  border: none;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+  margin: 1em 0;
+}

@@ -1,0 +1,59 @@
+NOTICE
+======
+
+Required Notice: Copyright 2026 Poetrynan (https://github.com/Poetrynan/Muster)
+
+This project is licensed under the PolyForm Noncommercial License 1.0.0.
+See the LICENSE file for the full terms.
+
+
+1. What the licence does NOT grant
+----------------------------------
+
+The LICENSE grants copyright and patent rights to the source code only. It
+grants no rights whatsoever in any name, brand, logo, icon or other trademark.
+In particular:
+
+  - The product name, the application icon and any associated wordmark or
+    visual identity are NOT licensed to you. If you distribute a modified
+    version, you must remove them and use your own name and icon.
+
+  - You must not use the product name, the icon, or the name of the original
+    author in a way that suggests your modified version is endorsed by,
+    affiliated with, or maintained by the original project.
+
+
+2. Third-party trademarks
+-------------------------
+
+"Monash" and "Monash University" are trademarks of Monash University.
+"Moodle" is a trademark of Moodle Pty Ltd or its related affiliates.
+"Windows" is a trademark of Microsoft Corporation.
+
+This project is an independent, personal study tool. It is NOT an official
+Monash University or Moodle product. It is not affiliated with, endorsed by,
+sponsored by, or authorised by Monash University, Moodle Pty Ltd, or any other
+organisation named above. All such names are used here solely for
+identification and descriptive purposes, to indicate what this software
+interoperates with.
+
+Monash University is the owner of the registered trademark MONASH, including
+in class 9 (computer software). Nothing in this project should be read as a
+claim to that mark or as any association with its owner.
+
+
+3. Third-party software
+-----------------------
+
+This project incorporates open-source components under their own licences.
+Those licences are unaffected by the LICENSE file above and continue to
+govern their respective components. See THIRD-PARTY-NOTICES.md for the list
+and the required attributions.
+
+
+4. End-user terms
+-----------------
+
+Use of the compiled application is additionally subject to TERMS.md, which
+sets out the acceptable-use limits, the absence of warranty, and the user's
+own responsibility for complying with their institution's rules.

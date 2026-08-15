@@ -1,0 +1,123 @@
+# ==============================================================================
+# Build Artifacts & Dependencies
+# ==============================================================================
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# ==============================================================================
+# Secrets, Credentials & Local Environment
+# ==============================================================================
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+*.crt
+*.keystore
+*.jks
+tauri.key
+tauri-private.key
+.npmrc
+.yarnrc
+
+# ==============================================================================
+# Login Sessions, Scraped Data & Personal Samples (Never commit)
+# ==============================================================================
+scripts/session.json
+*.har
+scripts/*.har
+.session/
+*.session
+*session*.json
+*cookie*.json
+*token*.json
+*credential*.json
+samples/
+
+# ==============================================================================
+# Local Databases, Caches & Temporary Storage
+# ==============================================================================
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.db-shm
+*.db-wal
+
+# ==============================================================================
+# Backup & Scratch Files Created During Development
+# ==============================================================================
+*.bak
+*.bak_*
+*.bak.*
+*.backup
+*.old
+*.orig
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+
+# ==============================================================================
+# Logs & Diagnostic Dumps
+# ==============================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.dmp
+*.dump
+*.crash
+*.stackdump
+
+# ==============================================================================
+# Internal Tools & Reference Docs
+# ==============================================================================
+scripts/
+doc/
+Reference/
+
+# ==============================================================================
+# AI Agent Working Directories & Local Assistant State
+# ==============================================================================
+.agents/
+.workbuddy/
+.claude/
+.cursor/
+.windsurf/
+.gemini/
+
+# ==============================================================================
+# IDE & Editor Configurations
+# ==============================================================================
+.idea/
+.fleet/
+*.sublime-workspace
+*.sublime-project
+.vscode/*
+!.vscode/extensions.json
+
+# ==============================================================================
+# Operating System Artifacts
+# ==============================================================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+Desktop.ini
+$RECYCLE.BIN/

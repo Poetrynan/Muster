@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Muster — Your Moodle materials and deadlines in one desktop app</title>
+<meta name="description" content="An independent, source-available tool (not a Monash or Moodle product): sign in once with your Monash account and this semester's lecture slides, notes and assignment due dates are collected automatically and ordered by urgency. Everything is stored on your own computer, free forever." />
+<link rel="icon" href="./app-icon.png" type="image/png" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Muster — Your Moodle materials and deadlines in one desktop app" />
+<meta property="og:description" content="An independent, source-available tool (not a Monash or Moodle product). Sign in once and this semester's slides, notes and assignment due dates are collected automatically and ordered by urgency, all stored on your own computer." />
+<meta property="og:image" content="./app-icon.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" content="#006DAE" />
+
+  <style>
+  :root {
+    --blue: #006DAE;
+    --blue-deep: #005A96;
+    --heritage: #ABF5F9;
+    --blueberry: #121256;
+
+    --bg: #FFFFFF;
+    --bg-soft: #F5F7FA;
+    --text: #0B1220;
+    --text-muted: #4A5568;
+    --text-faint: #718096;
+    --border: rgba(11, 18, 32, 0.10);
+    --card: #FFFFFF;
+    --card-border: rgba(11, 18, 32, 0.08);
+    --hover: rgba(11, 18, 32, 0.04);
+    --shadow: 0 10px 30px -12px rgba(11, 18, 32, 0.15);
+    --glow: rgba(0, 109, 174, 0.10);
+  }
+  html.dark {
+    --bg: #060B14;
+    --bg-soft: #0B1220;
+    --text: #F7FAFC;
+    --text-muted: #A0AEC0;
+    --text-faint: #718096;
+    --border: rgba(255, 255, 255, 0.10);
+    --card: rgba(255, 255, 255, 0.035);
+    --card-border: rgba(255, 255, 255, 0.09);
+    --hover: rgba(255, 255, 255, 0.06);
+    --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+    --glow: rgba(0, 109, 174, 0.22);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* ---------- Typography ---------- */
+  .t-muted { color: var(--text-muted); }
+  .t-faint { color: var(--text-faint); }
+  h1, h2, h3, h4 { letter-spacing: -0.022em; line-height: 1.2; }
+  h1 { font-size: clamp(2.25rem, 5vw, 2.75rem); font-weight: 800; }
+  h2 { font-size: clamp(1.5rem, 3vw, 1.75rem); font-weight: 800; }
+  h3 { font-size: 1.25rem; font-weight: 700; }
+  h4 { font-size: 1.0625rem; font-weight: 700; }
+  p  { font-size: 0.9375rem; }
+  .small { font-size: 0.8125rem; }
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+  .narrow { max-width: 780px; margin: 0 auto; padding: 0 1.5rem; }
+
+  section { padding: 5rem 0; }
+
+  /* Skip to main content: keyboard users can bypass the nav on their first Tab */
+  .skip {
+    position: absolute; left: -9999px; top: 0; z-index: 100;
+    padding: 0.6rem 1rem; background: var(--blue); color: #fff; border-radius: 0 0 8px 0;
+  }
+  .skip:focus { left: 0; }
+
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+  html.dark a:focus-visible,
+  html.dark button:focus-visible,
+  html.dark summary:focus-visible { outline-color: var(--heritage); }
+
+  /* ---------- Cards / glass ---------- */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .card-hover { transition: transform 0.25s ease, border-color 0.25s ease; }
+  .card-hover:hover { transform: translateY(-3px); border-color: rgba(0,109,174,0.45); }
+
+  .glass {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem;
+    font-size: 0.9375rem; font-weight: 600;
+    padding: 0.85rem 1.5rem; border-radius: 0.75rem;
+    border: 1px solid transparent; cursor: pointer;
+    transition: transform 0.15s ease, filter 0.2s ease, background-color 0.2s ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
+  .btn-primary {
+    background: var(--blue); color: #fff;
+    box-shadow: 0 10px 26px -8px rgba(0,109,174,0.55);
+  }
+  .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 14px 32px -8px rgba(0,109,174,0.65); }
+  .btn-ghost {
+    background: transparent; color: var(--text); border-color: var(--border);
+  }
+  .btn-ghost:hover { background: var(--hover); }
+  .btn-sm { padding: 0.5rem 0.9rem; font-size: 0.8125rem; border-radius: 0.625rem; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.3rem 0.75rem; border-radius: 999px;
+    font-size: 0.8125rem; font-weight: 600;
+    background: var(--glow); color: var(--blue);
+    border: 1px solid rgba(0,109,174,0.25);
+  }
+  html.dark .pill { color: var(--heritage); border-color: rgba(171,245,249,0.28); }
+
+  /* ---------- Navigation ---------- */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    padding: 0.85rem 0;
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.3s ease;
+  }
+  header.scrolled { border-bottom-color: var(--border); }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .brand { display: flex; align-items: center; gap: 0.65rem; }
+  .brand img { width: 2rem; height: 2rem; border-radius: 0.5rem; object-fit: contain; }
+  .brand-name { font-weight: 700; font-size: 1.0625rem; }
+  .nav-links { display: flex; align-items: center; gap: 1.6rem; font-size: 0.875rem; font-weight: 500; }
+  .nav-links a { color: var(--text-muted); transition: color 0.2s ease; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-actions { display: flex; align-items: center; gap: 0.5rem; }
+  @media (max-width: 900px) { .nav-links { display: none; } }
+
+  .icon-btn {
+    width: 2.25rem; height: 2.25rem; border-radius: 0.625rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+  .icon-btn svg { width: 1rem; height: 1rem; }
+  .seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 0.625rem; }
+  .seg button {
+    font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.55rem;
+    border: none; border-radius: 0.45rem; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.2s ease;
+  }
+  .seg button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+
+  /* ---------- Language dropdown ---------- */
+  .lang-wrap { position: relative; }
+  .lang-btn {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    height: 2.25rem; padding: 0 0.55rem 0 0.65rem;
+    border-radius: 0.625rem; border: 1px solid var(--border);
+    background: transparent; color: var(--text);
+    font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .lang-btn:hover { background: var(--hover); }
+  .lang-btn svg { width: 0.95rem; height: 0.95rem; flex-shrink: 0; }
+  .lang-btn .chev2 { opacity: 0.6; transition: transform 0.2s ease; }
+  .lang-wrap.open .lang-btn .chev2 { transform: rotate(180deg); }
+  .lang-menu {
+    position: absolute; right: 0; top: calc(100% + 0.5rem); z-index: 60;
+    min-width: 9.5rem; padding: 0.25rem;
+    border-radius: 0.75rem; border: 1px solid var(--card-border);
+    background: var(--bg); box-shadow: 0 12px 28px -10px rgba(0,0,0,0.35);
+    opacity: 0; transform: scale(0.96) translateY(-4px);
+    transform-origin: top right; pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  html.dark .lang-menu { background: var(--bg-soft); }
+  .lang-wrap.open .lang-menu { opacity: 1; transform: none; pointer-events: auto; }
+  .lang-menu button {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    gap: 0.5rem; padding: 0.5rem 0.6rem; border: none; border-radius: 0.5rem;
+    background: transparent; color: var(--text-muted);
+    font-size: 0.875rem; text-align: left; cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .lang-menu button:hover { background: var(--hover); }
+  .lang-menu button[aria-selected="true"] { color: var(--text); font-weight: 600; }
+  .lang-menu button .tick { width: 0.85rem; height: 0.85rem; opacity: 0; flex-shrink: 0; }
+  .lang-menu button[aria-selected="true"] .tick { opacity: 1; }
+  #iconSun { display: none; }
+  html.dark #iconSun { display: block; }
+  html.dark #iconMoon { display: none; }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 4.5rem 0 3rem; text-align: center; position: relative; }
+  .hero-glow {
+    position: absolute; top: -8rem; left: 50%; transform: translateX(-50%);
+    width: min(860px, 100%); height: 460px; pointer-events: none; z-index: -1;
+    background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 68%);
+    filter: blur(40px);
+  }
+  .hero h1 { margin: 1.25rem 0 1rem; }
+  .hero h1 .grad {
+    background: linear-gradient(100deg, var(--blue), #0092DC 55%, var(--blueberry));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  html.dark .hero h1 .grad {
+    background: linear-gradient(100deg, var(--heritage), #7FD4F5 50%, #FFFFFF);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .lead {
+    font-size: 1.0625rem; color: var(--text-muted);
+    max-width: 40rem; margin: 0 auto 1.75rem; line-height: 1.65;
+  }
+  .cta-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.9rem; }
+  .platform-note { margin-top: 0.9rem; font-size: 0.8125rem; color: var(--text-faint); }
+  /* ---------- App preview window ---------- */
+  .panel { padding: 0.7rem 0.85rem; border-radius: 0.75rem; background: var(--bg-soft); border: 1px solid var(--border); }
+  html.dark .panel { background: rgba(255,255,255,0.03); }
+
+
+  .shotimg {
+    margin-top: 3rem; border-radius: 1.25rem; padding: 0.6rem;
+    background: linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0.25));
+    border: 1px solid var(--border);
+    box-shadow: 0 30px 60px -20px rgba(15,23,42,0.28);
+  }
+  html.dark .shotimg {
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,0.7);
+  }
+  .shotimg img { display: block; width: 100%; height: auto; border-radius: 0.9rem; }
+
+  .showcase { display: grid; gap: 4.5rem; }
+  .sc-row { display: grid; grid-template-columns: 0.82fr 1.18fr; gap: 2.75rem; align-items: center; }
+  .sc-row.rev { grid-template-columns: 1.18fr 0.82fr; }
+  .sc-row.rev .sc-copy { order: 2; }
+  .sc-row.rev .sc-frame { order: 1; }
+  @media (max-width: 900px) {
+    .showcase { gap: 3rem; }
+    .sc-row, .sc-row.rev { grid-template-columns: 1fr; gap: 1.5rem; }
+    .sc-row.rev .sc-copy, .sc-row.rev .sc-frame { order: initial; }
+  }
+  .sc-kicker { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue); }
+  html.dark .sc-kicker { color: var(--heritage); }
+  .sc-copy h3 { margin: 0.55rem 0 0.65rem; font-size: 1.375rem; line-height: 1.35; }
+  .sc-copy p { margin: 0; color: var(--text-muted); line-height: 1.7; font-size: 0.9375rem; }
+  .sc-frame {
+    border-radius: 1rem; padding: 0.5rem; background: var(--bg-soft);
+    border: 1px solid var(--border); box-shadow: 0 20px 45px -18px rgba(15,23,42,0.22);
+  }
+  html.dark .sc-frame { background: rgba(255,255,255,0.03); box-shadow: 0 20px 50px -18px rgba(0,0,0,0.65); }
+  .sc-frame img { display: block; width: 100%; height: auto; border-radius: 0.7rem; }
+  .sc-live { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.9rem; font-size: 0.75rem; font-weight: 600; color: var(--blue); }
+  html.dark .sc-live { color: var(--heritage); }
+  .sc-live i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- Three steps ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+  .step { padding: 1.5rem; }
+  .step-no {
+    width: 1.9rem; height: 1.9rem; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.8125rem; font-weight: 700;
+    background: var(--blue); color: #fff; margin-bottom: 0.85rem;
+  }
+
+  /* ---------- Bento ---------- */
+  .bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  @media (max-width: 940px) { .bento { grid-template-columns: 1fr; } }
+  .bento .span2 { grid-column: span 2; }
+  @media (max-width: 940px) { .bento .span2 { grid-column: span 1; } }
+  .bento > div { padding: 1.75rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1.25rem; }
+  .ic {
+    width: 2.75rem; height: 2.75rem; border-radius: 0.75rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--glow); color: var(--blue);
+    border: 1px solid rgba(0,109,174,0.22); margin-bottom: 0.9rem;
+  }
+  html.dark .ic { color: var(--heritage); }
+  .ic svg { width: 1.35rem; height: 1.35rem; }
+  .foot-note { font-size: 0.8125rem; color: var(--text-faint); }
+
+  /* ---------- Bulleted list ---------- */
+  .dot-list {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+    font-size: 0.8125rem; color: var(--text-muted);
+  }
+  .dot-list span {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+  }
+  .dot-list span::before {
+    content: ""; flex-shrink: 0;
+    width: 5px; height: 5px; border-radius: 999px;
+    background: var(--blue);
+  }
+  html.dark .dot-list span::before { background: var(--heritage); }
+
+  .sec-head { text-align: center; margin-bottom: 3rem; }
+  .sec-head p { color: var(--text-muted); max-width: 34rem; margin: 0.65rem auto 0; }
+
+  /* ---------- FAQ ---------- */
+  details.faq { padding: 0; overflow: hidden; }
+  details.faq + details.faq { margin-top: 0.75rem; }
+  details.faq summary {
+    list-style: none; cursor: pointer;
+    padding: 1.1rem 1.35rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    font-weight: 600; font-size: 0.9375rem;
+  }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary .chev { transition: transform 0.2s ease; flex-shrink: 0; color: var(--text-faint); }
+  details.faq[open] summary .chev { transform: rotate(180deg); }
+  details.faq .body { padding: 0 1.35rem 1.25rem; color: var(--text-muted); font-size: 0.875rem; }
+
+  /* ---------- Footer ---------- */
+  footer { border-top: 1px solid var(--border); padding: 2.5rem 0 3rem; text-align: center; }
+  .disclaimer {
+    margin: 1.25rem auto 0; max-width: 44rem;
+    padding: 0.85rem 1rem; border-radius: 0.75rem;
+    border: 1px solid var(--border); background: var(--bg-soft);
+    font-size: 0.8125rem; color: var(--text-muted); line-height: 1.6;
+  }
+  html.dark .disclaimer { background: rgba(255,255,255,0.03); }
+
+  .foot-credit { margin-top: 1.5rem; }
+
+  .legal-links {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 0.5rem 0.8rem; margin: 0.7rem 0 0; font-size: 0.8125rem;
+  }
+  .legal-links a {
+    color: var(--text-muted); font-weight: 600; text-decoration: none;
+    border-bottom: 1px solid transparent; padding-bottom: 1px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .legal-links a:hover, .legal-links a:focus-visible {
+    color: var(--blue); border-bottom-color: currentColor;
+  }
+  html.dark .legal-links a:hover, html.dark .legal-links a:focus-visible { color: var(--heritage); }
+  .legal-links .sep {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text-faint); flex-shrink: 0;
+  }
+
+  .warn {
+    margin: 1.35rem auto 0; max-width: 44rem; text-align: left;
+    padding: 0.9rem 1.05rem; border-radius: 0.75rem;
+    border: 1px solid rgba(180,83,9,0.3); background: rgba(245,158,11,0.08);
+    font-size: 0.8125rem; line-height: 1.65; color: var(--text);
+  }
+  .warn strong { color: #b45309; }
+  html.dark .warn { border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.07); }
+  html.dark .warn strong { color: #fbbf24; }
+
+  /* ---------- Scroll reveal: replaces infinite animations ---------- */
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    * { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a href="#main" class="skip" data-i18n="skip">Skip to main content</a>
+
+<header id="hdr">
+  <div class="wrap nav-row">
+    <div class="brand">
+      <img src="./app-icon.png" alt="Muster" />
+      <span class="brand-name">Muster</span>
+    </div>
+
+    <nav class="nav-links" aria-label="Main">
+      <a href="#how" data-i18n="nav.how">How it works</a>
+      <a href="#features" data-i18n="nav.feat">Features</a>
+      <a href="#privacy" data-i18n="nav.privacy">Privacy</a>
+      <a href="#faq" data-i18n="nav.faq">FAQ</a>
+    </nav>
+
+    <div class="nav-actions">
+      <div class="lang-wrap" id="langWrap">
+        <button class="lang-btn" id="langBtn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Select language">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20"/></svg>
+          <span id="langLabel">English</span>
+          <svg class="chev2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="lang-menu" role="listbox" aria-label="Language">
+          <button type="button" role="option" data-lang="en" aria-selected="true">
+            <span>English</span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <button type="button" role="option" data-lang="zh" aria-selected="false">
+            <span>中文</span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <button type="button" role="option" data-lang="ja" aria-selected="false">
+            <span>日本語</span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <button type="button" role="option" data-lang="ko" aria-selected="false">
+            <span>한국어</span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle theme">
+        <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost btn-sm btn-star" href="https://github.com/Poetrynan/Muster" target="_blank" rel="noopener" aria-label="Star on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M12 2.5l2.955 5.988 6.61.96-4.783 4.662 1.129 6.583L12 17.577 6.089 20.693l1.129-6.583L2.435 9.448l6.61-.96L12 2.5z"/></svg>
+        <span data-i18n="nav.star">Star</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="narrow">
+      <span class="pill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span data-i18n="hero.pill">Free · source available · Built for Monash students</span>
+      </span>
+
+      <h1>
+        <span data-i18n="hero.t1">Your Moodle materials and deadlines,</span><br />
+        <span class="grad" data-i18n="hero.t2">brought into one desktop app</span>
+      </h1>
+
+      <p class="lead" data-i18n="hero.lead">
+        Sign in once with your Monash account, and this semester's lecture slides, notes and
+        assignment due dates are collected automatically and ordered by urgency. There is no need
+        to click through Moodle level by level, and everything is stored on your own computer.
+      </p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/Poetrynan/Muster/releases/latest">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0,3.449L9.75,2.1v9.451H0V3.449z M10.949,2.1L24,0v11.4H10.949V2.1z M0,12.6h9.75v9.451L0,20.699V12.6z M10.949,12.6H24V24l-13.051-1.801V12.6z"/></svg>
+          <span data-i18n="hero.dl">Download for Windows</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/Poetrynan/Muster" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          <span data-i18n="hero.gh">View on GitHub</span>
+        </a>
+      </div>
+      <p class="platform-note" data-i18n="hero.plat">Windows 10 / 11 · No sign-up required</p>
+    </div>
+
+    <div class="wrap">
+      <div class="shotimg reveal">
+        <img src="preview/dashboard.svg" width="1200" height="752" alt="Muster dashboard: every deadline from every unit merged into one list, ranked by urgency" />
+      </div>
+    </div>
+  </section>
+  <section id="how" style="background:var(--bg-soft);">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 data-i18n="how.h">Three steps to get started</h2>
+        <p data-i18n="how.p">No registration, no subscription, no forms.</p>
+      </div>
+      <div class="steps">
+        <div class="card step reveal">
+          <div class="step-no">1</div>
+          <h4 data-i18n="how.1h">Download and install</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="how.1p">
+            Use the button above to download, then double-click to install. Windows may display a
+            prompt during installation; select “More info”, then “Run anyway”.
+          </p>
+        </div>
+        <div class="card step reveal">
+          <div class="step-no">2</div>
+          <h4 data-i18n="how.2h">Sign in with your university account</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="how.2p">
+            Selecting sign-in opens the official Monash login page, exactly as when you log in to
+            Moodle: enter your username and password, then complete phone verification. Your
+            password is submitted directly to the university and the application never has access to it.
+          </p>
+        </div>
+        <div class="card step reveal">
+          <div class="step-no">3</div>
+          <h4 data-i18n="how.3h">Materials are organised automatically</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="how.3p">
+            After signing in, the application retrieves this semester's slides, notes and assignment
+            due dates for every unit and orders them by urgency. Select the items you want to keep
+            and download them in a single batch.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 data-i18n="feat.h">Built around the most common friction each semester</h2>
+        <p data-i18n="feat.p">No abstractions — only the steps this saves you.</p>
+      </div>
+      <div class="bento">
+        <div class="card card-hover span2 reveal">
+          <div>
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+            </div>
+            <h3 data-i18n="f1.h">Sync every unit at once</h3>
+            <p class="t-muted" style="margin-top:0.6rem;max-width:34rem;" data-i18n="f1.p">
+              Open the application and it retrieves each week's slides, lecture links and recording
+              entries across all your enrolled units in one pass, so there is no need to work through
+              Moodle unit by unit and week by week. The time required depends on your enrolment load
+              and current network conditions.
+            </p>
+          </div>
+          <div class="panel" style="display:flex;align-items:center;justify-content:space-between;">
+            <span class="small t-muted">FIT5046 · FIT5125 · FIT5032 · FIT4005</span>
+            <span class="small" style="color:var(--blue);font-weight:600;" data-i18n="f1.f">One sign-in, everything in place</span>
+          </div>
+        </div>
+
+        <div class="card card-hover reveal">
+          <div>
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+            </div>
+            <h3 data-i18n="f2.h">AI-generated key points</h3>
+            <p class="t-muted" style="margin-top:0.6rem;" data-i18n="f2.p">
+              Condense dozens of slides into a single page of revision notes, in English or Chinese.
+              It runs on your own AI account, so the cost is yours and the content is processed only
+              on your computer.
+            </p>
+          </div>
+          <span class="foot-note" data-i18n="f2.f">Your own account · model can be changed</span>
+        </div>
+
+        <div class="card card-hover reveal">
+          <div>
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            </div>
+            <h3 data-i18n="f3.h">Assignments ordered by urgency</h3>
+            <p class="t-muted" style="margin-top:0.6rem;" data-i18n="f3.p">
+              Automatically grouped into Overdue / Today / This week / Later, with each assignment's
+              share of the final grade shown alongside it — a figure that is often hard to locate in Moodle.
+            </p>
+          </div>
+          <span class="foot-note" data-i18n="f3.f">Sorted with grade weightings</span>
+        </div>
+
+        <div class="card card-hover span2 reveal" id="privacy">
+          <div>
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+            <h3 data-i18n="f4.h">Your data stays on your own machine</h3>
+            <p class="t-muted" style="margin-top:0.6rem;max-width:36rem;" data-i18n="f4.p">
+              Signing in opens the official Monash login page, so your password is submitted directly
+              to the university and the application has no access to it. We also operate no servers —
+              the materials you download and your signed-in state remain solely on your own computer.
+            </p>
+          </div>
+          <div class="dot-list">
+            <span data-i18n="f4.d1">Password submitted only to the university's official page</span>
+            <span data-i18n="f4.d2">None of your data is uploaded</span>
+            <span data-i18n="f4.d3">No cloud servers</span>
+            <span data-i18n="f4.d4">Free · source available</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 data-i18n="sc.h">A closer look at the screens you will actually use</h2>
+        <p data-i18n="sc.p">Four of them, and what each one saves you.</p>
+      </div>
+      <div class="showcase">
+        <div class="sc-row reveal">
+          <div class="sc-copy">
+            <span class="sc-kicker" data-i18n="sc1.k">Assignments</span>
+            <h3 data-i18n="sc1.h">The real submission status, not a guess</h3>
+            <p data-i18n="sc1.p">
+              Every assignment is ordered by due date and carries the status Moodle actually reports —
+              submitted, graded, or still outstanding. Work from last semester is filed away on its
+              own so it stops competing for your attention.
+            </p>
+          </div>
+          <div class="sc-frame">
+            <img src="preview/assignments.svg" width="1200" height="752" loading="lazy" alt="Assignment list with submission status, weighting and days remaining" />
+          </div>
+        </div>
+
+        <div class="sc-row rev reveal">
+          <div class="sc-copy">
+            <span class="sc-kicker" data-i18n="sc2.k">Announcements</span>
+            <h3 data-i18n="sc2.h">Sorted before you even open it</h3>
+            <p data-i18n="sc2.p">
+              Notices arrive grouped by unit, unread first, and already labelled by what they are
+              about — an assignment, a quiz, an exam, new material or a grade. One tap on a label
+              narrows the whole list.
+            </p>
+          </div>
+          <div class="sc-frame">
+            <img src="preview/announcements.svg" width="1200" height="752" loading="lazy" alt="Notification centre with announcements grouped by unit and filtered by type" />
+          </div>
+        </div>
+
+        <div class="sc-row reveal">
+          <div class="sc-copy">
+            <span class="sc-kicker" data-i18n="sc3.k">Downloads</span>
+            <h3 data-i18n="sc3.h">This week's materials, saved in one pass</h3>
+            <p data-i18n="sc3.p">
+              Progress, size and speed are shown while files are saved, and the folder opens as soon
+              as a download finishes. Anything that fails says why, so you know whether to retry.
+            </p>
+          </div>
+          <div class="sc-frame">
+            <img src="preview/downloads.svg" width="860" height="470" loading="lazy" alt="Download panel showing live progress, transfer speed and open-folder action" />
+          </div>
+        </div>
+
+        <div class="sc-row rev reveal">
+          <div class="sc-copy">
+            <span class="sc-kicker" data-i18n="sc4.k">Weekly summary</span>
+            <h3 data-i18n="sc4.h">The week's reading, condensed to what matters</h3>
+            <p data-i18n="sc4.p">
+              Choose to generate a summary and the text appears as it is written, laid out as an
+              overview, the key materials, what is due, and what to do next. Anything falling inside
+              the next seven days is called out. It is optional, and it follows your chosen language.
+            </p>
+            <span class="sc-live"><i aria-hidden="true"></i><span data-i18n="sc4.live">Live preview — this is the real output appearing</span></span>
+          </div>
+          <div class="sc-frame">
+            <img src="preview/ai-summary.svg" width="980" height="700" loading="lazy" alt="Weekly course summary being written out live, rendered with headings and lists" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:var(--bg-soft);">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 data-i18n="why.h">What becomes easier once it is installed</h2>
+        <p data-i18n="why.p">All situations you will genuinely encounter each semester.</p>
+      </div>
+      <div class="steps">
+        <div class="card step reveal">
+          <h4 data-i18n="why.1h">Runs continuously without consuming resources</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="why.1p">
+            In the background it is barely noticeable and will not interfere with Zoom or other
+            applications. Older laptops run it comfortably.
+          </p>
+        </div>
+        <div class="card step reveal">
+          <h4 data-i18n="why.2h">Read your notes offline</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="why.2p">
+            Materials you have downloaded are already stored on your computer. On a flight, on the
+            train, or during a network outage, you can still open and review them without connecting
+            to the campus network.
+          </p>
+        </div>
+        <div class="card step reveal">
+          <h4 data-i18n="why.3h">No maintenance on your part</h4>
+          <p class="t-muted" style="margin-top:0.5rem;" data-i18n="why.3p">
+            Moodle pages are adjusted from time to time. If content can no longer be retrieved, we
+            fix it and publish a new version — all you need to do is select update.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="narrow">
+      <div class="sec-head">
+        <h2 data-i18n="faq.h">Questions you may have</h2>
+        <p data-i18n="faq.p">An honest account of the points that most often give people pause.</p>
+      </div>
+
+      <details class="card faq reveal">
+        <summary>
+          <span data-i18n="q1.q">Windows shows a warning during installation — is this a concern?</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="body" data-i18n="q1.a">
+          No. This is a free tool developed by an individual student, and no paid Microsoft signing
+          certificate has been purchased, so Windows issues its standard prompt. Select “More info”,
+          then “Run anyway” to complete the installation. If you would still prefer to wait, it is
+          reasonable to install it after classmates have used it.
+        </div>
+      </details>
+
+      <details class="card faq reveal">
+        <summary>
+          <span data-i18n="q2.q">Could using it breach university rules?</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="body" data-i18n="q2.a">
+          First, how it works: it signs in with your own account and accesses only the units you
+          already have permission to view. It does not sign in on anyone else's behalf and does not
+          share materials with anyone — the effect is the same as opening Moodle and reading it
+          yourself. Whether this complies with your own faculty's rules is something you should
+          confirm yourself; we cannot make that determination for you. If you are unsure, we
+          recommend not installing it.
+        </div>
+      </details>
+
+      <details class="card faq reveal">
+        <summary>
+          <span data-i18n="q3.q">Will my Monash password be stored?</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="body" data-i18n="q3.a">
+          No. Selecting sign-in opens the official Monash login page, and both your password and
+          phone verification are submitted directly to the university; the application can neither
+          see nor obtain them. It knows only that you have signed in successfully, and that state is
+          stored on your own computer so you do not need to sign in again next time.
+        </div>
+      </details>
+
+      <details class="card faq reveal">
+        <summary>
+          <span data-i18n="q4.q">Does it support all of my units?</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="body" data-i18n="q4.a">
+          Most units are supported without issue. However, some Monash faculties structure their unit
+          pages differently, so individual units may have content that is missed. If you encounter
+          this, send us the unit code and we will add support as soon as possible.
+        </div>
+      </details>
+
+      <details class="card faq reveal">
+        <summary>
+          <span data-i18n="q5.q">Is there a cost? Will it be charged for later?</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="body" data-i18n="q5.a">
+          It is free, and there are no plans to charge for it. It was developed by a Monash student to
+          address their own needs, and no account registration is required. The only potential cost
+          is the AI key-points feature, which uses your own AI account; those charges are paid
+          directly to the AI provider and are unrelated to us.
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section style="padding-top:1rem;">
+    <div class="narrow">
+      <div class="card reveal" style="padding:2.75rem 2rem;text-align:center;">
+        <h2 data-i18n="cta.h">Install it and give the time back to study</h2>
+        <p class="t-muted" style="max-width:28rem;margin:0.75rem auto 1.75rem;" data-i18n="cta.p">
+          Its purpose is to reduce the time you spend searching for course materials.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/Poetrynan/Muster/releases/latest">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0,3.449L9.75,2.1v9.451H0V3.449z M10.949,2.1L24,0v11.4H10.949V2.1z M0,12.6h9.75v9.451L0,20.699V12.6z M10.949,12.6H24V24l-13.051-1.801V12.6z"/></svg>
+            <span data-i18n="cta.dl">Download for Windows</span>
+          </a>
+        </div>
+        <p class="platform-note" data-i18n="cta.plat">Windows 10 / 11 · No sign-up required</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="warn" data-i18n="foot.noncom">
+      <strong>Commercial use is prohibited.</strong> This software is for personal, non-commercial use
+      only. If you breach this licence or the terms of use, you bear all resulting legal liability
+      yourself; the original author bears none.
+    </p>
+    <p class="disclaimer" data-i18n="foot.legal">
+      Muster is an independent, source-available personal study tool built by Poetrynan.
+      <strong>It is not a Monash University or Moodle product.</strong> It is not affiliated with
+      Monash University or Moodle Pty Ltd.
+      “Monash” is a trademark of Monash University and is used here for identification only.<br />
+      © 2026 Poetrynan · Please observe your faculty's IT terms of use and copyright requirements.
+    </p>
+    <div class="small t-muted foot-credit">
+      <span data-i18n="foot.by">Built by <strong style="color:var(--text);">Poetrynan</strong></span> ·
+      <a href="https://github.com/Poetrynan/Muster" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600;">GitHub</a>
+    </div>
+    <nav class="legal-links" aria-label="Legal documents">
+      <a href="https://github.com/Poetrynan/Muster/blob/main/TERMS.md" target="_blank" rel="noopener" data-i18n="foot.terms">Terms of Use</a>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/Poetrynan/Muster/blob/main/LICENSE" target="_blank" rel="noopener" data-i18n="foot.lic">Licence</a>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/Poetrynan/Muster/blob/main/NOTICE" target="_blank" rel="noopener" data-i18n="foot.notice">Trademark Notice</a>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/Poetrynan/Muster/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener" data-i18n="foot.third">Third-Party Notices</a>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/Poetrynan/Muster/blob/main/SECURITY.md" target="_blank" rel="noopener" data-i18n="foot.sec">Security Policy</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // Theme: follows localStorage, defaults to dark
+  (function () {
+    var root = document.documentElement;
+    try {
+      if (localStorage.getItem("mi-theme") === "light") root.classList.remove("dark");
+    } catch (e) {}
+    document.getElementById("themeBtn").addEventListener("click", function () {
+      root.classList.toggle("dark");
+      try {
+        localStorage.setItem("mi-theme", root.classList.contains("dark") ? "dark" : "light");
+      } catch (e) {}
+    });
+  })();
+
+  // Nav bar reveals a divider on scroll
+  (function () {
+    var hdr = document.getElementById("hdr");
+    var onScroll = function () { hdr.classList.toggle("scrolled", window.scrollY > 8); };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+  })();
+
+  // Scroll reveal
+  (function () {
+    var els = document.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window)) {
+      els.forEach(function (el) { el.classList.add("in"); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+
+  // Language: dictionary + switching
+  var I18N = {};
+  I18N.zh = {
+    "meta.title": "Muster — 将 Moodle 的课件与截止日期集中到一个桌面应用",
+    "skip": "跳到主内容",
+    "nav.how": "使用方法", "nav.feat": "功能", "nav.privacy": "隐私", "nav.faq": "常见问题", "nav.dl": "下载", "nav.star": "点个 Star",
+    "hero.pill": "免费 · 源码公开 · 为 Monash 学生打造",
+    "hero.t1": "Moodle 的课件与截止日期，",
+    "hero.t2": "集中到一个桌面应用",
+    "hero.lead": "用你的 Monash 账号登录一次，本学期每门课的课件、讲义与作业截止日期会自动整理进来，并按紧急程度排序。无需再在 Moodle 中逐层点击查找，所有内容都保存在你自己的电脑上。",
+    "hero.dl": "下载 Windows 版", "hero.gh": "在 GitHub 上查看", "hero.plat": "Windows 10 / 11 · 无需注册",
+    "sc.h": "再仔细看看你真正会用到的几个界面", "sc.p": "四个界面，以及它们各自替你省下的事。",
+    "sc1.k": "作业", "sc1.h": "提交状态来自 Moodle，不是猜的",
+    "sc1.p": "每一项作业按截止时间排好，并显示 Moodle 里真实的状态——已提交、已评分，还是仍未完成。上学期的作业单独归档，不再和本学期抢你的注意力。",
+    "sc2.k": "公告", "sc2.h": "还没点开，就已经分好类了",
+    "sc2.p": "公告按课程归组、未读优先，并且已经标好了它在说什么——作业、测验、考试、新资料还是成绩。点一下标签，整个列表就只剩这一类。",
+    "sc3.k": "下载", "sc3.h": "本周的课件，一次存完",
+    "sc3.p": "存文件的过程中会显示进度、大小和速度，下载完成后可以直接打开所在文件夹。失败的会写明原因，你能判断要不要重试。",
+    "sc4.k": "每周总结", "sc4.h": "把这一周要读的东西，收拢成重点",
+    "sc4.p": "选择生成之后，文字会一边写一边出现，分成本周概览、核心资料、需要交的东西，以及接下来该做什么。七天内到期的会被特别标出。这个功能是可选的，语言跟随你选的界面语言。",
+    "sc4.live": "这是实时预览——文字正在真实地逐段生成",
+    "how.h": "三步即可开始使用", "how.p": "无需注册，无需订阅，无需填写表单。",
+    "how.1h": "下载安装",
+    "how.1p": "点击上方按钮下载，双击完成安装。安装过程中 Windows 可能弹出提示，点击「更多信息 → 仍要运行」即可。",
+    "how.2h": "使用学校账号登录",
+    "how.2p": "点击登录后会打开 Monash 官方登录页面，与平时登录 Moodle 完全一致：输入账号密码并完成手机验证。密码由你直接提交给学校，本应用无法接触。",
+    "how.3h": "课件自动整理就位",
+    "how.3p": "登录后自动获取本学期每门课的课件、讲义与作业截止日期，并按紧急程度排序。勾选需要保存的内容，即可一次批量下载。",
+    "feat.h": "针对每学期最常见的几个痛点", "feat.p": "不谈概念，只列出实际能为你省下的操作。",
+    "f1.h": "多门课程一次同步",
+    "f1.p": "打开即可一次性获取所有在读课程的每周课件、讲义链接与录播入口，无需再在 Moodle 中逐门课程、逐周点击。所需时间取决于选课数量与当前网络状况。",
+    "f1.f": "一次登录，全部就位",
+    "f2.h": "AI 提炼重点",
+    "f2.p": "将数十页的课件浓缩为一页复习要点，支持中文与英文。使用你自己的 AI 账号，费用由你承担，内容也仅在你的电脑上处理。",
+    "f2.f": "使用自己的账号 · 可更换模型",
+    "f3.h": "作业按紧急程度排序",
+    "f3.p": "自动分为「已过期 / 今天 / 本周 / 以后」四类，并标注每项作业在总成绩中的占比——这一数字在 Moodle 中往往不易找到。",
+    "f3.f": "含成绩占比排序",
+    "f4.h": "你的数据只保留在本机",
+    "f4.p": "登录时打开的是 Monash 官方登录页面，密码由你直接提交给学校，本应用无法接触。我们也不设任何服务器——下载的课件与你的登录状态，全部仅保存在你自己的电脑上。",
+    "f4.d1": "密码仅提交至学校官方页面", "f4.d2": "不上传你的任何数据",
+    "f4.d3": "无云端服务器", "f4.d4": "免费 · 源码公开",
+    "why.h": "安装之后，这些环节会更省心", "why.p": "都是每学期真实会遇到的场景。",
+    "why.1h": "常驻运行也不占资源",
+    "why.1p": "在后台运行时几乎无感，不影响你使用 Zoom 或其他程序，较旧的笔记本也能流畅运行。",
+    "why.2h": "离线也能查看讲义",
+    "why.2p": "已下载的课件就存在你的电脑上。无论在飞机、地铁，还是网络中断时，都能随时打开复习，无需连接校园网络。",
+    "why.3h": "无需自行维护",
+    "why.3p": "Moodle 页面偶尔会调整。若出现内容无法获取的情况，我们会修复并发布新版本，你只需点击更新即可。",
+    "faq.h": "你可能关心的问题", "faq.p": "把最容易让人犹豫的几点如实说明。",
+    "q1.q": "安装时 Windows 弹出警告，是否需要担心？",
+    "q1.a": "无需担心。这是学生个人开发的免费工具，未购买微软的付费签名认证，因此 Windows 会按惯例给出提示。点击「更多信息」，再点击「仍要运行」即可完成安装。若仍有顾虑，也可以等身边同学使用后再安装。",
+    "q2.q": "使用它会违反学校规定吗？",
+    "q2.a": "先说明它的工作方式：使用你自己的账号登录，只访问你本就有权限查看的课程，不代他人登录，也不会将课件分享给任何人——效果等同于你自己打开 Moodle 浏览一遍。至于这是否符合你所在学院的规定，请你自行确认，我们无法代为判断。若不确定，建议暂不安装。",
+    "q3.q": "我的 Monash 密码会被保存吗？",
+    "q3.a": "不会。点击登录后打开的是 Monash 官方登录页面，密码与手机验证均由你直接提交给学校，本应用无法看到、也无法获取。它仅知道你已成功登录，该状态保存在你自己的电脑上，因此下次打开无需重新登录。",
+    "q4.q": "它支持我的所有课程吗？",
+    "q4.a": "大部分课程都能正常支持。不过 Monash 部分学院的课程页面结构较为特殊，个别课程可能会遗漏部分内容。若遇到此类情况，请将课程代码告知我们，我们会尽快补充支持。",
+    "q5.q": "需要付费吗？以后会收费吗？",
+    "q5.a": "免费，且没有收费计划。这是 Monash 学生为解决自身需求而开发的工具，无需注册账号。唯一可能产生费用的是 AI 提炼重点功能，它使用你自己的 AI 账号，相关费用由你直接支付给 AI 平台，与我们无关。",
+    "cta.h": "安装它，把时间还给学习",
+    "cta.p": "它存在的意义，是让你把更少的时间花在查找课件上。",
+    "cta.dl": "下载 Windows 版", "cta.plat": "Windows 10 / 11 · 无需注册",
+    "foot.by": "由 <strong style=\"color:var(--text);\">Poetrynan</strong> 开发", "foot.dev": "",
+    "foot.terms": "使用条款", "foot.lic": "许可协议", "foot.notice": "商标声明", "foot.third": "第三方声明", "foot.sec": "安全策略",
+    "foot.noncom": "<strong>禁止商业使用。</strong>本软件仅供个人非商业用途。若违反本协议与使用准则，由此产生的一切法律责任由使用者自行承担，与原作者无关。",
+    "foot.legal": "Muster 是由 Poetrynan 独立开发的源码公开个人学习工具，<strong>并非 Monash University 或 Moodle 官方出品</strong>，与两者无任何隶属关系。\u201CMonash\u201D 为 Monash University 的商标，此处仅作说明性指代。<br />© 2026 Poetrynan · 请遵守你所在院系的 IT 使用条款与版权规定。"
+  };
+  I18N.en = {
+    "meta.title": "Muster — Your Moodle materials and deadlines in one desktop app",
+    "skip": "Skip to main content",
+    "nav.how": "How it works", "nav.feat": "Features", "nav.privacy": "Privacy", "nav.faq": "FAQ", "nav.dl": "Download", "nav.star": "Star",
+    "hero.pill": "Free · source available · Built for Monash students",
+    "hero.t1": "Your Moodle materials and deadlines,",
+    "hero.t2": "brought into one desktop app",
+    "hero.lead": "Sign in once with your Monash account, and this semester's lecture slides, notes and assignment due dates are collected automatically and ordered by urgency. There is no need to click through Moodle level by level, and everything is stored on your own computer.",
+    "hero.dl": "Download for Windows", "hero.gh": "View on GitHub", "hero.plat": "Windows 10 / 11 · No sign-up required",
+    "sc.h": "A closer look at the screens you will actually use", "sc.p": "Four of them, and what each one saves you.",
+    "sc1.k": "Assignments", "sc1.h": "The real submission status, not a guess",
+    "sc1.p": "Every assignment is ordered by due date and carries the status Moodle actually reports — submitted, graded, or still outstanding. Work from last semester is filed away on its own so it stops competing for your attention.",
+    "sc2.k": "Announcements", "sc2.h": "Sorted before you even open it",
+    "sc2.p": "Notices arrive grouped by unit, unread first, and already labelled by what they are about — an assignment, a quiz, an exam, new material or a grade. One tap on a label narrows the whole list.",
+    "sc3.k": "Downloads", "sc3.h": "This week's materials, saved in one pass",
+    "sc3.p": "Progress, size and speed are shown while files are saved, and the folder opens as soon as a download finishes. Anything that fails says why, so you know whether to retry.",
+    "sc4.k": "Weekly summary", "sc4.h": "The week's reading, condensed to what matters",
+    "sc4.p": "Choose to generate a summary and the text appears as it is written, laid out as an overview, the key materials, what is due, and what to do next. Anything falling inside the next seven days is called out. It is optional, and it follows your chosen language.",
+    "sc4.live": "Live preview — this is the real output appearing",
+    "how.h": "Three steps to get started", "how.p": "No registration, no subscription, no forms.",
+    "how.1h": "Download and install",
+    "how.1p": "Use the button above to download, then double-click to install. Windows may display a prompt during installation; select \u201CMore info\u201D, then \u201CRun anyway\u201D.",
+    "how.2h": "Sign in with your university account",
+    "how.2p": "Selecting sign-in opens the official Monash login page, exactly as when you log in to Moodle: enter your username and password, then complete phone verification. Your password is submitted directly to the university and the application never has access to it.",
+    "how.3h": "Materials are organised automatically",
+    "how.3p": "After signing in, the application retrieves this semester's slides, notes and assignment due dates for every unit and orders them by urgency. Select the items you want to keep and download them in a single batch.",
+    "feat.h": "Built around the most common friction each semester", "feat.p": "No abstractions — only the steps this saves you.",
+    "f1.h": "Sync every unit at once",
+    "f1.p": "Open the application and it retrieves each week's slides, lecture links and recording entries across all your enrolled units in one pass, so there is no need to work through Moodle unit by unit and week by week. The time required depends on your enrolment load and current network conditions.",
+    "f1.f": "One sign-in, everything in place",
+    "f2.h": "AI-generated key points",
+    "f2.p": "Condense dozens of slides into a single page of revision notes, in English or Chinese. It runs on your own AI account, so the cost is yours and the content is processed only on your computer.",
+    "f2.f": "Your own account · model can be changed",
+    "f3.h": "Assignments ordered by urgency",
+    "f3.p": "Automatically grouped into Overdue / Today / This week / Later, with each assignment's share of the final grade shown alongside it — a figure that is often hard to locate in Moodle.",
+    "f3.f": "Sorted with grade weightings",
+    "f4.h": "Your data stays on your own machine",
+    "f4.p": "Signing in opens the official Monash login page, so your password is submitted directly to the university and the application has no access to it. We also operate no servers — the materials you download and your signed-in state remain solely on your own computer.",
+    "f4.d1": "Password submitted only to the university's official page", "f4.d2": "None of your data is uploaded",
+    "f4.d3": "No cloud servers", "f4.d4": "Free · source available",
+    "why.h": "What becomes easier once it is installed", "why.p": "All situations you will genuinely encounter each semester.",
+    "why.1h": "Runs continuously without consuming resources",
+    "why.1p": "In the background it is barely noticeable and will not interfere with Zoom or other applications. Older laptops run it comfortably.",
+    "why.2h": "Read your notes offline",
+    "why.2p": "Materials you have downloaded are already stored on your computer. On a flight, on the train, or during a network outage, you can still open and review them without connecting to the campus network.",
+    "why.3h": "No maintenance on your part",
+    "why.3p": "Moodle pages are adjusted from time to time. If content can no longer be retrieved, we fix it and publish a new version — all you need to do is select update.",
+    "faq.h": "Questions you may have", "faq.p": "An honest account of the points that most often give people pause.",
+    "q1.q": "Windows shows a warning during installation — is this a concern?",
+    "q1.a": "No. This is a free tool developed by an individual student, and no paid Microsoft signing certificate has been purchased, so Windows issues its standard prompt. Select \u201CMore info\u201D, then \u201CRun anyway\u201D to complete the installation. If you would still prefer to wait, it is reasonable to install it after classmates have used it.",
+    "q2.q": "Could using it breach university rules?",
+    "q2.a": "First, how it works: it signs in with your own account and accesses only the units you already have permission to view. It does not sign in on anyone else's behalf and does not share materials with anyone — the effect is the same as opening Moodle and reading it yourself. Whether this complies with your own faculty's rules is something you should confirm yourself; we cannot make that determination for you. If you are unsure, we recommend not installing it.",
+    "q3.q": "Will my Monash password be stored?",
+    "q3.a": "No. Selecting sign-in opens the official Monash login page, and both your password and phone verification are submitted directly to the university; the application can neither see nor obtain them. It knows only that you have signed in successfully, and that state is stored on your own computer so you do not need to sign in again next time.",
+    "q4.q": "Does it support all of my units?",
+    "q4.a": "Most units are supported without issue. However, some Monash faculties structure their unit pages differently, so individual units may have content that is missed. If you encounter this, send us the unit code and we will add support as soon as possible.",
+    "q5.q": "Is there a cost? Will it be charged for later?",
+    "q5.a": "It is free, and there are no plans to charge for it. It was developed by a Monash student to address their own needs, and no account registration is required. The only potential cost is the AI key-points feature, which uses your own AI account; those charges are paid directly to the AI provider and are unrelated to us.",
+    "cta.h": "Install it and give the time back to study",
+    "cta.p": "Its purpose is to reduce the time you spend searching for course materials.",
+    "cta.dl": "Download for Windows", "cta.plat": "Windows 10 / 11 · No sign-up required",
+    "foot.by": "Built by <strong style=\"color:var(--text);\">Poetrynan</strong>", "foot.dev": "",
+    "foot.terms": "Terms of Use", "foot.lic": "Licence", "foot.notice": "Trademark Notice", "foot.third": "Third-Party Notices", "foot.sec": "Security Policy",
+    "foot.noncom": "<strong>Commercial use is prohibited.</strong> This software is for personal, non-commercial use only. If you breach this licence or the terms of use, you bear all resulting legal liability yourself; the original author bears none.",
+    "foot.legal": "Muster is an independent, source-available personal study tool built by Poetrynan. <strong>It is not a Monash University or Moodle product.</strong> It is not affiliated with Monash University or Moodle Pty Ltd. \u201CMonash\u201D is a trademark of Monash University and is used here for identification only.<br />© 2026 Poetrynan · Please observe your faculty's IT terms of use and copyright requirements."
+  };
+  I18N.ja = {
+    "meta.title": "Muster — Moodle の資料と締め切りを一つのデスクトップアプリに集約",
+    "skip": "本文へスキップ",
+    "nav.how": "使用方法", "nav.feat": "機能", "nav.privacy": "プライバシー", "nav.faq": "よくある質問", "nav.dl": "ダウンロード", "nav.star": "スター",
+    "hero.pill": "無料・ソース公開 · Monash の学生のために",
+    "hero.t1": "Moodle の資料と締め切りを、",
+    "hero.t2": "一つのデスクトップアプリに集約",
+    "hero.lead": "Monash アカウントで一度ログインすれば、今学期の各ユニットのスライド・資料・課題の締め切りが自動的に取り込まれ、緊急度の順に整理されます。Moodle を階層ごとにたどって探す必要はなく、すべての内容はご自身のパソコンに保存されます。",
+    "hero.dl": "Windows 版をダウンロード", "hero.gh": "GitHub で確認する", "hero.plat": "Windows 10 / 11 · 登録不要",
+    "sc.h": "実際に使う画面をもう少し詳しく", "sc.p": "4 つの画面と、それぞれが省いてくれる手間。",
+    "sc1.k": "課題", "sc1.h": "提出状況は推測ではなく Moodle の実データ",
+    "sc1.p": "課題は締切順に並び、Moodle が実際に返す状況——提出済み・採点済み・未提出——がそのまま表示されます。前学期の課題は別にまとめられ、今学期の注意を奪いません。",
+    "sc2.k": "お知らせ", "sc2.h": "開く前から、すでに整理済み",
+    "sc2.p": "お知らせはコースごとにまとまり、未読が先に並び、内容の種類——課題・小テスト・試験・新しい資料・成績——があらかじめ付けられています。ラベルを一度押すだけで、その種類だけに絞れます。",
+    "sc3.k": "ダウンロード", "sc3.h": "今週の資料を、一度で保存",
+    "sc3.p": "保存中は進捗・サイズ・速度が表示され、完了するとそのフォルダをすぐ開けます。失敗したものは理由が示されるので、再試行するかどうか判断できます。",
+    "sc4.k": "週次まとめ", "sc4.h": "今週読むべきものを、要点に絞る",
+    "sc4.p": "生成を選ぶと、文章が書かれていく様子がそのまま表示され、今週の概要・主な資料・提出が必要なもの・次にすべきことに分かれます。7 日以内に締切のものは特に示されます。この機能は任意で、表示言語に合わせて出力されます。",
+    "sc4.live": "これはライブプレビューです——文章が実際に書き出されています",
+    "how.h": "3 ステップで利用開始", "how.p": "登録不要、サブスクリプション不要、フォーム記入も不要です。",
+    "how.1h": "ダウンロードとインストール",
+    "how.1p": "上のボタンからダウンロードし、ダブルクリックでインストールします。インストール中に Windows の警告が表示された場合は、「詳細情報」→「実行」を選択してください。",
+    "how.2h": "大学のアカウントでログイン",
+    "how.2p": "ログインを選択すると Monash 公式のログイン画面が開きます。普段 Moodle にログインする場合とまったく同じで、ID とパスワードを入力し、スマートフォン認証を完了します。パスワードは大学へ直接送信され、本アプリが取得することはありません。",
+    "how.3h": "資料が自動的に整理されます",
+    "how.3p": "ログイン後、今学期の各ユニットのスライド・資料・課題の締め切りを自動的に取得し、緊急度の順に整理します。保存したい項目を選択すれば、一括でダウンロードできます。",
+    "feat.h": "毎学期繰り返される手間に対応", "feat.p": "抽象的な説明は省き、実際に削減できる操作のみを挙げます。",
+    "f1.h": "複数ユニットを一括同期",
+    "f1.p": "起動するだけで、履修中のすべてのユニットについて毎週のスライド・講義リンク・録画の入口を一度に取得します。Moodle をユニットごと・週ごとにたどる必要はありません。所要時間は履修数と回線状況によって異なります。",
+    "f1.f": "一度のログインで、すべて揃います",
+    "f2.h": "AI による要点の抽出",
+    "f2.p": "数十ページの資料を 1 ページの復習要点にまとめます。日本語と英語に対応しています。ご自身の AI アカウントを使用するため、費用はご自身の負担となり、内容もご自身のパソコン上でのみ処理されます。",
+    "f2.f": "自身のアカウントを使用 · モデル変更可",
+    "f3.h": "課題を緊急度の順に整理",
+    "f3.p": "「期限切れ / 本日 / 今週 / 以降」の 4 区分に自動で分類し、各課題の成績全体に対する配点も併せて表示します。この数値は Moodle 上では見つけにくいものです。",
+    "f3.f": "配点を含めた並べ替え",
+    "f4.h": "データはご自身のパソコンのみに保存",
+    "f4.p": "ログイン時に開かれるのは Monash 公式のログイン画面であり、パスワードは大学へ直接送信され、本アプリが取得することはありません。当方はサーバーも運用していません。ダウンロードした資料とログイン状態は、すべてご自身のパソコン上にのみ保存されます。",
+    "f4.d1": "パスワードは大学公式画面にのみ送信", "f4.d2": "いかなるデータもアップロードしません",
+    "f4.d3": "クラウドサーバーなし", "f4.d4": "無料・ソース公開",
+    "why.h": "導入後に負担が軽くなる点", "why.p": "いずれも毎学期実際に起こる場面です。",
+    "why.1h": "常時起動でも負荷になりません",
+    "why.1p": "バックグラウンドでの動作はほとんど意識されず、Zoom やその他のアプリの妨げにもなりません。やや古いノートパソコンでも問題なく動作します。",
+    "why.2h": "オフラインでも資料を閲覧できます",
+    "why.2p": "ダウンロード済みの資料はご自身のパソコンに保存されています。飛行機内や電車内、通信が途切れた状況でも、そのまま開いて復習でき、学内ネットワークへの接続は不要です。",
+    "why.3h": "ご自身での保守は不要です",
+    "why.3p": "Moodle のページ構成は時折変更されます。内容を取得できなくなった場合は当方が修正し、新しいバージョンを公開しますので、更新を選択いただくだけで済みます。",
+    "faq.h": "ご懸念になりやすい点", "faq.p": "判断に迷いやすい点を率直にご説明します。",
+    "q1.q": "インストール時に Windows の警告が表示されますが、問題ありませんか。",
+    "q1.a": "問題ありません。学生個人が開発した無料のツールで、Microsoft の有償署名証明書を取得していないため、Windows が通常の警告を表示します。「詳細情報」→「実行」を選択すればインストールが完了します。ご不安が残る場合は、周囲の方が使用された後に導入いただいても差し支えありません。",
+    "q2.q": "利用によって大学の規定に違反しませんか。",
+    "q2.a": "まず動作についてご説明します。ご自身のアカウントでログインし、もともと閲覧権限のあるユニットのみにアクセスします。他者に代わってログインすることはなく、資料を第三者へ共有することもありません。ご自身で Moodle を開いて閲覧する場合と同等です。これがご所属学部の規定に適合するかについては、ご自身でご確認ください。当方が代わりに判断することはできません。ご不明な場合は導入を控えることをお勧めします。",
+    "q3.q": "Monash のパスワードは保存されますか。",
+    "q3.a": "保存されません。ログインを選択すると開かれるのは Monash 公式のログイン画面であり、パスワードとスマートフォン認証はいずれも大学へ直接送信されます。本アプリが参照または取得することはできません。本アプリが把握するのはログインに成功したという事実のみで、その状態はご自身のパソコン上に保存されるため、次回以降の再ログインは不要です。",
+    "q4.q": "履修中のすべてのユニットに対応していますか。",
+    "q4.a": "大半のユニットには問題なく対応しています。ただし Monash の一部学部ではユニットページの構成が異なるため、個別のユニットで一部の内容が取得されない場合があります。その際はユニットコードをお知らせいただければ、速やかに対応いたします。",
+    "q5.q": "費用は必要ですか。今後有料になりますか。",
+    "q5.a": "無料であり、有料化の予定もありません。Monash の学生が自身の必要に応じて開発したもので、アカウント登録も不要です。費用が発生し得るのは AI による要点抽出機能のみで、ご自身の AI アカウントを使用するため、当該費用は AI 事業者へ直接お支払いいただくものであり、当方とは関係ありません。",
+    "cta.h": "導入して、時間を学習に戻しましょう",
+    "cta.p": "資料の検索に費やす時間を減らすことを目的としたツールです。",
+    "cta.dl": "Windows 版をダウンロード", "cta.plat": "Windows 10 / 11 · 登録不要",
+    "foot.by": "<strong style=\"color:var(--text);\">Poetrynan</strong> が開発", "foot.dev": "",
+    "foot.terms": "利用規約", "foot.lic": "ライセンス", "foot.notice": "商標について", "foot.third": "第三者ライセンス", "foot.sec": "セキュリティ方針",
+    "foot.noncom": "<strong>商用利用は禁止されています。</strong>本ソフトウェアは個人の非商用利用に限ります。本ライセンスおよび利用規約に違反した場合、それにより生じる一切の法的責任は利用者が負い、原作者は一切の責任を負いません。",
+    "foot.legal": "Muster は Poetrynan が独自に開発したソース公開の個人学習ツールです。<strong>Monash University や Moodle の公式製品ではありません。</strong>両者とは一切関係がありません。\u201CMonash\u201D は Monash University の商標であり、ここでは識別のためにのみ使用しています。<br />© 2026 Poetrynan · ご所属学部の IT 利用規約および著作権規定を遵守してください。"
+  };
+  I18N.ko = {
+    "meta.title": "Muster — Moodle 자료와 마감일을 하나의 데스크톱 앱으로",
+    "skip": "본문으로 건너가기",
+    "nav.how": "사용 방법", "nav.feat": "기능", "nav.privacy": "개인정보", "nav.faq": "자주 묻는 질문", "nav.dl": "다운로드", "nav.star": "스타",
+    "hero.pill": "무료 · 소스 공개 · Monash 학생을 위해",
+    "hero.t1": "Moodle 자료와 마감일을,",
+    "hero.t2": "하나의 데스크톱 앱으로",
+    "hero.lead": "Monash 계정으로 한 번 로그인하면 이번 학기 각 과목의 강의자료, 노트, 과제 마감일이 자동으로 정리되어 들어오고 긴급한 순서대로 배열됩니다. Moodle을 단계별로 눌러 찾을 필요가 없으며, 모든 자료는 본인 컴퓨터에 저장됩니다.",
+    "hero.dl": "Windows 버전 다운로드", "hero.gh": "GitHub에서 확인", "hero.plat": "Windows 10 / 11 · 가입 불필요",
+    "sc.h": "실제로 쓰게 되는 화면을 조금 더 자세히", "sc.p": "네 개의 화면, 그리고 각각이 덜어주는 일.",
+    "sc1.k": "과제", "sc1.h": "제출 상태는 추측이 아니라 Moodle의 실제 데이터",
+    "sc1.p": "모든 과제가 마감일 순으로 정렬되고, Moodle이 실제로 알려주는 상태——제출됨, 채점됨, 아직 미완료——가 그대로 표시됩니다. 지난 학기 과제는 따로 보관되어 이번 학기의 주의를 빼앗지 않습니다.",
+    "sc2.k": "공지", "sc2.h": "열어보기 전에 이미 분류되어 있습니다",
+    "sc2.p": "공지는 코스별로 묶이고 읽지 않은 것이 먼저 오며, 무엇에 관한 것인지——과제, 퀴즈, 시험, 새 자료, 성적——가 미리 표시됩니다. 라벨을 한 번 누르면 그 종류만 남습니다.",
+    "sc3.k": "다운로드", "sc3.h": "이번 주 자료를 한 번에 저장",
+    "sc3.p": "저장하는 동안 진행률과 크기, 속도가 표시되고 완료되면 해당 폴더를 바로 열 수 있습니다. 실패한 항목은 이유가 나오므로 다시 시도할지 판단할 수 있습니다.",
+    "sc4.k": "주간 요약", "sc4.h": "이번 주에 읽을 것을 핵심만 남기고",
+    "sc4.p": "생성을 선택하면 글이 써지는 대로 나타나며, 이번 주 개요·주요 자료·제출해야 할 것·다음에 할 일로 나뉩니다. 7일 안에 마감되는 항목은 따로 표시됩니다. 이 기능은 선택 사항이며, 선택한 화면 언어를 따릅니다.",
+    "sc4.live": "실시간 미리보기입니다——글이 실제로 생성되고 있습니다",
+    "how.h": "세 단계로 시작", "how.p": "가입도, 구독도, 양식 작성도 필요하지 않습니다.",
+    "how.1h": "다운로드 및 설치",
+    "how.1p": "위 버튼으로 다운로드한 뒤 두 번 클릭해 설치합니다. 설치 중 Windows 경고가 표시되면 「추가 정보」 → 「실행」을 선택하면 됩니다.",
+    "how.2h": "학교 계정으로 로그인",
+    "how.2p": "로그인을 선택하면 Monash 공식 로그인 화면이 열립니다. 평소 Moodle에 로그인할 때와 동일하게 아이디와 비밀번호를 입력하고 휴대폰 인증을 완료합니다. 비밀번호는 학교로 직접 전송되며, 본 앱은 접근할 수 없습니다.",
+    "how.3h": "자료가 자동으로 정리됩니다",
+    "how.3p": "로그인 후 이번 학기 각 과목의 강의자료, 노트, 과제 마감일을 자동으로 가져와 긴급한 순서대로 정리합니다. 보관할 항목을 선택하면 한 번에 일괄 다운로드할 수 있습니다.",
+    "feat.h": "매 학기 반복되는 번거로움을 해결합니다", "feat.p": "개념 설명은 생략하고, 실제로 줄어드는 작업만 정리했습니다.",
+    "f1.h": "여러 과목 일괄 동기화",
+    "f1.p": "실행하면 수강 중인 모든 과목의 주별 강의자료, 강의 링크, 녹화 입구를 한 번에 가져옵니다. Moodle을 과목별·주별로 다시 열어볼 필요가 없습니다. 소요 시간은 수강 과목 수와 네트워크 상태에 따라 달라집니다.",
+    "f1.f": "한 번의 로그인으로 모두 준비",
+    "f2.h": "AI 기반 핵심 정리",
+    "f2.p": "수십 장의 강의자료를 한 장짜리 복습 요점으로 정리합니다. 한국어와 영어를 지원합니다. 본인 AI 계정을 사용하므로 비용은 본인 부담이며, 내용도 본인 컴퓨터에서만 처리됩니다.",
+    "f2.f": "본인 계정 사용 · 모델 변경 가능",
+    "f3.h": "과제를 긴급한 순서로 정리",
+    "f3.p": "「기한 지남 / 오늘 / 이번 주 / 이후」 네 가지로 자동 분류하고, 각 과제가 전체 성적에서 차지하는 배점도 함께 표시합니다. 이 수치는 Moodle에서 찾기 어려운 편입니다.",
+    "f3.f": "성적 배점 기준 정렬",
+    "f4.h": "데이터는 본인 컴퓨터에만 보관됩니다",
+    "f4.p": "로그인 시 열리는 화면은 Monash 공식 로그인 페이지이며, 비밀번호는 학교로 직접 전송되어 본 앱은 접근할 수 없습니다. 저희는 서버도 운영하지 않습니다. 다운로드한 자료와 로그인 상태는 모두 본인 컴퓨터에만 저장됩니다.",
+    "f4.d1": "비밀번호는 학교 공식 페이지에만 전송", "f4.d2": "어떠한 데이터도 업로드하지 않음",
+    "f4.d3": "클라우드 서버 없음", "f4.d4": "무료 · 소스 공개",
+    "why.h": "설치 후 부담이 줄어드는 부분", "why.p": "모두 매 학기 실제로 겪게 되는 상황입니다.",
+    "why.1h": "상시 실행해도 부담이 없습니다",
+    "why.1p": "백그라운드에서 동작할 때 거의 체감되지 않으며, Zoom이나 다른 프로그램 사용에도 영향을 주지 않습니다. 다소 오래된 노트북에서도 원활하게 작동합니다.",
+    "why.2h": "오프라인에서도 자료를 열람할 수 있습니다",
+    "why.2p": "다운로드한 자료는 본인 컴퓨터에 저장되어 있습니다. 비행기나 지하철, 네트워크가 끊긴 상황에서도 바로 열어 복습할 수 있으며, 캠퍼스 네트워크 연결이 필요하지 않습니다.",
+    "why.3h": "직접 관리할 필요가 없습니다",
+    "why.3p": "Moodle 페이지 구조는 간혹 변경됩니다. 자료를 가져올 수 없게 되면 저희가 수정하여 새 버전을 배포하므로, 업데이트만 선택하시면 됩니다.",
+    "faq.h": "궁금해하실 만한 사항", "faq.p": "판단하기 어려운 부분을 솔직하게 설명합니다.",
+    "q1.q": "설치할 때 Windows 경고가 표시되는데 문제가 없습니까?",
+    "q1.a": "문제없습니다. 학생이 개인적으로 개발한 무료 도구로, Microsoft의 유료 서명 인증을 구매하지 않았기 때문에 Windows가 통상적인 경고를 표시합니다. 「추가 정보」 → 「실행」을 선택하면 설치가 완료됩니다. 그래도 우려가 있으시면 주변에서 사용해 본 뒤에 설치하셔도 무리가 없습니다.",
+    "q2.q": "사용하면 학교 규정을 위반하게 됩니까?",
+    "q2.a": "먼저 동작 방식을 설명드립니다. 본인 계정으로 로그인하여, 원래 열람 권한이 있는 과목에만 접근합니다. 타인을 대신해 로그인하지 않으며, 자료를 제3자에게 공유하지도 않습니다. 직접 Moodle을 열어 열람하는 것과 동일합니다. 이것이 소속 학부 규정에 부합하는지는 직접 확인해 주시기 바랍니다. 저희가 대신 판단할 수는 없습니다. 확실하지 않다면 설치를 보류하시는 편을 권합니다.",
+    "q3.q": "제 Monash 비밀번호가 저장됩니까?",
+    "q3.a": "저장되지 않습니다. 로그인을 선택하면 열리는 화면은 Monash 공식 로그인 페이지이며, 비밀번호와 휴대폰 인증은 모두 학교로 직접 전송됩니다. 본 앱은 이를 확인하거나 취득할 수 없습니다. 앱이 파악하는 것은 로그인에 성공했다는 사실뿐이며, 해당 상태는 본인 컴퓨터에 저장되므로 다음 실행 시 다시 로그인할 필요가 없습니다.",
+    "q4.q": "제 모든 과목을 지원합니까?",
+    "q4.a": "대부분의 과목은 문제없이 지원됩니다. 다만 Monash 일부 학부는 과목 페이지 구조가 달라, 개별 과목에서 일부 내용이 누락될 수 있습니다. 이러한 경우 과목 코드를 알려 주시면 가능한 한 빠르게 지원을 추가하겠습니다.",
+    "q5.q": "비용이 필요합니까? 이후에 유료화됩니까?",
+    "q5.a": "무료이며 유료화 계획도 없습니다. Monash 학생이 본인의 필요에 따라 개발한 도구로, 계정 등록도 필요하지 않습니다. 비용이 발생할 수 있는 부분은 AI 핵심 정리 기능뿐이며, 본인 AI 계정을 사용하므로 해당 요금은 AI 사업자에게 직접 지불하는 것으로 저희와는 무관합니다.",
+    "cta.h": "설치하고, 시간을 학습에 돌려주세요",
+    "cta.p": "자료를 찾는 데 쓰는 시간을 줄이기 위한 도구입니다.",
+    "cta.dl": "Windows 버전 다운로드", "cta.plat": "Windows 10 / 11 · 가입 불필요",
+    "foot.by": "<strong style=\"color:var(--text);\">Poetrynan</strong> 개발", "foot.dev": "",
+    "foot.terms": "이용 약관", "foot.lic": "라이선스", "foot.notice": "상표 안내", "foot.third": "제3자 고지", "foot.sec": "보안 정책",
+    "foot.noncom": "<strong>상업적 이용은 금지됩니다.</strong> 본 소프트웨어는 개인의 비상업적 용도로만 사용할 수 있습니다. 본 라이선스 및 이용 약관을 위반한 경우, 그로 인해 발생하는 모든 법적 책임은 이용자 본인이 부담하며 원작자는 어떠한 책임도 지지 않습니다.",
+    "foot.legal": "Muster는 Poetrynan이 독자적으로 개발한 소스 공개 개인 학습 도구입니다. <strong>Monash University나 Moodle의 공식 제품이 아닙니다.</strong> 양측과 아무 관련이 없습니다. \u201CMonash\u201D는 Monash University의 상표이며 여기서는 식별 목적으로만 사용합니다.<br />© 2026 Poetrynan · 소속 학부의 IT 이용 약관과 저작권 규정을 준수해 주십시오."
+  };
+  (function () {
+    var root = document.documentElement;
+    var wrap = document.getElementById("langWrap");
+    var btn = document.getElementById("langBtn");
+    var label = document.getElementById("langLabel");
+    var opts = wrap.querySelectorAll("[data-lang]");
+    var NAMES = { zh: "中文", en: "English", ja: "日本語", ko: "한국어" };
+    var HTMLLANG = { zh: "zh-CN", en: "en", ja: "ja", ko: "ko" };
+
+    function apply(lang) {
+      var dict = I18N[lang];
+      if (!dict) return;
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        var v = dict[el.getAttribute("data-i18n")];
+        if (v == null) return;
+        if (v.indexOf("<") >= 0) el.innerHTML = v;
+        else el.textContent = v;
+      });
+      if (dict["meta.title"]) document.title = dict["meta.title"];
+      root.setAttribute("lang", HTMLLANG[lang] || lang);
+      label.textContent = NAMES[lang];
+      opts.forEach(function (o) {
+        o.setAttribute("aria-selected", String(o.getAttribute("data-lang") === lang));
+      });
+      try { localStorage.setItem("mi-lang", lang); } catch (e) {}
+    }
+
+    var saved = "en";
+    try { saved = localStorage.getItem("mi-lang") || "en"; } catch (e) {}
+    apply(saved);
+
+    function close() { wrap.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var open = wrap.classList.toggle("open");
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    opts.forEach(function (o) {
+      o.addEventListener("click", function () {
+        apply(o.getAttribute("data-lang"));
+        close();
+      });
+    });
+    document.addEventListener("click", function (e) {
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") close();
+    });
+  })();
+</script>
+</body>
+</html>

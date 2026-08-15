@@ -1,0 +1,65 @@
+[package]
+name = "muster"
+version = "0.1.0"
+description = "Unofficial desktop companion that collects your own Moodle course materials and deadlines"
+authors = ["Poetrynan"]
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "muster_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "cookies", "stream"] }
+tokio = { version = "1", features = ["full"] }
+url = "2.5"
+regex = "1.10"
+chrono = "0.4"
+dirs = "5.0"
+scraper = "0.20"
+futures-util = "0.3"
+keyring = "2.1"
+
+# WebView2 cookie extraction for SSO login (Windows).
+# webview2-com is already in the dependency tree via tauri; pinning it here lets
+# us call ICoreWebView2CookieManager directly. `windows` provides the PWSTR type.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = [] }
+
+# P2-8: Release 构建优化 —
+# - opt-level = 3 优先运行速度（scraper 的 HTML 解析是 CPU 密集，不能用 "z" 换体积）
+# - lto = "thin" 跨 crate 内联 + 死代码剔除，体积与编译时间平衡点
+# - codegen-units = 1 单单元编译，牺牲编译时间换更充分的优化
+# - strip = true 剥离调试符号，可执行文件更小 → 冷启动映射更快
+# 刻意不设 panic = "abort"：Tauri 与 webview2-com 的 FFI 回调依赖 unwind 安全，
+# 改成 abort 会有破坏 SSO cookie 提取路径的风险。
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# P-8.1: dev（`npm run tauri dev` / `cargo build` 默认 profile）调试提速。
+# 只作用于 dev 构建，release 完全不受影响。
+# - opt-level = 1：scraper 的 HTML 解析是 CPU 密集，默认 0 优化在 debug 下慢一个数量级。
+#   1 级在「编译速度」与「运行速度」之间取平衡，调试断点仍可用（不像 opt-level=3 会跳行）。
+# - 刻意不开 lto / 不降 codegen-units：那会显著拖慢增量编译，与"调试要快"的目标相悖。
+[profile.dev]
+opt-level = 1
+
