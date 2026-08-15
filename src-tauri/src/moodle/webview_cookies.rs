@@ -8,10 +8,10 @@
 //! context. We solve it by reading the WebView2 cookie manager directly and
 //! handing the cookies to `reqwest`.
 //!
-//! On Windows we use `ICoreWebView2CookieManager::GetCookies`, which returns
-//! HttpOnly cookies. On other platforms we fall back to `document.cookie`
-//! (which cannot see HttpOnly cookies and therefore cannot authenticate against
-//! Moodle) and surface a clear error.
+//! On Windows we keep the existing `ICoreWebView2CookieManager::GetCookies`
+//! implementation. On macOS, Tauri 2.11's WebView cookie API talks to
+//! WKWebsiteDataStore and returns HttpOnly cookies as well, so no JavaScript or
+//! Objective-C bridge is required.
 
 use crate::moodle::auth::CookieData;
 
@@ -34,6 +34,83 @@ pub fn extract_moodle_cookies(
                 .to_string(),
         )
     }
+}
+
+/// Read Moodle cookies from WKWebView on macOS through Tauri's cross-platform
+/// cookie API. This is deliberately a separate entry point so the established
+/// Windows COM implementation remains untouched.
+#[cfg(target_os = "macos")]
+pub fn extract_moodle_cookies_macos(
+    webview: &tauri::WebviewWindow,
+) -> Result<Vec<CookieData>, String> {
+    const MOODLE_URL: &str = "https://learning.monash.edu";
+
+    let url = url::Url::parse(MOODLE_URL)
+        .map_err(|e| format!("invalid Moodle URL: {}", e))?;
+    let cookies = webview
+        .cookies_for_url(url)
+        .map_err(|e| format!("Failed to read WKWebView cookies: {}", e))?;
+
+    Ok(cookies
+        .into_iter()
+        .filter(|cookie| {
+            cookie.domain().is_none_or(|domain| {
+                let domain = domain.trim_start_matches('.');
+                domain == "learning.monash.edu" || domain.ends_with(".monash.edu")
+            })
+        })
+        .map(|cookie| CookieData {
+            name: cookie.name().to_string(),
+            value: cookie.value().to_string(),
+            domain: cookie
+                .domain()
+                .unwrap_or("learning.monash.edu")
+                .to_string(),
+            path: cookie.path().unwrap_or("/").to_string(),
+        })
+        .collect())
+}
+
+/// Seed a newly-created macOS in-app WKWebView with the saved Moodle session.
+#[cfg(target_os = "macos")]
+pub fn inject_moodle_cookies_macos(
+    webview: &tauri::WebviewWindow,
+    cookies: &[CookieData],
+    url: &str,
+) -> Result<(), String> {
+    let target = url::Url::parse(url).map_err(|e| format!("Invalid target URL: {}", e))?;
+    let target_is_monash = target
+        .host_str()
+        .map(|host| host == "monash.edu" || host.ends_with(".monash.edu"))
+        .unwrap_or(false);
+    if target.scheme() != "https" || !target_is_monash {
+        return Err("Only HTTPS Monash URLs may receive Moodle cookies".to_string());
+    }
+
+    for saved in cookies {
+        let domain = saved.domain.trim_start_matches('.');
+        if domain != "monash.edu" && !domain.ends_with(".monash.edu") {
+            continue;
+        }
+
+        let cookie = tauri::webview::Cookie::build((saved.name.clone(), saved.value.clone()))
+            .domain(saved.domain.clone())
+            .path(if saved.path.is_empty() {
+                "/".to_string()
+            } else {
+                saved.path.clone()
+            })
+            .secure(true)
+            .http_only(saved.name.eq_ignore_ascii_case("MoodleSession"))
+            .build();
+        webview
+            .set_cookie(cookie)
+            .map_err(|e| format!("Failed to inject WKWebView cookie: {}", e))?;
+    }
+
+    webview
+        .navigate(target)
+        .map_err(|e| format!("Failed to reload authenticated page: {}", e))
 }
 
 /// Inject session cookies into WebView2 so the user does not need to re-login in in-app webviews.

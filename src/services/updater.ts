@@ -33,6 +33,46 @@ export interface UpdateCheckResult {
 export const GITHUB_REPO = "Poetrynan/Muster";
 export const APP_CURRENT_VERSION = "0.1.1";
 
+type DesktopPlatform = "macos" | "windows" | "other";
+
+function getDesktopPlatform(): DesktopPlatform {
+  if (typeof navigator === "undefined") return "other";
+  const identity = `${navigator.platform || ""} ${navigator.userAgent || ""}`.toLowerCase();
+  if (identity.includes("mac")) return "macos";
+  if (identity.includes("win")) return "windows";
+  return "other";
+}
+
+/** Pick an installer for the current desktop without changing the GitHub release protocol. */
+export function selectInstallerAsset(
+  assets: GitHubAsset[],
+  platform: DesktopPlatform = getDesktopPlatform()
+): GitHubAsset | undefined {
+  const lowerName = (asset: GitHubAsset) => asset.name.toLowerCase();
+
+  if (platform === "macos") {
+    return (
+      assets.find((asset) => {
+        const name = lowerName(asset);
+        return name.endsWith(".dmg") && /(aarch64|arm64|apple[-_ ]?silicon)/.test(name);
+      }) ||
+      assets.find((asset) => lowerName(asset).endsWith(".dmg")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".app.tar.gz")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".zip"))
+    );
+  }
+
+  if (platform === "windows") {
+    return (
+      assets.find((asset) => lowerName(asset).endsWith(".msi")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".exe")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".zip"))
+    );
+  }
+
+  return assets.find((asset) => lowerName(asset).endsWith(".zip")) || assets[0];
+}
+
 /**
  * Compare two semver strings (e.g. "0.1.0" vs "0.2.0" or "v0.1.1")
  * Returns > 0 if v1 > v2, < 0 if v1 < v2, 0 if equal
@@ -86,13 +126,9 @@ export async function checkForAppUpdates(
     const tagName = data.tag_name || "";
     const cleanLatest = tagName.replace(/^v/i, "").trim();
 
-    // Find best installer asset (.msi / .exe / .zip)
+    // Find the installer for the current desktop architecture/platform.
     const assets: GitHubAsset[] = data.assets || [];
-    const installerAsset =
-      assets.find((a) => a.name.endsWith(".msi")) ||
-      assets.find((a) => a.name.endsWith(".exe")) ||
-      assets.find((a) => a.name.endsWith(".zip")) ||
-      assets[0];
+    const installerAsset = selectInstallerAsset(assets);
 
     const releaseInfo: ReleaseInfo = {
       tagName,

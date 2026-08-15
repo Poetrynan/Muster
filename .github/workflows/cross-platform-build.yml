@@ -1,0 +1,49 @@
+name: Cross-platform build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+            build_script: tauri:build:mac-arm
+            artifact_path: src-tauri/target/aarch64-apple-darwin/release/bundle
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            build_script: tauri:build:windows-x64
+            artifact_path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run ${{ matrix.build_script }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muster-${{ matrix.target }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
