@@ -600,9 +600,13 @@ async fn start_sso_login_webview_inner(
     // read them from the cookie manager.
     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
 
-    // Extract cookies on the UI thread (WebView2 requires main-thread access).
+    // Extract cookies through the established WebView2 path on Windows and
+    // Tauri's HttpOnly-capable WKWebView API on macOS.
+    #[cfg(windows)]
     let (cookies_tx, cookies_rx) = std::sync::mpsc::channel::<Result<Vec<CookieData>, String>>();
+    #[cfg(windows)]
     let webview_for_extract = webview_window.clone();
+    #[cfg(windows)]
     webview_for_extract
         .with_webview(move |pw| {
             let result = moodle::webview_cookies::extract_moodle_cookies(&pw);
@@ -610,9 +614,19 @@ async fn start_sso_login_webview_inner(
         })
         .map_err(|e| format!("Failed to access WebView for cookie extraction: {}", e))?;
 
+    #[cfg(windows)]
     let cookies = cookies_rx
         .recv_timeout(std::time::Duration::from_secs(15))
         .map_err(|e| format!("Cookie extraction timed out: {}", e))??;
+
+    #[cfg(target_os = "macos")]
+    let cookies = moodle::webview_cookies::extract_moodle_cookies_macos(&webview_window)?;
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let cookies: Vec<CookieData> = {
+        let _ = webview_window.close();
+        return Err("SSO cookie extraction is supported only on Windows and macOS.".to_string());
+    };
 
     let _ = webview_window.close();
 
@@ -690,12 +704,26 @@ async fn open_in_app_webview(
         .build()
         .map_err(|e| format!("Failed to open window: {}", e))?;
 
-    // Inject the MoodleSession and other cookies into WebView2 to allow login-free access
+    // Inject the MoodleSession and other cookies to allow login-free access.
     if !cookies.is_empty() {
-        let url_for_inject = url.clone();
-        let _ = webview_window.with_webview(move |pw| {
-            let _ = moodle::webview_cookies::inject_moodle_cookies(&pw, &cookies, &url_for_inject);
-        });
+        #[cfg(windows)]
+        {
+            let url_for_inject = url.clone();
+            let _ = webview_window.with_webview(move |pw| {
+                let _ = moodle::webview_cookies::inject_moodle_cookies(
+                    &pw,
+                    &cookies,
+                    &url_for_inject,
+                );
+            });
+        }
+
+        #[cfg(target_os = "macos")]
+        moodle::webview_cookies::inject_moodle_cookies_macos(
+            &webview_window,
+            &cookies,
+            &url,
+        )?;
     }
 
     Ok(())
@@ -808,9 +836,18 @@ pub fn run() {
                     .expect("tray quit item");
                 let menu = Menu::with_items(app, &[&show_item, &quit_item]).expect("tray menu");
 
+                // macOS menu bar items use a dedicated monochrome template image so
+                // AppKit can tint it correctly for light, dark, and highlighted states.
+                // Other platforms keep the full-colour application icon.
+                #[cfg(target_os = "macos")]
+                let tray_icon = tauri::include_image!("icons/tray-macos-template.png");
+                #[cfg(not(target_os = "macos"))]
+                let tray_icon = app.default_window_icon().expect("default icon").clone();
+
                 let _tray = TrayIconBuilder::with_id("main-tray")
                     .tooltip("Muster")
-                    .icon(app.default_window_icon().expect("default icon").clone())
+                    .icon(tray_icon)
+                    .icon_as_template(cfg!(target_os = "macos"))
                     .menu(&menu)
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id.as_ref() {
