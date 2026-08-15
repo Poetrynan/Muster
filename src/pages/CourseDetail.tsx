@@ -28,6 +28,7 @@ import { Tabs } from "../components/ui/tabs";
 import { Skeleton } from "../components/ui/skeleton";
 import { MarkdownRenderer } from "../components/ui/MarkdownRenderer";
 import { useAppStore } from "../stores/useAppStore";
+import { downloadFile } from "../services/api";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import {
   fetchCourseResources,
@@ -284,6 +285,51 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Real download via the shared download manager (visible in the top-bar
+  // download panel), same as the Dashboard resource rows.
+  const [resourceDownloadingKey, setResourceDownloadingKey] = useState<string | null>(null);
+  const handleDownloadResource = async (resource: { key: string; name: string; url?: string }) => {
+    if (!resource.url || resourceDownloadingKey) return;
+    const { upsertDownload } = useAppStore.getState();
+    const settings = useAppStore.getState().settings;
+    setResourceDownloadingKey(resource.key);
+    upsertDownload({
+      key: resource.key,
+      name: resource.name,
+      received: 0,
+      total: null,
+      speed: 0,
+      status: "downloading",
+      lastTick: Date.now(),
+    });
+    try {
+      const savedPath = await downloadFile(resource.url, settings.downloadPath || "");
+      upsertDownload({
+        key: resource.key,
+        name: resource.name,
+        received: 1,
+        total: 1,
+        speed: 0,
+        status: "done",
+        path: savedPath,
+        lastTick: Date.now(),
+      });
+    } catch (err) {
+      upsertDownload({
+        key: resource.key,
+        name: resource.name,
+        received: 0,
+        total: null,
+        speed: 0,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        lastTick: Date.now(),
+      });
+    } finally {
+      setResourceDownloadingKey(null);
+    }
+  };
 
   const handleOpenSection = async (sectionNum: number) => {
     const url = `https://learning.monash.edu/course/view.php?id=${courseId}&section=${sectionNum}`;
@@ -662,10 +708,25 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => window.open(resource.url, "_blank")}
-                                    title={t("course.materials.openExternal")}
+                                    onClick={() =>
+                                      handleDownloadResource({
+                                        key: `${idx}-${resource.url ?? "no-url"}`,
+                                        name: resource.name,
+                                        url: resource.url,
+                                      })
+                                    }
+                                    disabled={resourceDownloadingKey !== null}
+                                    title={
+                                      resourceDownloadingKey !== null
+                                        ? t("course.materials.downloading")
+                                        : t("course.materials.download")
+                                    }
                                   >
-                                    <Download className="w-4 h-4" />
+                                    {resourceDownloadingKey !== null ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Download className="w-4 h-4" />
+                                    )}
                                   </Button>
                                 ) : resource.url ? (
                                   <Button
