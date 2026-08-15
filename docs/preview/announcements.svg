@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="752" viewBox="0 0 1200 752" role="img" aria-label="Muster notification centre: auto-classified announcements grouped by course">
+  <defs>
+    <linearGradient id="lg3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00539B"/><stop offset="60%" stop-color="#2E7FD1"/><stop offset="100%" stop-color="#38BDF8"/></linearGradient>
+    <linearGradient id="av3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#93C5FD"/></linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="752" rx="14" fill="#FFFFFF"/>
+  <path d="M14 0h1172a14 14 0 0 1 14 14v22H0V14A14 14 0 0 1 14 0z" fill="#F7F8FA"/>
+  <line x1="0" y1="36" x2="1200" y2="36" stroke="#E5E7EB"/>
+  <g stroke="#5A5F66" stroke-width="1.15" fill="none" stroke-linecap="square">
+    <path d="M1080 18h10"/>
+    <rect x="1126" y="13" width="10" height="10" rx="1"/>
+    <path d="M1172 13l10 10M1182 13l-10 10"/>
+  </g>
+  <text x="16" y="22" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="600" fill="#8A9099">Muster</text>
+
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="0" y="36" width="253" height="716" fill="#FCFCFD"/>
+    <line x1="253" y1="36" x2="253" y2="752" stroke="#E5E7EB"/>
+    <line x1="0" y1="122" x2="253" y2="122" stroke="#E5E7EB"/>
+    <rect x="21" y="55" width="40" height="40" rx="11" fill="url(#lg3)"/>
+    <text x="41" y="82" text-anchor="middle" font-size="21" font-weight="800" fill="#FFFFFF">M</text>
+    <text x="71" y="72" font-size="16" font-weight="700" fill="#000000">Muster</text>
+    <text x="71" y="89" font-size="9.5" fill="#666666">For The Better Monash</text>
+    <text x="71" y="102" font-size="9.5" fill="#999999">works with Moodle&#8482;</text>
+
+    <g fill="#666666" font-size="13" font-weight="500">
+      <g transform="translate(28,148) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></g>
+      <text x="58" y="162">Home</text>
+      <g transform="translate(28,194) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></g>
+      <text x="58" y="208">Courses</text>
+      <g transform="translate(28,240) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></g>
+      <text x="58" y="254">Assignments</text>
+      <g transform="translate(28,286) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></g>
+      <text x="58" y="300">Resources</text>
+      <g transform="translate(28,332) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></g>
+      <text x="58" y="346">Calendar</text>
+    </g>
+    <rect x="13" y="366" width="227" height="42" rx="11" fill="#3B82F6"/>
+    <g transform="translate(28,378) scale(0.75)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></g>
+    <text x="58" y="392" font-size="13" font-weight="600" fill="#FFFFFF">Notifications</text>
+    <rect x="204" y="378" width="26" height="19" rx="9.5" fill="#D97706"/>
+    <text x="217" y="391.5" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">7</text>
+    <g transform="translate(28,424) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.2.61.74 1.03 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></g>
+    <text x="58" y="438" font-size="13" font-weight="500" fill="#666666">Settings</text>
+    <line x1="0" y1="628" x2="253" y2="628" stroke="#E5E7EB"/>
+    <rect x="13" y="640" width="227" height="52" rx="11" fill="#F5F7FA"/>
+    <circle cx="41" cy="666" r="17" fill="url(#av3)"/>
+    <g transform="translate(32,657) scale(0.75)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>
+    <text x="66" y="662" font-size="12" font-weight="600" fill="#000000">Sarah Chen</text>
+    <text x="66" y="678" font-size="9.5" fill="#666666">schen0042@student.monash.edu</text>
+  </g>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <line x1="253" y1="94" x2="1200" y2="94" stroke="#E5E7EB"/>
+    <rect x="277" y="50" width="420" height="34" rx="11" fill="#F1F5F9"/>
+    <g transform="translate(293,60) scale(0.62)" fill="none" stroke="#8A9099" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></g>
+    <text x="316" y="71" font-size="12.5" fill="#9AA0A6">Search courses, assignments, resources...</text>
+    <rect x="1044" y="50" width="66" height="34" rx="11" fill="#F1F5F9"/>
+    <g transform="translate(1054,60) scale(0.6)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></g>
+    <text x="1076" y="71" font-size="11.5" font-weight="600" fill="#333333">EN</text>
+    <rect x="1120" y="50" width="34" height="34" rx="10" fill="#F1F5F9"/>
+    <g transform="translate(1130,60) scale(0.62)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></g>
+    <circle cx="1148" cy="53" r="4.5" fill="#D97706"/>
+
+    <text x="277" y="140" font-size="23" font-weight="700" fill="#000000">Notification Centre</text>
+    <text x="277" y="164" font-size="13" fill="#666666">View announcements from all courses and stay up to date.</text>
+    <rect x="1023" y="120" width="128" height="32" rx="10" fill="#FFFFFF" stroke="#E0E0E0"/>
+    <g transform="translate(1037,128) scale(0.62)" fill="none" stroke="#333333" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L7 17l-5-5"/><path d="M22 10l-7.5 7.5L13 16"/></g>
+    <text x="1059" y="140" font-size="11.5" font-weight="500" fill="#333333">Mark all read</text>
+
+    <text x="277" y="196" font-size="12" fill="#666666">7 unread &#183; 24 total</text>
+    <g font-size="11" font-weight="600">
+      <rect x="377" y="182" width="48" height="26" rx="13" fill="#3B82F6"/><text x="401" y="199" text-anchor="middle" fill="#FFFFFF">All</text>
+      <rect x="433" y="182" width="112" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="489" y="199" text-anchor="middle" fill="#666666">Announcements</text>
+      <rect x="553" y="182" width="94" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="600" y="199" text-anchor="middle" fill="#666666">Assignments</text>
+      <rect x="655" y="182" width="66" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="688" y="199" text-anchor="middle" fill="#666666">Quizzes</text>
+      <rect x="729" y="182" width="58" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="758" y="199" text-anchor="middle" fill="#666666">Exams</text>
+      <rect x="795" y="182" width="74" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="832" y="199" text-anchor="middle" fill="#666666">Materials</text>
+      <rect x="877" y="182" width="62" height="26" rx="13" fill="#FFFFFF" stroke="#E0E0E0"/><text x="908" y="199" text-anchor="middle" fill="#666666">Grades</text>
+    </g>
+
+    <text x="277" y="240" font-size="13" font-weight="700" fill="#000000">FIT5225</text>
+    <rect x="332" y="227" width="26" height="19" rx="9.5" fill="#FEF9C3"/><text x="345" y="240.5" text-anchor="middle" font-size="11" font-weight="700" fill="#854D0E">3</text>
+    <text x="368" y="240" font-size="11" fill="#9AA0A6">14</text>
+
+    <rect x="277" y="252" width="874" height="86" rx="18" fill="#FFFFFF" stroke="#E9EBEF"/>
+    <path d="M277 270a18 18 0 0 1 18-18h4v86h-4a18 18 0 0 1-18-18z" fill="#3B82F6"/>
+    <g transform="translate(313,273) scale(0.85)" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></g>
+    <rect x="341" y="272" width="66" height="20" rx="10" fill="#DBEAFE"/><text x="374" y="286" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1E40AF">Materials</text>
+    <text x="417" y="286" font-size="13.5" font-weight="600" fill="#000000">Week 6 lecture slides now available</text>
+    <circle cx="678" cy="282" r="4" fill="#D97706"/>
+    <text x="341" y="308" font-size="12" fill="#666666">Slides for the containerisation lecture have been uploaded to Week 6.</text>
+    <text x="341" y="327" font-size="10.5" fill="#9AA0A6">Dr. Alan Nguyen &#183; 5 March 2026, 10:14 AM</text>
+
+    <rect x="277" y="348" width="874" height="86" rx="18" fill="#FFFFFF" stroke="#E9EBEF"/>
+    <path d="M277 366a18 18 0 0 1 18-18h4v86h-4a18 18 0 0 1-18-18z" fill="#3B82F6"/>
+    <g transform="translate(313,369) scale(0.85)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></g>
+    <rect x="341" y="368" width="80" height="20" rx="10" fill="#FEF9C3"/><text x="381" y="382" text-anchor="middle" font-size="10.5" font-weight="700" fill="#854D0E">Assignments</text>
+    <text x="431" y="382" font-size="13.5" font-weight="600" fill="#000000">Assignment 2 spec clarification</text>
+    <circle cx="672" cy="378" r="4" fill="#D97706"/>
+    <text x="341" y="404" font-size="12" fill="#666666">Please note section 3.2 has been updated; resubmission is not required.</text>
+    <text x="341" y="423" font-size="10.5" fill="#9AA0A6">Dr. Alan Nguyen &#183; 3 March 2026, 4:02 PM</text>
+
+    <text x="277" y="470" font-size="13" font-weight="700" fill="#000000">FIT5147</text>
+    <text x="332" y="470" font-size="11" fill="#9AA0A6">9</text>
+
+    <g opacity="0.7">
+      <rect x="277" y="482" width="874" height="86" rx="18" fill="#FFFFFF" stroke="#E9EBEF"/>
+      <g transform="translate(313,503) scale(0.85)" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></g>
+      <rect x="341" y="502" width="58" height="20" rx="10" fill="#DCFCE7"/><text x="370" y="516" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">Grades</text>
+      <text x="409" y="516" font-size="13.5" font-weight="400" fill="#000000">Quiz 3 results released</text>
+      <text x="341" y="538" font-size="12" fill="#666666">Marks are now visible in the gradebook.</text>
+      <text x="341" y="557" font-size="10.5" fill="#9AA0A6">Teaching Team &#183; 1 March 2026, 9:30 AM</text>
+    </g>
+
+    <g transform="translate(277,596) scale(0.62)" fill="none" stroke="#8A9099" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></g>
+    <text x="299" y="607" font-size="13" font-weight="600" fill="#666666">Past courses (9)</text>
+    <line x1="277" y1="632" x2="1151" y2="632" stroke="#EEF0F3"/>
+    <text x="277" y="660" font-size="11.5" fill="#9AA0A6">Every notice is auto-classified, grouped by course and sorted unread-first. One tap on a chip filters the whole wall.</text>
+  </g>
+</svg>

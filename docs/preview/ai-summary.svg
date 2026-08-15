@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="700" viewBox="0 0 980 700" role="img" aria-label="Muster AI course summary streaming live with Markdown rendering">
+  <rect x="0" y="0" width="980" height="700" rx="14" fill="#FFFFFF"/>
+  <path d="M14 0h952a14 14 0 0 1 14 14v16H0V14A14 14 0 0 1 14 0z" fill="#F7F8FA"/>
+  <line x1="0" y1="30" x2="980" y2="30" stroke="#E5E7EB"/>
+  <g stroke="#5A5F66" stroke-width="1.05" fill="none" stroke-linecap="square"><path d="M876 15h8"/><rect x="916" y="11" width="8" height="8" rx="1"/><path d="M956 11l8 8M964 11l-8 8"/></g>
+  <text x="14" y="19" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="600" fill="#8A9099">Muster</text>
+
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g transform="translate(20,48) scale(0.68)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></g>
+    <text x="44" y="61" font-size="15" font-weight="700" fill="#000000">FIT5225</text>
+    <text x="106" y="61" font-size="13" fill="#666666">Cloud computing and security &#183; S1 2026</text>
+
+    <rect x="20" y="84" width="700" height="34" rx="11" fill="#F1F5F9"/>
+    <g font-size="11.5" font-weight="500" fill="#666666">
+      <text x="52" y="105" text-anchor="middle">Overview</text>
+      <text x="129" y="105" text-anchor="middle">Materials</text>
+      <text x="216" y="105" text-anchor="middle">Assignments</text>
+      <text x="323" y="105" text-anchor="middle">Announcements</text>
+      <text x="418" y="105" text-anchor="middle">Contacts</text>
+      <text x="493" y="105" text-anchor="middle">Unit Info</text>
+      <text x="577" y="105" text-anchor="middle">Recordings</text>
+    </g>
+    <rect x="632" y="88" width="84" height="26" rx="8" fill="#FFFFFF"/>
+    <text x="674" y="105" text-anchor="middle" font-size="11.5" font-weight="600" fill="#111111">AI Summary</text>
+
+    <rect x="20" y="132" width="940" height="548" rx="18" fill="#FFFFFF" stroke="#E9EBEF"/>
+    <g transform="translate(40,152) scale(0.75)" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
+    <text x="66" y="167" font-size="14.5" font-weight="600" fill="#000000">OpenAI Compatible Summary</text>
+
+    <g>
+      <rect x="40" y="188" width="238" height="38" rx="11" fill="#3B82F6"/>
+      <g transform="translate(56,199) scale(0.68)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
+      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Generate This Week's Summary</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.036" values="1;0"/>
+    </g>
+
+    <g opacity="0">
+      <rect x="40" y="188" width="152" height="38" rx="11" fill="#3B82F6"/>
+      <g transform="translate(64,207)"><g><path d="M0 -7A7 7 0 0 1 7 0" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/><circle cx="0" cy="0" r="7" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="2.4"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.9s" repeatCount="indefinite"/></g></g>
+      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Generating...</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.036;0.714" values="0;1;0"/>
+    </g>
+
+    <g opacity="0">
+      <rect x="40" y="188" width="186" height="38" rx="11" fill="#3B82F6"/>
+      <g transform="translate(56,199) scale(0.68)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
+      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Regenerate Summary</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.714;0.964" values="0;1;0"/>
+    </g>
+    <rect x="40" y="244" width="900" height="410" rx="16" fill="#FCFCFD" stroke="#EDEFF2"/>
+
+    <g opacity="0"><text x="64" y="284" font-size="15" font-weight="700" fill="#000000">This Week at a Glance</text>
+      <line x1="64" y1="293" x2="916" y2="293" stroke="#E5E7EB"/>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.055;0.08;1" values="0;0;1;1"/></g>
+
+    <g opacity="0"><text x="64" y="318" font-size="12.5" fill="#333333">Week 6 centres on containerisation and secure cloud deployment. Assessment pressure is high this</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.107;0.132;1" values="0;0;1;1"/></g>
+    <g opacity="0"><text x="64" y="336" font-size="12.5" fill="#333333">week: Assignment 2 (30%) is due Thursday and Quiz 1 closes today.</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.159;0.184;1" values="0;0;1;1"/></g>
+
+    <g opacity="0"><text x="64" y="370" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">KEY RESOURCES</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.211;0.236;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="391" r="2.6" fill="#333333"/><text x="82" y="395" font-size="12.5" fill="#333333">Week 6 lecture slides &#8212; containerisation (PDF, 9.5 MB)</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.263;0.288;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="415" r="2.6" fill="#333333"/><text x="82" y="419" font-size="12.5" fill="#333333">Lab 6 worksheet &#8212; Docker images and vulnerability scanning</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.315;0.34;1" values="0;0;1;1"/></g>
+    <g opacity="0"><text x="64" y="453" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">ASSIGNMENTS &amp; QUIZZES</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.367;0.392;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="474" r="2.6" fill="#333333"/><text x="82" y="478" font-size="12.5" fill="#333333">Assignment 2: Cloud Deployment &#8212; due 12 Mar 2026, 16:30, weight 30%</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.419;0.444;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="498" r="2.6" fill="#333333"/><text x="82" y="502" font-size="12.5" fill="#333333">Quiz 1: Fundamentals &#8212; closes today, 2 attempts remaining</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.471;0.496;1" values="0;0;1;1"/></g>
+
+    <g opacity="0"><text x="64" y="536" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">NEXT STEPS</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.523;0.548;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="557" r="2.6" fill="#333333"/><text x="82" y="561" font-size="12.5" fill="#333333">Start Assignment 2 today &#8212; 30% of the unit and only 4 days left.</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.575;0.6;1" values="0;0;1;1"/></g>
+    <g opacity="0"><circle cx="70" cy="581" r="2.6" fill="#333333"/><text x="82" y="585" font-size="12.5" fill="#333333">Sit Quiz 1 before midnight, then re-read slides 12&#8211;31 for the lab.</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.627;0.652;1" values="0;0;1;1"/></g>
+
+    <g opacity="0">
+      <text x="0" y="0" font-size="14" font-weight="700" fill="#3B82F6">&#9613;<animate attributeName="opacity" values="1;0" keyTimes="0;0.5" dur="0.9s" calcMode="discrete" repeatCount="indefinite"/></text>
+      <animateTransform attributeName="transform" type="translate" dur="14s" repeatCount="indefinite" calcMode="discrete"
+        keyTimes="0;0.08;0.132;0.184;0.236;0.288;0.34;0.392;0.444;0.496;0.548;0.6;0.652"
+        values="64,284;236,284;570,318;450,336;152,370;418,395;444,419;208,453;494,478;424,502;146,536;462,561;462,585"/>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.08;0.7" values="0;1;0"/>
+    </g>
+
+    <g opacity="0">
+      <line x1="64" y1="612" x2="916" y2="612" stroke="#E5E7EB"/>
+      <text x="64" y="634" font-size="10.5" fill="#9AA0A6">Generated at 8/03/2026, 9:42:11 PM &#183; openai &#183; gpt-4o-mini</text>
+      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.714;0.964" values="0;1;0"/>
+    </g>
+    <text x="490" y="678" text-anchor="middle" font-size="10.5" fill="#B4B9C0">Streaming output &#8212; the summary types in live, fully Markdown-rendered, in your interface language.</text>
+  </g>
+</svg>
