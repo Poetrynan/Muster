@@ -33,7 +33,7 @@ export interface UpdateCheckResult {
 }
 
 export const GITHUB_REPO = "Poetrynan/Muster";
-export const APP_CURRENT_VERSION = "0.1.1";
+export const APP_CURRENT_VERSION = "0.1.3";
 
 type DesktopPlatform = "macos" | "windows" | "other";
 type DesktopArch = "aarch64" | "x86_64" | "other";
