@@ -806,6 +806,68 @@ fn dev_log(stage: String, detail: String) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Structured system information attached to feedback submissions.
+/// Reported from Rust (not parsed from a user-agent string): OS family, exact
+/// version, architecture, Apple Silicon flag and the app version.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemInfo {
+    pub os: String,
+    pub arch: String,
+    pub os_version: String,
+    pub is_apple_silicon: bool,
+    pub app_version: String,
+}
+
+/// Best-effort OS version:
+/// - Windows: RtlGetVersion (kernel version, e.g. "10.0.26200")
+/// - macOS:   `sw_vers -productVersion` (e.g. "15.5")
+/// - other:   empty (unknown)
+fn detect_os_version() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Wdk::System::SystemServices::RtlGetVersion;
+        use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+        let mut vi = OSVERSIONINFOW {
+            dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+            ..Default::default()
+        };
+        // NTSTATUS == 0 means STATUS_SUCCESS.
+        let status = unsafe { RtlGetVersion(&mut vi) };
+        if status.is_ok() {
+            return format!("{}.{}.{}", vi.dwMajorVersion, vi.dwMinorVersion, vi.dwBuildNumber);
+        }
+        "unknown".to_string()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|v| v.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "unknown".to_string()
+    }
+}
+
+#[tauri::command]
+fn get_system_info(app_handle: tauri::AppHandle) -> SystemInfo {
+    let os = std::env::consts::OS.to_string();
+    let arch = std::env::consts::ARCH.to_string();
+    SystemInfo {
+        os,
+        arch,
+        os_version: detect_os_version(),
+        is_apple_silicon: std::env::consts::OS == "macos" && std::env::consts::ARCH == "aarch64",
+        app_version: app_handle.package_info().version.to_string(),
+    }
+}
+
 pub fn run() {
     use tauri::{Listener, Manager};
 
@@ -979,6 +1041,7 @@ pub fn run() {
             fetch_grade_overview,
             set_close_to_tray,
             get_target_arch,
+            get_system_info,
             sync_all,
             get_sync_status,
             download_file,
@@ -994,4 +1057,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detect_os_version;
+
+    #[test]
+    fn os_version_is_never_empty() {
+        // On Windows this resolves via RtlGetVersion (kernel version), on macOS via
+        // sw_vers; it must never panic and should return a non-empty string.
+        let v = detect_os_version();
+        println!("detect_os_version() = {v:?} | os = {} | arch = {}", std::env::consts::OS, std::env::consts::ARCH);
+        assert!(!v.is_empty(), "detect_os_version returned empty");
+        // Windows: "10.0.26200"; macOS: "15.5" — contains at least one digit.
+        assert!(v.chars().any(|c| c.is_ascii_digit()), "no version digits in {v:?}");
+    }
+
+    #[test]
+    fn os_and_arch_constants_are_populated() {
+        assert_eq!(std::env::consts::OS.len() > 0, true);
+        assert_eq!(std::env::consts::ARCH.len() > 0, true);
+    }
 }

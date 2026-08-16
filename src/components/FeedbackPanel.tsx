@@ -6,7 +6,8 @@ import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { useTranslation } from "../i18n/useTranslation";
 import { useAppStore } from "../stores/useAppStore";
-import { APP_CURRENT_VERSION } from "../services/updater";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentAppVersion } from "../services/updater";
 
 // Public submit-only endpoint. It carries no credential and grants no read access,
 // so shipping it in an open-source client leaks nothing that isn't already public.
@@ -19,6 +20,14 @@ const COOLDOWN_SECONDS = 30;
 
 type FeedbackKind = "bug" | "idea" | "other";
 type SendState = "idle" | "sending" | "success" | "error";
+
+interface SystemInfo {
+  os: string;
+  arch: string;
+  osVersion: string;
+  isAppleSilicon: boolean;
+  appVersion: string;
+}
 // Retryable and non-retryable failures need different copy: telling someone to check
 // their connection when the real cause is a rate limit sends them into a retry loop.
 type FailureKind = "network" | "rate" | "server";
@@ -34,6 +43,8 @@ export function FeedbackPanel() {
   const [failure, setFailure] = useState<FailureKind | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [isDuplicate, setIsDuplicate] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
   // Last body we actually delivered. Kept in a ref because it must survive the
   // success screen and "write another" without triggering a re-render of its own.
@@ -47,15 +58,39 @@ export function FeedbackPanel() {
     return () => clearInterval(id);
   }, [cooldown]);
 
+  // Resolve the current version from the runtime (tauri.conf.json).
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentAppVersion().then((v) => {
+      if (!cancelled) setAppVersion(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Structured OS info reported from Rust (not parsed from a user-agent string).
+  useEffect(() => {
+    let cancelled = false;
+    invoke<SystemInfo>("get_system_info")
+      .then((info) => {
+        if (!cancelled) setSystemInfo(info);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Built once and used for both the disclosure list and the request body, so what
   // the user is shown can never drift from what is actually sent.
   const meta = useMemo(
     () => ({
-      version: APP_CURRENT_VERSION,
+      version: appVersion,
       language: settings.language || "en",
-      platform: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+      platform: systemInfo ? JSON.stringify(systemInfo) : "unknown",
     }),
-    [settings.language]
+    [settings.language, appVersion, systemInfo]
   );
 
   const kinds: { key: FeedbackKind; labelKey: Parameters<typeof t>[0] }[] = [
@@ -206,7 +241,11 @@ export function FeedbackPanel() {
                     <li>{t("feedback.attachedVersion", { version: meta.version })}</li>
                     <li>{t("feedback.attachedLanguage", { language: meta.language })}</li>
                     <li className="break-all">
-                      {t("feedback.attachedPlatform", { platform: meta.platform })}
+                      {t("feedback.attachedPlatform", {
+                        platform: systemInfo
+                          ? `${systemInfo.os} ${systemInfo.osVersion} (${systemInfo.arch})${systemInfo.isAppleSilicon ? " · Apple Silicon" : ""} · v${systemInfo.appVersion}`
+                          : meta.platform,
+                      })}
                     </li>
                   </ul>
                   <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">

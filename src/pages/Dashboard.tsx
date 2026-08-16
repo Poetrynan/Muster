@@ -24,6 +24,7 @@ import {
   X,
   CloudDownload,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useState, lazy, Suspense, useCallback, useMemo, useRef } from "react";
 import { Button } from "../components/ui/button";
@@ -34,6 +35,7 @@ import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustratio
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { useAppStore } from "../stores/useAppStore";
+import { checkForAppUpdates, getCurrentAppVersion, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
@@ -755,6 +757,36 @@ export function Dashboard() {
     };
   }, [isLoggedIn]);
 
+  // Silent update check on launch: only surfaces a banner AFTER the user is in the
+  // real app (Dashboard) when a newer release exists. No prompts on the login page.
+  const [updateBanner, setUpdateBanner] = useState<ReleaseInfo | null>(null);
+  const openReleaseUrl = async (url: string) => {
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } catch {
+      /* silent */
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    getCurrentAppVersion()
+      .then((version) => checkForAppUpdates(version))
+      .then((res) => {
+        if (!cancelled && res.hasUpdate && res.latestRelease) {
+          setUpdateBanner(res.latestRelease);
+        }
+      })
+      .catch(() => {
+        /* silent: never block the app on an update-check failure */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
+
   // Periodic auto-sync: on mount, check whether more than autoSyncIntervalDays (default 7 days) has passed since the last auto-sync.
   // No setInterval — a desktop app restarts often enough that a single check on mount is sufficient.
   // Settings are read via getState() to avoid putting settings in the dependency array and re-running on every settings change.
@@ -1284,6 +1316,26 @@ export function Dashboard() {
 
         {/* Content area */}
         <div className="flex-1 overflow-auto p-6 fade-in">
+          {/* Update available banner — shown only inside the real app (after login),
+              when a newer GitHub release was found by the silent launch check. */}
+          {updateBanner && (
+            <div className="mb-6 p-4 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => openReleaseUrl(updateBanner.htmlUrl)}
+                className="flex items-start gap-3 text-left flex-1 min-w-0 group"
+              >
+                <Sparkles className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <p className="font-semibold text-foreground group-hover:underline">
+                  {t("dashboard.updateBanner", { version: updateBanner.version || updateBanner.tagName })}
+                </p>
+              </button>
+              <Button variant="ghost" size="sm" onClick={() => setUpdateBanner(null)} aria-label={t("common.close")}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
           {/* Reminder Banner */}
           {reminderBanner && (
             <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-4">

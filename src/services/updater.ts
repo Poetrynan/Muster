@@ -33,7 +33,24 @@ export interface UpdateCheckResult {
 }
 
 export const GITHUB_REPO = "Poetrynan/Muster";
-export const APP_CURRENT_VERSION = "0.1.3";
+
+/**
+ * Current app version, read from the runtime (tauri.conf.json via getVersion).
+ * Never hardcoded: bumping the version in tauri.conf.json before packaging is
+ * the single source of truth, so the About page, the update-check baseline and
+ * the update banner can never display a stale version again.
+ */
+let cachedVersion: string | null = null;
+export async function getCurrentAppVersion(): Promise<string> {
+  if (cachedVersion) return cachedVersion;
+  try {
+    const { getVersion } = await import("@tauri-apps/api/app");
+    cachedVersion = await getVersion();
+  } catch {
+    cachedVersion = "0.0.0";
+  }
+  return cachedVersion;
+}
 
 type DesktopPlatform = "macos" | "windows" | "other";
 type DesktopArch = "aarch64" | "x86_64" | "other";
@@ -130,9 +147,12 @@ export function compareVersions(v1: string, v2: string): number {
  * Check for updates via GitHub Releases API
  */
 export async function checkForAppUpdates(
-  currentVersion: string = APP_CURRENT_VERSION,
+  currentVersion?: string,
   repo: string = GITHUB_REPO
 ): Promise<UpdateCheckResult> {
+  if (!currentVersion) {
+    currentVersion = await getCurrentAppVersion();
+  }
   try {
     const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
       headers: {

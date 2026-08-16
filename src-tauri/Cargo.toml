@@ -1,6 +1,6 @@
 [package]
 name = "muster"
-version = "0.1.3"
+version = "0.1.4"
 description = "Unofficial desktop companion that collects your own Moodle course materials and deadlines"
 authors = ["Poetrynan"]
 license = "PolyForm-Noncommercial-1.0.0"
@@ -41,7 +41,7 @@ keyring = "2.1"
 # us call ICoreWebView2CookieManager directly. `windows` provides the PWSTR type.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
-windows = { version = "0.61", features = [] }
+windows = { version = "0.61", features = ["Win32_System_SystemInformation", "Wdk_System_SystemServices"] }
 
 # P2-8: Release 构建优化 —
 # - opt-level = 3 优先运行速度（scraper 的 HTML 解析是 CPU 密集，不能用 "z" 换体积）
