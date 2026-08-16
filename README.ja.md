@@ -73,13 +73,16 @@ Muster は学生向けのデスクトップアプリです。Moodle に散らば
 > 例：アプリをアンインストールしても、あなたのデータはサーバーに残りません。
 
 
-## 🚀 はじめに
+## 🚀 はじめ方
+ 
+> **対応プラットフォーム**：Muster は **Windows 10 / 11 (64-bit)** および **macOS 12+ (Apple Silicon & Intel)** に対応しています。
 
-> **注意**: Muster は現在 **Windows 10 / 11 (64-bit)** のみ対応しています。**Mac (macOS) 版は現在未対応**です（将来のリリースで予定）。
-
-1. [Releases](https://github.com/Poetrynan/Muster/releases) から最新の Windows インストーラー（`Muster_0.1.1_x64-setup.exe`）をダウンロード。
-2. 起動して Monash アカウントでログイン（Okta SSO）。
-3. **Moodleと同期**をクリック — コース・課題・資料・お知らせが自動取得されます。
+1. [Releases](https://github.com/Poetrynan/Muster/releases) ページから対応するインストーラーをダウンロードします：
+   - **Windows**：`Muster_0.1.1_x64-setup.exe`（または `.msi`）
+   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.1.1_aarch64.dmg`
+   - **macOS (Intel)**：`Muster_0.1.1_x64.dmg`
+2. アプリを起動し、Monash アカウントでログインします（Okta SSO）。
+3. **Moodleと同期** をクリックすると、コース、課題、資料、お知らせが自動で取得されます。
 
 > ソースからビルドする場合: `npm install && npm run build && npx tauri build` を実行（Rust ツールチェーンが必要）。
 

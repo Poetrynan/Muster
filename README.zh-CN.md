@@ -73,13 +73,16 @@ Muster 是一款面向学生的桌面应用，把散落在 Moodle 各处的课�
 > 举个例子：卸载应用后，没有任何你的数据残留在服务器上。
 
 
-## 🚀 快速开始
+## 🚀 快速上手
+ 
+> **支持平台**：Muster 支持 **Windows 10 / 11 (64位)** 与 **macOS 12+ (Apple Silicon M系列与 Intel 芯片)**。
 
-> **说明**：Muster 当前仅支持 **Windows 10 / 11 (64位)** 系统。**Mac (macOS) 版本暂不支持**（计划在后续版本推出）。
-
-1. 从 [Releases](https://github.com/Poetrynan/Muster/releases) 页面下载最新 Windows 安装包（`Muster_0.1.1_x64-setup.exe`）。
-2. 启动应用，用 Monash 账号登录（Okta SSO）。
-3. 点击**同步 Moodle 数据** — 课程、作业、资料、公告自动抓取。
+1. 在 [Releases](https://github.com/Poetrynan/Muster/releases) 页面下载适合你系统的安装包：
+   - **Windows**：`Muster_0.1.1_x64-setup.exe`（或 `.msi`）
+   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.1.1_aarch64.dmg`
+   - **macOS (Intel)**：`Muster_0.1.1_x64.dmg`
+2. 打开客户端，点击登录并使用你的 Monash 学生账号完成认证（Okta SSO）。
+3. 点击 **同步 Moodle 数据** —— 所有课程、作业、课件和通知将自动拉取到本地。
 
 > 想从源码构建的开发者：查看项目结构后运行 `npm install && npm run build && npx tauri build`（需要 Rust 工具链）。
 
