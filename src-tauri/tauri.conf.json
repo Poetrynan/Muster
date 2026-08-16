@@ -37,6 +37,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    },
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",
