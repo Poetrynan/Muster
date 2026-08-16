@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Globe,
@@ -47,9 +47,25 @@ const LIGHT_TOKENS = {
 
 export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { setLoggedIn, setUser } = useAppStore();
   const { t, lang } = useTranslation();
+
+  // Footer version comes from the runtime (tauri.conf.json) — never hardcoded,
+  // so a release can never ship with a stale version string.
+  useEffect(() => {
+    let cancelled = false;
+    import("../services/updater")
+      .then((m) => m.getCurrentAppVersion())
+      .then((v) => {
+        if (!cancelled) setAppVersion(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLoginResponse = (response: {
     success: boolean;
@@ -104,7 +120,7 @@ export function LoginPage() {
       security: "安全与隐私",
       mfa: "支持 Okta 手机 MFA 二步验证",
       keyring: "凭证写入系统安全凭据库，明文密码零接触",
-      footNote: "v0.1.3 · 非 Monash 官方出品，与 Monash University 无关联",
+      footNote: "非 Monash 官方出品，与 Monash University 无关联",
       errorTitle: "登录错误",
       signingIn: "登录中...",
       features: [
@@ -125,7 +141,7 @@ export function LoginPage() {
       security: "Security & privacy",
       mfa: "Supports Okta mobile 2FA (MFA)",
       keyring: "Credentials stored in the OS keyring; no plaintext password",
-      footNote: "v0.1.3 · Not a Monash product, not affiliated with Monash University",
+      footNote: "Not a Monash product, not affiliated with Monash University",
       errorTitle: "Sign-in error",
       signingIn: "Signing in...",
       features: [
@@ -146,7 +162,7 @@ export function LoginPage() {
       security: "セキュリティとプライバシー",
       mfa: "Okta モバイル MFA（二段階認証）に対応",
       keyring: "認証情報は OS の資格情報ストアに保存され、平文パスワードは一切扱いません",
-      footNote: "v0.1.3 · Monash 公式製品ではなく、Monash University とは無関係です",
+      footNote: "Monash 公式製品ではなく、Monash University とは無関係です",
       errorTitle: "ログインエラー",
       signingIn: "ログイン中...",
       features: [
@@ -167,7 +183,7 @@ export function LoginPage() {
       security: "보안 및 개인정보",
       mfa: "Okta 모바일 MFA(2단계 인증) 지원",
       keyring: "자격 증명은 OS 자격 증명 저장소에 저장되며, 평문 비밀번호는 다루지 않습니다",
-      footNote: "v0.1.3 · Monash 공식 제품이 아니며 Monash University와 무관합니다",
+      footNote: "Monash 공식 제품이 아니며 Monash University와 무관합니다",
       errorTitle: "로그인 오류",
       signingIn: "로그인 중...",
       features: [
@@ -403,7 +419,7 @@ export function LoginPage() {
 
         {/* Footer: factual, neutral disclaimer */}
         <p className="text-xs text-center text-muted-foreground shrink-0">
-          {copy.footNote}
+          {`v${appVersion} · ${copy.footNote}`}
         </p>
       </div>
     </div>

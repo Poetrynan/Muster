@@ -1,3 +1,80 @@
+# ✨ Muster v0.1.4 — Update Banner & Dynamic Versions
+
+> v0.1.4 adds a **silent update check on launch** with an in-app banner when a
+> newer release exists, makes the app version fully **runtime-driven** (no more
+> hardcoded version strings anywhere), and attaches **structured system info**
+> (reported from Rust, not a user-agent string) to feedback submissions.
+
+---
+
+## ✨ What's New
+
+### 1. Update banner — know when a new version ships
+On launch, Muster silently checks GitHub for a newer release. When one exists,
+a banner appears **inside the app** (after login, on the dashboard): "New
+version v0.1.5 available — tap to view". Tapping opens the release page; the
+X dismisses it for the session. No update → no banner, zero noise.
+
+### 2. Version numbers are no longer hardcoded
+Previously the version shown in About, the login footer, the update check and
+feedback had to be bumped by hand on every release — v0.1.3 shipped with a
+stale v0.1.1 baseline. Now every version string comes from the runtime
+(tauri.conf.json via `getVersion`): the About page, login footer (4
+languages), update-check baseline and feedback attachments can never drift
+again. The version is maintained in exactly one place.
+
+### 3. Feedback carries real structured system info
+Feedback submissions now attach a structured system report obtained from Rust
+(`get_system_info`) instead of a raw browser user-agent string:
+
+```json
+{
+  "os": "windows",
+  "arch": "x86_64",
+  "osVersion": "10.0.26200",
+  "isAppleSilicon": false,
+  "appVersion": "0.1.4"
+}
+```
+
+On macOS it reports e.g. `"os": "macos"`, `"arch": "aarch64"`,
+`"osVersion": "15.5"`, `"isAppleSilicon": true`. No UA parsing, no fake data —
+exact OS family, kernel/product version, architecture and app version.
+
+---
+
+## 🐛 Bug Fixes
+
+### 1. About page / login footer showed a stale version ❌→✅
+The About page and the login footer (all four languages) could display an old
+version when a release forgot to bump the hardcoded constant. Root-caused and
+eliminated: version display is now fully runtime-driven (see What's New #2).
+
+### 2. Update check could report the wrong baseline ❌→✅
+The update-check baseline was a hardcoded constant that drifted (v0.1.2
+shipped with a v0.1.1 baseline, which would have prompted a false "update
+available"). The baseline is now the actual runtime version.
+
+### 3. Feedback attached a confusing browser user-agent ❌→✅
+Feedback used to send a WebView user-agent string (`Mozilla/5.0 … Edg/…`)
+that looked fake and didn't identify the app. It now sends precise structured
+system info from Rust (see What's New #3).
+
+---
+
+## 🪟🍏 Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 **Windows** | 64-bit NSIS Setup (Recommended) | `Muster_0.1.4_x64-setup.exe` |
+| 🪟 **Windows** | 64-bit MSI Installer | `Muster_0.1.4_x64_en-US.msi` |
+| 🍏 **macOS** | Apple Silicon (M1 / M2 / M3 / M4) | `Muster_0.1.4_aarch64.dmg` |
+| 🍏 **macOS** | Intel x86_64 | `Muster_0.1.4_x64.dmg` |
+
+> **macOS first launch:** right-click the app → **Open** (or run `xattr -dr com.apple.quarantine /Applications/Muster.app`) to bypass Gatekeeper for unsigned development builds.
+
+---
+
 # 🐛 Muster v0.1.3 — Version Display Hotfix
 
 > v0.1.3 fixes version-number inconsistencies left over from the v0.1.2 release:

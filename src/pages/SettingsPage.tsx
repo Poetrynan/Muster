@@ -40,7 +40,7 @@ import { saveAiConfig, syncAll, logout, testAiConnection } from "../services/api
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { requestNotificationPermission, clearReminded } from "../services/reminders";
-import { checkForAppUpdates, APP_CURRENT_VERSION, type UpdateCheckResult } from "../services/updater";
+import { checkForAppUpdates, getCurrentAppVersion, type UpdateCheckResult } from "../services/updater";
 import { ACCENT_COLORS, type AccentColor } from "../types";
 import { open } from "@tauri-apps/plugin-dialog";
 import appIcon from "../assets/app-icon.png";
@@ -92,6 +92,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   // GitHub Release update check state
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [appVersion, setAppVersion] = useState("");
   const [showUpToDateToast, setShowUpToDateToast] = useState(false);
 
   // Sync "minimize to tray on close" to the Rust side (the window close event reads it); degrades silently in the browser dev environment
@@ -190,13 +191,25 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     }
   };
 
+  // Resolve the current version once from the runtime (tauri.conf.json).
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentAppVersion().then((v) => {
+      if (!cancelled) setAppVersion(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
     setUpdateResult(null);
     setShowUpToDateToast(false);
 
     try {
-      const res = await checkForAppUpdates(APP_CURRENT_VERSION);
+      const currentVersion = appVersion || (await getCurrentAppVersion());
+      const res = await checkForAppUpdates(currentVersion);
       setUpdateResult(res);
       if (!res.hasUpdate && !res.error) {
         setShowUpToDateToast(true);
@@ -205,7 +218,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     } catch (e: any) {
       setUpdateResult({
         hasUpdate: false,
-        currentVersion: APP_CURRENT_VERSION,
+        currentVersion: appVersion || "unknown",
         error: e?.message || "Failed to check",
       });
     } finally {
@@ -941,7 +954,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                     <h3 className="text-xl font-bold mb-1.5">Muster</h3>
                     <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
                       <span className="text-xs px-2.5 py-0.5 rounded-full bg-secondary text-muted-foreground border">
-                        {t("settings.about.version", { version: APP_CURRENT_VERSION })}
+                        {t("settings.about.version", { version: appVersion || "—" })}
                       </span>
                       <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium">
                         {t("settings.about.authorBadge", { author: "Poetrynan" })}
@@ -963,7 +976,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                     {showUpToDateToast && (
                       <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-in fade-in zoom-in duration-200">
                         <Check className="w-3.5 h-3.5" />
-                        {t("settings.about.upToDate", { version: APP_CURRENT_VERSION })}
+                        {t("settings.about.upToDate", { version: appVersion })}
                       </div>
                     )}
 
