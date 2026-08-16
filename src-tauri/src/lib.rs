@@ -8,7 +8,7 @@ mod server;
 
 use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
 use moodle::scraper::MoodleScraper;
-use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording};
+use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, CourseTabData, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording};
 use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
@@ -223,7 +223,17 @@ async fn fetch_course_recordings(
 async fn sync_all(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<(Vec<Course>, Vec<Resource>, Vec<Assignment>, Vec<Announcement>), String> {
+    #[allow(unused)] include_fixed_tabs: bool,
+) -> Result<
+    (
+        Vec<Course>,
+        Vec<Resource>,
+        Vec<Assignment>,
+        Vec<Announcement>,
+        Vec<CourseTabData>,
+    ),
+    String,
+> {
     let scraper_guard = state.scraper.lock().await;
     let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
     let progress: Option<std::sync::Arc<dyn Fn(usize, usize, &str) + Send + Sync>> =
@@ -233,7 +243,7 @@ async fn sync_all(
                 serde_json::json!({ "done": done, "total": total, "phase": phase }),
             );
         }));
-    scraper.fetch_all_data(progress).await
+    scraper.fetch_all_data(progress, include_fixed_tabs).await
 }
 
 /// Remove all files inside the configured download folder (user-initiated, from the clear-data modal).
@@ -294,7 +304,8 @@ async fn get_sync_status(state: State<'_, AppState>) -> Result<SyncStatus, Strin
         if let Ok(resources) = scraper.fetch_course_resources(course.id).await {
             resources_count += resources.len() as u32;
         }
-        if let Ok(assignments) = scraper.fetch_assignments(course.id).await {
+        // Count assessments (quizzes included) the same way the sync path does
+        if let Ok(assignments) = scraper.fetch_course_assessments(course.id).await {
             assignments_count += assignments.len() as u32;
         }
         if let Ok(announcements) = scraper.fetch_announcements(course.id).await {

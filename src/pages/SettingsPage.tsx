@@ -26,7 +26,7 @@ import {
   User,
   Wifi,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -37,6 +37,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { useTranslation } from "../i18n/useTranslation";
 import type { TranslationKey } from "../i18n/translations";
 import { saveAiConfig, syncAll, logout, testAiConnection } from "../services/api";
+import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { requestNotificationPermission, clearReminded } from "../services/reminders";
 import { checkForAppUpdates, APP_CURRENT_VERSION, type UpdateCheckResult } from "../services/updater";
@@ -241,13 +242,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     status: "idle",
   });
   const [showApiKey, setShowApiKey] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<number | null>(null);
-  const showToast = (msg: string) => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    setToast(msg);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
-  };
+
   const handleTestAiConnection = async () => {
     if (aiTest.status === "testing") return;
     if (!settings.aiApiKey?.trim() || !settings.aiBaseUrl?.trim()) {
@@ -784,14 +779,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                     <Check className="w-4 h-4 mr-1.5" />
                     {t("settings.ai.save")}
                   </Button>
-                  {toast && (
-                    <div
-                      role="status"
-                      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium shadow-lg animate-in fade-in slide-in-from-bottom-2"
-                    >
-                      {toast}
-                    </div>
-                  )}
+
                 </CardContent>
               </Card>
 
@@ -915,7 +903,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               </Card>
 
               <div className="flex gap-3">
-                <Button onClick={() => syncAll().catch(console.error)}>
+                <Button onClick={() => { useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() }); syncAll().catch(console.error); }}>
                   <Download className="w-4 h-4 mr-2" />
                   {t("dashboard.sync")}
                 </Button>

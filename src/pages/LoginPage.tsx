@@ -89,35 +89,98 @@ export function LoginPage() {
     }
   };
 
-  const features = [
-    {
-      icon: Zap,
-      badge: lang === "zh" ? "实时同步" : "Instant",
-      title: lang === "zh" ? "全自动课件与资料抓取" : "Auto-Sync Course Data",
-      desc:
-        lang === "zh"
-          ? "自动同步 Moodle 讲义 PDF、课程作业与核心公告，进入课程即刷新。"
-          : "Automatically pull lecture slides, tasks and announcements the moment you open a unit.",
+  // Landing page copy is fully localized (zh / en / ja / ko) — the app supports four
+  // interface languages, so the login page must not fall back to English for ja/ko.
+  const COPY = {
+    zh: {
+      badge: "专为 Monash 学生打造的智能学习助手",
+      heroTitle1: "高效掌控课程动态",
+      heroTitle2: "告别繁琐信息搜寻",
+      heroBody: "智能聚合 Moodle 讲义与作业动态，利用 AI 提炼考点精要，助力 Monash 学生轻松掌控学习节奏。",
+      footerLocal: "本地存储 · 数据不出设备",
+      welcome: "欢迎回来",
+      welcomeBody: "使用 Monash 学生账号通过官方 SSO 通道验证，无需在本应用输入密码。",
+      signIn: "Monash SSO 快捷登录",
+      security: "安全与隐私",
+      mfa: "支持 Okta 手机 MFA 二步验证",
+      keyring: "凭证写入系统安全凭据库，明文密码零接触",
+      footNote: "v0.1.1 · 非 Monash 官方出品，与 Monash University 无关联",
+      errorTitle: "登录错误",
+      signingIn: "登录中...",
+      features: [
+        { badge: "实时同步", title: "全自动课件与资料抓取", desc: "自动同步 Moodle 讲义 PDF、课程作业与核心公告，进入课程即刷新。" },
+        { badge: "AI 驱动", title: "AI 智能提炼考点精要", desc: "一键剖析课程重点，按权重排序评估任务，快速梳理复习脉络。" },
+        { badge: "安全加密", title: "Monash 官方 SSO 直连", desc: "走 Okta 官方二步验证通道，全程不接触明文密码。" },
+      ],
     },
-    {
-      icon: Cpu,
-      badge: lang === "zh" ? "AI 驱动" : "AI Powered",
-      title: lang === "zh" ? "AI 智能提炼考点精要" : "AI Course Summaries",
-      desc:
-        lang === "zh"
-          ? "一键剖析课程重点，按权重排序评估任务，快速梳理复习脉络。"
-          : "Distil key exam points and rank assessments by weight to build a clear revision plan.",
+    en: {
+      badge: "Next-gen intelligence for Monash Moodle",
+      heroTitle1: "Master Your Courses",
+      heroTitle2: "Without the Hassle",
+      heroBody: "Aggregate lecture slides and deadlines seamlessly, then let AI surface the exam topics that matter most.",
+      footerLocal: "Local-first · data stays on device",
+      welcome: "Welcome back",
+      welcomeBody: "Verify with your Monash student account via official SSO — no password entered here.",
+      signIn: "Sign in with Monash SSO",
+      security: "Security & privacy",
+      mfa: "Supports Okta mobile 2FA (MFA)",
+      keyring: "Credentials stored in the OS keyring; no plaintext password",
+      footNote: "v0.1.1 · Not a Monash product, not affiliated with Monash University",
+      errorTitle: "Sign-in error",
+      signingIn: "Signing in...",
+      features: [
+        { badge: "Instant", title: "Auto-Sync Course Data", desc: "Automatically pull lecture slides, tasks and announcements the moment you open a unit." },
+        { badge: "AI Powered", title: "AI Course Summaries", desc: "Distil key exam points and rank assessments by weight to build a clear revision plan." },
+        { badge: "Encrypted", title: "Official Monash SSO", desc: "Sign in through the official Okta 2FA flow — your password is never handled by this app." },
+      ],
     },
-    {
-      icon: Lock,
-      badge: lang === "zh" ? "安全加密" : "Encrypted",
-      title: lang === "zh" ? "Monash 官方 SSO 直连" : "Official Monash SSO",
-      desc:
-        lang === "zh"
-          ? "走 Okta 官方二步验证通道，全程不接触明文密码。"
-          : "Sign in through the official Okta 2FA flow — your password is never handled by this app.",
+    ja: {
+      badge: "Monash 学生のためのスマート学習アシスタント",
+      heroTitle1: "コースの動向を効率的に把握",
+      heroTitle2: "情報探しの手間から解放",
+      heroBody: "Moodle の講義資料と課題の動向をスマートに集約。AI が試験の要点を抽出し、Monash の学生の学習ペースを支えます。",
+      footerLocal: "ローカル保存・データは端末の外に出ません",
+      welcome: "おかえりなさい",
+      welcomeBody: "Monash の学生アカウントを公式 SSO で認証。このアプリにパスワードを入力する必要はありません。",
+      signIn: "Monash SSO でログイン",
+      security: "セキュリティとプライバシー",
+      mfa: "Okta モバイル MFA（二段階認証）に対応",
+      keyring: "認証情報は OS の資格情報ストアに保存され、平文パスワードは一切扱いません",
+      footNote: "v0.1.1 · Monash 公式製品ではなく、Monash University とは無関係です",
+      errorTitle: "ログインエラー",
+      signingIn: "ログイン中...",
+      features: [
+        { badge: "リアルタイム同期", title: "全自動の資料・課題取得", desc: "Moodle の講義PDF・課題・重要なお知らせを自動同期。コースを開くとすぐ最新に。" },
+        { badge: "AI 駆動", title: "AI が試験の要点を抽出", desc: "コースの要点をワンクリックで分析し、課題を重要度順に整理。復習の計画がすぐ立てられます。" },
+        { badge: "安全・暗号化", title: "Monash 公式 SSO 直結", desc: "Okta 公式の二段階認証を利用。パスワードがアプリを経由することはありません。" },
+      ],
     },
-  ];
+    ko: {
+      badge: "Monash 학생을 위한 스마트 학습 도우미",
+      heroTitle1: "코스 동향을 효율적으로 파악",
+      heroTitle2: "정보 찾기의 번거로움에서 해방",
+      heroBody: "Moodle 강의 자료와 과제 동향을 스마트하게 집약하고, AI가 시험 핵심을 추출해 Monash 학생의 학습 리듬을 돕습니다.",
+      footerLocal: "로컬 저장 · 데이터는 기기를 벗어나지 않습니다",
+      welcome: "다시 오신 것을 환영합니다",
+      welcomeBody: "Monash 학생 계정을 공식 SSO로 인증하세요. 이 앱에 비밀번호를 입력할 필요가 없습니다.",
+      signIn: "Monash SSO로 로그인",
+      security: "보안 및 개인정보",
+      mfa: "Okta 모바일 MFA(2단계 인증) 지원",
+      keyring: "자격 증명은 OS 자격 증명 저장소에 저장되며, 평문 비밀번호는 다루지 않습니다",
+      footNote: "v0.1.1 · Monash 공식 제품이 아니며 Monash University와 무관합니다",
+      errorTitle: "로그인 오류",
+      signingIn: "로그인 중...",
+      features: [
+        { badge: "실시간 동기화", title: "자동 코스 데이터 동기화", desc: "Moodle 강의 PDF·과제·중요 공지를 자동 동기화. 코스를 열면 바로 최신으로." },
+        { badge: "AI 기반", title: "AI 코스 요약", desc: "코스 핵심을 원클릭으로 분석하고 과제를 중요도순으로 정렬해 복습 계획을 빠르게 세울 수 있습니다." },
+        { badge: "안전 암호화", title: "Monash 공식 SSO", desc: "Okta 공식 2단계 인증 사용. 비밀번호가 앱을 거치지 않습니다." },
+      ],
+    },
+  } as const;
+
+  const copy = COPY[lang as keyof typeof COPY] ?? COPY.en;
+  const icons = [Zap, Cpu, Lock];
+  const features = copy.features.map((f, idx) => ({ icon: icons[idx], ...f }));
 
   // BODY_PLACEHOLDER
   return (
@@ -155,7 +218,7 @@ export function LoginPage() {
               Muster
             </div>
             <p className="text-[13px] font-medium text-white/85">
-              Monash Course Intelligence System
+              Unofficial Monash Course Intelligence System
             </p>
           </div>
         </div>
@@ -176,37 +239,19 @@ export function LoginPage() {
               }}
             >
               <Sparkles className="w-3.5 h-3.5" style={{ color: MONASH.heritage }} />
-              <span>
-                {lang === "zh"
-                  ? "专为 Monash 学生打造的智能学习助手"
-                  : "Next-gen intelligence for Monash Moodle"}
-              </span>
+              <span>{copy.badge}</span>
             </div>
 
             <h1 className="text-4xl font-extrabold text-white tracking-tight leading-[1.15] mb-4">
-              {lang === "zh" ? (
-                <>
-                  高效掌控课程动态
-                  <br />
-                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-[#ABF5F9] to-white">
-                    告别繁琐信息搜寻
-                  </span>
-                </>
-              ) : (
-                <>
-                  Master Your Courses
-                  <br />
-                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-[#ABF5F9] to-white">
-                    Without the Hassle
-                  </span>
-                </>
-              )}
+              {copy.heroTitle1}
+              <br />
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-[#ABF5F9] to-white">
+                {copy.heroTitle2}
+              </span>
             </h1>
 
             <p className="text-[15px] leading-relaxed text-white/[0.88] max-w-lg mb-7">
-              {lang === "zh"
-                ? "智能聚合 Moodle 讲义与作业动态，利用 AI 提炼考点精要，助力 Monash 学生轻松掌控学习节奏。"
-                : "Aggregate lecture slides and deadlines seamlessly, then let AI surface the exam topics that matter most."}
+              {copy.heroBody}
             </p>
           </motion.div>
 
@@ -250,7 +295,7 @@ export function LoginPage() {
           <span>© 2026 Muster</span>
           <span className="flex items-center gap-1.5 text-white/90">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            {lang === "zh" ? "本地存储 · 数据不出设备" : "Local-first · data stays on device"}
+            {copy.footerLocal}
           </span>
         </div>
       </div>
@@ -279,12 +324,10 @@ export function LoginPage() {
                 <span>Monash SSO Authentication</span>
               </div>
               <h2 className="text-2xl font-extrabold text-foreground tracking-tight">
-                {lang === "zh" ? "欢迎回来" : "Welcome back"}
+                {copy.welcome}
               </h2>
               <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-                {lang === "zh"
-                  ? "使用 Monash 学生账号通过官方 SSO 通道验证，无需在本应用输入密码。"
-                  : "Verify with your Monash student account via official SSO — no password entered here."}
+                {copy.welcomeBody}
               </p>
             </div>
 
@@ -300,7 +343,7 @@ export function LoginPage() {
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">
-                    {t("login.errorTitle") || (lang === "zh" ? "登录错误" : "Sign-in error")}
+                    {t("login.errorTitle") || copy.errorTitle}
                   </p>
                   <p className="mt-0.5 opacity-90 leading-relaxed whitespace-pre-line">{error}</p>
                 </div>
@@ -321,13 +364,13 @@ export function LoginPage() {
                 {isLoading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>{t("login.signingIn") || (lang === "zh" ? "登录中..." : "Signing in...")}</span>
+                    <span>{t("login.signingIn") || copy.signingIn}</span>
                   </>
                 ) : (
                   <>
                     <Globe className="w-4 h-4 text-white" />
                     <span className="text-white">
-                      {lang === "zh" ? "Monash SSO 快捷登录" : "Sign in with Monash SSO"}
+                      {copy.signIn}
                     </span>
                     <ArrowRight className="w-4 h-4 ml-auto text-white/85 group-hover:translate-x-1 transition-transform" />
                   </>
@@ -337,23 +380,19 @@ export function LoginPage() {
               <div className="p-3.5 rounded-xl bg-muted text-[13px] text-muted-foreground space-y-2">
                 <div className="flex items-center gap-1.5 font-semibold text-foreground">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>{lang === "zh" ? "安全与隐私" : "Security & privacy"}</span>
+                  <span>{copy.security}</span>
                 </div>
                 <ul className="space-y-1.5">
                   <li className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>
-                      {lang === "zh"
-                        ? "支持 Okta 手机 MFA 二步验证"
-                        : "Supports Okta mobile 2FA (MFA)"}
+                      {copy.mfa}
                     </span>
                   </li>
                   <li className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>
-                      {lang === "zh"
-                        ? "凭证写入系统安全凭据库，明文密码零接触"
-                        : "Credentials stored in the OS keyring; no plaintext password"}
+                      {copy.keyring}
                     </span>
                   </li>
                 </ul>
@@ -364,9 +403,7 @@ export function LoginPage() {
 
         {/* Footer: factual, neutral disclaimer */}
         <p className="text-xs text-center text-muted-foreground shrink-0">
-          {lang === "zh"
-            ? "v0.1.0 · 非 Monash 官方出品，与 Monash University 无关联"
-            : "v0.1.0 · Not a Monash product, not affiliated with Monash University"}
+          {copy.footNote}
         </p>
       </div>
     </div>

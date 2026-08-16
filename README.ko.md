@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.0-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.1-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -77,7 +77,7 @@ Muster는 학생을 위한 데스크톱 앱입니다. Moodle 곳곳에 흩어진
 
 > **참고**: Muster는 현재 **Windows 10 / 11 (64-bit)** 만 지원합니다. **Mac (macOS) 버전은 현재 지원되지 않습니다** (추후 지원 예정).
 
-1. [Releases](https://github.com/Poetrynan/Muster/releases)에서 최신 Windows 설치 파일（`Muster_0.1.0_x64-setup.exe`）을 다운로드.
+1. [Releases](https://github.com/Poetrynan/Muster/releases)에서 최신 Windows 설치 파일（`Muster_0.1.1_x64-setup.exe`）을 다운로드.
 2. 앱을 실행하고 Monash 계정으로 로그인 (Okta SSO).
 3. **Moodle 데이터 동기화** 클릭 — 코스·과제·자료·공지가 자동으로 가져와집니다.
 

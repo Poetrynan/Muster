@@ -31,7 +31,7 @@ export interface UpdateCheckResult {
 }
 
 export const GITHUB_REPO = "Poetrynan/Muster";
-export const APP_CURRENT_VERSION = "0.1.0";
+export const APP_CURRENT_VERSION = "0.1.1";
 
 /**
  * Compare two semver strings (e.g. "0.1.0" vs "0.2.0" or "v0.1.1")
