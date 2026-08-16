@@ -173,7 +173,25 @@ timestamp.
 ## 🛡 Security & Privacy (unchanged)
 
 - **Zero telemetry** — no third-party analytics or tracking.
-- **OS-level keyring** — Moodle sessions live in Windows Credential Manager.
+- **OS-level keyring** — Moodle sessions live in Windows Credential Manager or macOS Keychain.
 - **Client-side AI** — your API keys never leave the machine.
 - **Polite requests** — all Moodle requests are rate-limited to stay within
   the university's acceptable-use guidelines.
+
+---
+
+## 📦 Downloads & Installation
+
+> [!NOTE]
+> **Platform Support**: Muster supports **Windows 10 / 11 (64-bit)** and beta builds for **Apple Silicon and Intel Macs running macOS 12 or later**.
+
+| Platform | Package Type | File | Status |
+| :--- | :--- | :--- | :--- |
+| **Windows** (Recommended) | NSIS Installer | `Muster_0.1.1_x64-setup.exe` | ✅ Available |
+| **Windows** | Enterprise MSI | `Muster_0.1.1_x64_en-US.msi` | ✅ Available |
+| **Windows** | Standalone Executable | `muster.exe` | ✅ Available |
+| **macOS** | Apple Silicon DMG | `Muster_0.1.1_aarch64.dmg` | 🧪 Beta |
+| **macOS** | Intel DMG | `Muster_0.1.1_x64.dmg` | 🧪 Beta |
+
+> [!IMPORTANT]
+> The macOS beta uses an ad-hoc signature and is not notarized by Apple. On first launch, macOS may block the app. After attempting to open Muster, go to **System Settings → Privacy & Security** and choose **Open Anyway**. Download the DMG matching your Mac's processor.
