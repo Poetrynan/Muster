@@ -28,15 +28,21 @@ import {
 import { useEffect, useState, lazy, Suspense, useCallback, useMemo, useRef } from "react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Dialog } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
 import { EmptyBox } from "../components/ui/empty-box";
 import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustration";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { useAppStore } from "../stores/useAppStore";
+import { DownloadCenter } from "../components/DownloadCenter";
+import { DownloadProgressRing } from "../components/ui/download-progress-ring";
+import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
+// Reopening the app within this window after the last auto sync renders from local
+// data instead of re-scraping everything (user request: "1 小时内关闭再打开不重新抓取").
+const LAUNCH_SYNC_COOLDOWN_MS = 60 * 60 * 1000;
+
 // Announcement type classifier: infer type from title + body keywords (rule-first, covers both Chinese and English).
 function classifyAnnouncement(
   title: string,
@@ -185,7 +191,6 @@ const MANUAL_SYNC_COOLDOWN_MS = 60_000;
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("home");
   const [calFilter, setCalFilter] = useState("all");
-  const [dlModalOpen, setDlModalOpen] = useState(false);
   const [notifTypeFilter, setNotifTypeFilter] = useState("all");
   const [notifHistoryOpen, setNotifHistoryOpen] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
@@ -193,7 +198,6 @@ export function Dashboard() {
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number; phase: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [manualSyncCooldown, setManualSyncCooldown] = useState(false);
   const {
     user,
@@ -216,8 +220,6 @@ export function Dashboard() {
     reset,
     downloads,
     upsertDownload,
-    removeDownload,
-    clearDownloads,
     calendarEvents,
     setCalendarEvents,
     gradeOverview,
@@ -246,37 +248,7 @@ export function Dashboard() {
   const realCourses = courses.filter((c: any) => !c.isPortal);
 
   // ---- Download manager (browser-style: progress + speed + status) ----
-  const [dlOpen, setDlOpen] = useState(false);
-  const dlPanelRef = useRef<HTMLDivElement>(null);
   const dlTick = useRef(new Map<string, { t: number; r: number }>());
-
-  // Auto-close the download panel when switching tabs or opening a course detail page
-  useEffect(() => {
-    setDlOpen(false);
-  }, [activeTab, selectedCourseId]);
-
-  // Auto-close the download panel on outside click or Esc (close on losing focus)
-  useEffect(() => {
-    if (!dlOpen) return;
-    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      if (dlPanelRef.current && !dlPanelRef.current.contains(e.target as Node)) {
-        setDlOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setDlOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("touchstart", handleOutsideClick);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [dlOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -309,15 +281,6 @@ export function Dashboard() {
       unlisten?.();
     };
   }, []);
-
-  const activeDownloadCount = downloads.filter((x) => x.status === "downloading").length;
-  const openDownloadFolder = async (p2: string) => {
-    try {
-      const { openPath } = await import("@tauri-apps/plugin-opener");
-      const dir = p2.replace(/\\[^\\/]+$/, "").replace(/\/[^/]+$/, "");
-      await openPath(dir);
-    } catch { /* silent */ }
-  };
 
   // Notification click-through: open the discussion page in the in-app WebView (shares the SSO session), fall back to the external browser
   const openAnnouncement = async (url: string) => {
@@ -470,19 +433,45 @@ export function Dashboard() {
             </div>
             {/* Downloadable = download button; external link = open button */}
             {isDownloadable ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("dashboard.download", { name: resource.name })}
-                onClick={() => handleDownload({ key: rowKey, name: resource.name, url: resource.url })}
-                disabled={downloadingId === rowKey}
-              >
-                {downloadingId === rowKey ? (
-                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-              </Button>
+              (() => {
+                // Row-level progress: the download manager key is the plain URL (backend
+                // emits download-progress with key=file_url), so look it up by url.
+                const dlItem = resource.url
+                  ? downloads.find((d) => d.key === resource.url)
+                  : undefined;
+                const pct =
+                  downloadingId === rowKey && dlItem && dlItem.total
+                    ? Math.round(((dlItem.received ?? 0) / dlItem.total) * 100)
+                    : null;
+                return (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    // `disabled` would apply pointer-events-none (button.tsx) and swallow
+                    // the native title tooltip — use aria-disabled + visual dimming;
+                    // handleDownload guards re-entry.
+                    aria-label={
+                      downloadingId === rowKey
+                        ? t("dashboard.downloading")
+                        : t("dashboard.download", { name: resource.name })
+                    }
+                    onClick={() => handleDownload({ key: rowKey, name: resource.name, url: resource.url })}
+                    className={downloadingId === rowKey ? "opacity-50 cursor-not-allowed" : ""}
+                    title={
+                      downloadingId === rowKey
+                        ? t("dashboard.downloading")
+                        : t("dashboard.download", { name: resource.name })
+                    }
+                    aria-disabled={downloadingId === rowKey}
+                  >
+                    {downloadingId === rowKey ? (
+                      <DownloadProgressRing percent={pct} size={22} />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                  </Button>
+                );
+              })()
             ) : resource.url ? (
               <Button
                 variant="ghost"
@@ -529,6 +518,9 @@ export function Dashboard() {
     setLoadError(null);
     try {
       const prevState = useAppStore.getState();
+      // Refresh the cooldown timestamp so a manual sync also suppresses the
+      // launch auto-sync for the next hour.
+      prevState.updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       const data = await syncAll();
       updateAllSyncedData(data);
       // Calendar events + grade overview (parallel; failures never block the main flow)
@@ -611,13 +603,11 @@ export function Dashboard() {
   const handleDownload = async (resource: { key: string; name: string; url?: string }) => {
     const url = resource.url || "#";
     if (url === "#") {
-      setDownloadStatus(t("dashboard.downloadNoUrl"));
-      setTimeout(() => setDownloadStatus(null), 3000);
+      showToast(t("dashboard.downloadNoUrl"));
       return;
     }
 
     setDownloadingId(resource.key);
-    setDownloadStatus(null);
     // Enqueue into the download manager
     upsertDownload({
       key: url,
@@ -649,8 +639,7 @@ export function Dashboard() {
           console.warn("revealItemInDir failed:", err);
         }
       }
-      setDownloadStatus(t("dashboard.downloaded", { path: savedPath }));
-      setTimeout(() => setDownloadStatus(null), 5000);
+      showToast(t("dashboard.downloaded", { path: savedPath }));
     } catch (err) {
       console.error("Download failed:", err);
       upsertDownload({
@@ -663,8 +652,7 @@ export function Dashboard() {
         error: err instanceof Error ? err.message : String(err),
         lastTick: Date.now(),
       });
-      setDownloadStatus(t("dashboard.downloadFailed", { error: err instanceof Error ? err.message : "Unknown error" }));
-      setTimeout(() => setDownloadStatus(null), 5000);
+      showToast(t("dashboard.downloadFailed", { error: err instanceof Error ? err.message : "Unknown error" }));
     } finally {
       setDownloadingId(null);
     }
@@ -692,10 +680,30 @@ export function Dashboard() {
         // unoptimized debug parsing is slow on top of that, dragging "open the app" into the minutes range. During debugging, render
         // straight from the Zustand persisted cache and hit the manual sync button in the top-right when fresh data is needed.
         // Release builds (import.meta.env.DEV=false) keep the original "sync on open" behavior, entirely unaffected.
-        const shouldAutoSync = !import.meta.env.DEV;
+        // 1-hour launch cooldown: reopening the app shortly after the last sync renders
+        // from local data (no re-scrape). First run (no timestamp) always syncs.
+        const st = useAppStore.getState();
+        const lastAutoSyncTs = st.settings.lastAutoSyncAt ? Date.parse(st.settings.lastAutoSyncAt) : 0;
+        const withinCooldown =
+          !Number.isNaN(lastAutoSyncTs) &&
+          lastAutoSyncTs > 0 &&
+          Date.now() - lastAutoSyncTs < LAUNCH_SYNC_COOLDOWN_MS;
+        const shouldAutoSync = !import.meta.env.DEV && !withinCooldown;
+        // Semester-fixed tabs (unit info / schedule / contacts) are cached: after the first
+        // full sync they are skipped on regular launches (fetch strategy per user ruling).
+        const hasFixedTabCache =
+          Object.keys(st.unitInfos).length > 0 &&
+          Object.keys(st.schedules).length > 0 &&
+          Object.keys(st.contacts).length > 0;
+        if (shouldAutoSync) {
+          // Mark the startup sync as running so the progress banner shows and manual
+          // syncs are de-duplicated; skipped entirely when the cooldown applies.
+          setSyncStatus({ isRunning: true });
+          st.updateSettings({ lastAutoSyncAt: new Date().toISOString() });
+        }
         const [fetched, synced] = await Promise.allSettled([
-          courses.length === 0 ? fetchCourses() : Promise.resolve(null),
-          shouldAutoSync ? syncAll() : Promise.resolve(null),
+          shouldAutoSync && courses.length === 0 ? fetchCourses() : Promise.resolve(null),
+          shouldAutoSync ? syncAll(!hasFixedTabCache) : Promise.resolve(null),
         ]);
 
         if (!isMounted) return;
@@ -801,6 +809,11 @@ export function Dashboard() {
     const items: Item[] = [];
     (calendarEvents || []).forEach((e) => {
       if (e.eventType === "open") return;
+      // Only deadlines of courses the user currently has. After a logout / fresh
+      // login the course list is empty and stale calendar events must not show;
+      // course-less global events (no courseId) only appear when courses exist.
+      if (courses.length === 0) return;
+      if (e.courseId != null && !courses.some((c) => c.id === e.courseId)) return;
       items.push({
         key: `ev:${e.id}`,
         courseId: e.courseId ?? null,
@@ -825,7 +838,7 @@ export function Dashboard() {
       return true;
     });
     return out.sort((a, b) => a.ts - b.ts);
-  }, [calendarEvents, assignments]);
+  }, [calendarEvents, assignments, courses]);
 
   const dueSoonCount = deadlineItems.filter((d) => d.ts >= Date.now() && d.ts <= Date.now() + 7 * 86_400_000).length;
   const gradedCount = (gradeOverview || []).filter((g) => g.grade !== "-").length;
@@ -1212,221 +1225,29 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Download manager (top toolbar) */}
-            <div className="relative" ref={dlPanelRef}>
-              <button
-                type="button"
-                onClick={() => setDlOpen((v) => !v)}
-                className="inline-flex items-center justify-center w-10 h-10 rounded-xl text-foreground hover:bg-muted/50 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 relative"
-                aria-label={t("downloads.openPanel")}
-                title={t("downloads.title")}
-              >
-                <Download className="w-5 h-5" />
-                {activeDownloadCount > 0 && (
-                  <span className="absolute top-1 right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px]">
-                    {activeDownloadCount}
-                  </span>
-                )}
-              </button>
-              {dlOpen && (
-                <Card className="absolute right-0 top-full mt-2 w-80 shadow-2xl z-50">
-                  <CardContent className="p-3 space-y-2 max-h-80 overflow-y-auto">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold">{t("downloads.title")}</span>
-                      {downloads.length > 0 && (
-                        <Button variant="ghost" size="sm" onClick={clearDownloads}>
-                          {t("downloads.clearAll")}
-                        </Button>
-                      )}
-                    </div>
-                    {downloads.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-6">{t("downloads.empty")}</p>
-                    )}
-                    {downloads.slice(0, 5).map((dl) => {
-                      const pct =
-                        dl.total && dl.total > 0
-                          ? Math.min(100, Math.round((dl.received / dl.total) * 100))
-                          : 0;
-                      const speedText = dl.speed > 0 ? `${(dl.speed / 1024 / 1024).toFixed(1)} MB/s` : "";
-                      const sizeText =
-                        dl.total && dl.total > 0
-                          ? `${(dl.received / 1024 / 1024).toFixed(1)} / ${(dl.total / 1024 / 1024).toFixed(1)} MB`
-                          : dl.received > 0
-                          ? `${(dl.received / 1024 / 1024).toFixed(1)} MB`
-                          : "";
-                      return (
-                        <div key={dl.key} className="border rounded-lg p-2">
-                          <div className="flex items-center gap-2">
-                            {dl.status === "downloading" ? (
-                              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />
-                            ) : dl.status === "done" ? (
-                              <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                            ) : (
-                              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                            )}
-                            <p className="text-xs font-medium truncate flex-1">{dl.name}</p>
-                            {dl.status !== "downloading" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2"
-                                onClick={() => removeDownload(dl.key)}
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                          {dl.status === "downloading" && (
-                            <>
-                              <div className="h-1.5 w-full bg-muted rounded-full mt-2 overflow-hidden">
-                                <div
-                                  className="h-full bg-primary transition-all"
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                              <p className="text-[11px] text-muted-foreground mt-1">
-                                {pct}% {sizeText && `· ${sizeText}`} {speedText && `· ${speedText}`}
-                              </p>
-                            </>
-                          )}
-                          {dl.status === "done" && (
-                            <div className="flex items-center justify-between mt-1">
-                              <p className="text-[11px] text-success">{t("downloads.done")}</p>
-                              {dl.path && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2"
-                                  onClick={() => openDownloadFolder(dl.path!)}
-                                >
-                                  <FolderOpen className="w-3 h-3 mr-1" />
-                                  {t("downloads.openFolder")}
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                          {dl.status === "error" && (
-                            <p className="text-[11px] text-destructive mt-1">
-                              {t("downloads.failed")}{dl.error ? `: ${dl.error}` : ""}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {downloads.length > 5 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full mt-1"
-                        onClick={() => setDlModalOpen(true)}
-                      >
-                        {t("dashboard.downloadsViewAll", { count: downloads.length })}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            <DownloadCenter autoCloseKey={activeTab} />
 
-            {/* Download history modal: view all download tasks (including completed/failed) */}
-            <Dialog open={dlModalOpen} onClose={() => setDlModalOpen(false)} className="w-[560px] max-w-[92vw]">
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-foreground">{t("downloads.title")}</h3>
-                  <span className="text-xs text-muted-foreground">{downloads.length}</span>
-                </div>
-                {downloads.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">{t("downloads.empty")}</p>
-                ) : (
-                  <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                    {downloads.map((dl) => {
-                      const pct =
-                        dl.total && dl.total > 0
-                          ? Math.min(100, Math.round((dl.received / dl.total) * 100))
-                          : 0;
-                      const speedText = dl.speed > 0 ? `${(dl.speed / 1024 / 1024).toFixed(1)} MB/s` : "";
-                      const sizeText =
-                        dl.total && dl.total > 0
-                          ? `${(dl.received / 1024 / 1024).toFixed(1)} / ${(dl.total / 1024 / 1024).toFixed(1)} MB`
-                          : dl.received > 0
-                          ? `${(dl.received / 1024 / 1024).toFixed(1)} MB`
-                          : "";
-                      return (
-                        <div key={dl.key} className="border rounded-lg p-3 bg-card">
-                          <div className="flex items-center gap-2">
-                            {dl.status === "downloading" ? (
-                              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />
-                            ) : dl.status === "done" ? (
-                              <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                            ) : (
-                              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                            )}
-                            <p className="text-xs font-medium truncate flex-1">{dl.name}</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() => removeDownload(dl.key)}
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                          {dl.status === "downloading" && (
-                            <>
-                              <div className="h-1.5 w-full bg-muted rounded-full mt-2 overflow-hidden">
-                                <div
-                                  className="h-full bg-primary transition-all"
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                              <p className="text-[11px] text-muted-foreground mt-1">
-                                {pct}% {sizeText && `· ${sizeText}`} {speedText && `· ${speedText}`}
-                              </p>
-                            </>
-                          )}
-                          {dl.status === "done" && dl.path && (
-                            <div className="flex items-center justify-between mt-1">
-                              <p className="text-[11px] text-success">{t("downloads.done")}</p>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2"
-                                onClick={() => openDownloadFolder(dl.path!)}
-                              >
-                                <FolderOpen className="w-3 h-3 mr-1" />
-                                {t("downloads.openFolder")}
-                              </Button>
-                            </div>
-                          )}
-                          {dl.status === "error" && (
-                            <p className="text-[11px] text-destructive mt-1">
-                              {t("downloads.failed")}{dl.error ? `: ${dl.error}` : ""}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="flex justify-between mt-4 pt-3 border-t">
-                  <Button variant="outline" size="sm" onClick={clearDownloads}>
-                    {t("downloads.clearAll")}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDlModalOpen(false)}>
-                    {t("common.close")}
-                  </Button>
-                </div>
-              </div>
-            </Dialog>
 
             <Button
               variant="ghost"
               size="icon"
-              className="hover:bg-secondary touch-target relative"
+              // NOTE: `disabled` would apply pointer-events-none (button.tsx) and swallow the
+              // native title tooltip — use aria-disabled + visual dimming instead; the click
+              // guard lives inside handleManualSync.
+              className={
+                "hover:bg-secondary touch-target relative" +
+                (syncStatus.isRunning || manualSyncCooldown ? " opacity-50 cursor-not-allowed" : "")
+              }
               aria-label={t("dashboard.refresh")}
-              title={manualSyncCooldown ? t("dashboard.refreshCooldown") : t("dashboard.refresh")}
+              title={
+                syncStatus.isRunning
+                  ? t("dashboard.syncing")
+                  : manualSyncCooldown
+                    ? t("dashboard.refreshCooldown")
+                    : t("dashboard.refresh")
+              }
               onClick={handleManualSync}
-              disabled={syncStatus.isRunning || manualSyncCooldown}
+              aria-disabled={syncStatus.isRunning || manualSyncCooldown}
             >
               {syncStatus.isRunning ? (
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -1479,8 +1300,9 @@ export function Dashboard() {
             </div>
           )}
 
-          {/* Real-time Syncing Progress Banner */}
-          {isLoadingCourses && (
+          {/* Real-time Syncing Progress Banner — shown for the startup auto-sync
+              (first run and every later launch) AND for manual syncs. */}
+          {(syncStatus.isRunning || isLoadingCourses) && (
             <div className="mb-6 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/15 via-primary/5 to-info/15 backdrop-blur-md p-5 shadow-sm overflow-hidden">
               <div className="flex items-center gap-4">
                 {/* Progress ring with real % when the backend reports it, spinning arc otherwise */}
@@ -1787,7 +1609,23 @@ export function Dashboard() {
                     {t("dashboard.resourcesSubtitle")}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleManualSync} disabled={syncStatus.isRunning || isLoadingCourses || manualSyncCooldown} className="gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManualSync}
+                  // `disabled` would apply pointer-events-none (button.tsx) and swallow the
+                  // native title tooltip — use aria-disabled + visual dimming instead; the
+                  // click guard lives inside handleManualSync.
+                  className={"gap-2" + (syncStatus.isRunning || isLoadingCourses || manualSyncCooldown ? " opacity-50 cursor-not-allowed" : "")}
+                  title={
+                    syncStatus.isRunning
+                      ? t("dashboard.syncing")
+                      : manualSyncCooldown
+                        ? t("dashboard.refreshCooldown")
+                        : t("dashboard.refresh")
+                  }
+                  aria-disabled={syncStatus.isRunning || isLoadingCourses || manualSyncCooldown}
+                >
                   {syncStatus.isRunning ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1801,12 +1639,6 @@ export function Dashboard() {
                   )}
                 </Button>
               </div>
-
-              {downloadStatus && (
-                <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm">
-                  {downloadStatus}
-                </div>
-              )}
 
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -2071,7 +1903,6 @@ export function Dashboard() {
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="text-sm font-semibold text-foreground">{cname}</h3>
                               {unread > 0 && <Badge variant="warning">{unread}</Badge>}
-                              <span className="text-xs text-muted-foreground">{items.length}</span>
                             </div>
                             <div className="space-y-3 announcements-list" role="list" aria-label={t("dashboard.notificationsAria")}>
                               {items.map((a: any, index: number) => {

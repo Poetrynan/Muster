@@ -28,6 +28,10 @@ import { Tabs } from "../components/ui/tabs";
 import { Skeleton } from "../components/ui/skeleton";
 import { MarkdownRenderer } from "../components/ui/MarkdownRenderer";
 import { useAppStore } from "../stores/useAppStore";
+import { DownloadCenter } from "../components/DownloadCenter";
+import { DownloadProgressRing } from "../components/ui/download-progress-ring";
+import { downloadFile } from "../services/api";
+import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import {
   fetchCourseResources,
@@ -77,9 +81,19 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     assignments,
     announcements,
     settings,
+    downloads,
     setCourseResources,
     addSummary,
   } = useAppStore();
+  // Tab data fetched live by the full sync on every login: render instantly from the
+  // in-memory store, and only fall back to on-demand fetching when the sync hasn't
+  // populated the data yet (e.g. the user opened a course before the sync finished).
+  const cachedContacts = useAppStore((s) => s.contacts[courseId]);
+  const cachedDashboard = useAppStore((s) => s.unitDashboards[courseId]);
+  const cachedUnitInfo = useAppStore((s) => s.unitInfos[courseId]);
+  const cachedSchedule = useAppStore((s) => s.schedules[courseId]);
+  const cachedRecordings = useAppStore((s) => s.recordings[courseId]);
+  const setCourseTabData = useAppStore((s) => s.setCourseTabData);
   const { t } = useTranslation();
   const [loadingResources, setLoadingResources] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -90,28 +104,30 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   const [thinkingActive, setThinkingActive] = useState(false);
   const streamRef = useRef("");
   const [loadingContacts, setLoadingContacts] = useState(false);
-  const [contacts, setContacts] = useState<CourseContact[]>([]);
+  const [contacts, setContacts] = useState<CourseContact[]>(cachedContacts ?? []);
   const [contactsError, setContactsError] = useState<string | null>(null);
 
   // Task #38 — Unit Info (handbook) + Schedule, fetching &section=1 / &section=2 of the same course in parallel
   const [loadingUnitInfo, setLoadingUnitInfo] = useState(false);
-  const [unitInfo, setUnitInfo] = useState<UnitInfo | null>(null);
-  const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [unitInfo, setUnitInfo] = useState<UnitInfo | null>(cachedUnitInfo ?? null);
+  const [schedule, setSchedule] = useState<Schedule | null>(cachedSchedule ?? null);
   const [unitInfoError, setUnitInfoError] = useState<string | null>(null);
 
   // Task #40 — Lecture Recordings (Panopto block)
   const [loadingRecordings, setLoadingRecordings] = useState(false);
-  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>(cachedRecordings ?? []);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
+  // Distinguish "fetched and empty" from "never fetched", so an empty cache isn't
+  // refetched on every tab switch; the full sync marks it loaded even when a course
+  // has no recordings at all.
+  const [recordingsLoaded, setRecordingsLoaded] = useState(cachedRecordings !== undefined);
   // Unit Dashboard (unit overview, section=0)
-  const [dashboardData, setDashboardData] = useState<UnitDashboard | null>(null);
+  const [dashboardData, setDashboardData] = useState<UnitDashboard | null>(cachedDashboard ?? null);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   // Task #37 — assessment overview (assignments + quizzes + weights + categories), from &section=56
-  const [loadingAssessments, setLoadingAssessments] = useState(false);
-  const [assessments, setAssessments] = useState<Assignment[]>([]);
-  const [assessmentsError, setAssessmentsError] = useState<string | null>(null);
+  // Initial true: the first paint must show the skeleton, not flash the store fallback list.
 
   // Task #39 — submission status / feedback dialog for a single assignment
   const [submission, setSubmission] = useState<SubmissionStatus | null>(null);
@@ -120,6 +136,28 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   const [submissionForId, setSubmissionForId] = useState<number | null>(null);
 
   const course = courses.find((c) => c.id === courseId);
+
+  // Write one tab's freshly fetched data back into the in-memory store (merged with
+  // whatever the full sync fetched), so later tab switches render without refetching.
+  const patchTabData = (patch: {
+    dashboard?: UnitDashboard | null;
+    unitInfo?: UnitInfo | null;
+    schedule?: Schedule | null;
+    recordings?: Recording[];
+    contacts?: CourseContact[];
+  }) => {
+    const state = useAppStore.getState();
+    setCourseTabData([
+      {
+        courseId,
+        dashboard: patch.dashboard !== undefined ? patch.dashboard : (state.unitDashboards[courseId] ?? null),
+        unitInfo: patch.unitInfo !== undefined ? patch.unitInfo : (state.unitInfos[courseId] ?? null),
+        schedule: patch.schedule !== undefined ? patch.schedule : (state.schedules[courseId] ?? null),
+        recordings: patch.recordings ?? state.recordings[courseId] ?? [],
+        contacts: patch.contacts ?? state.contacts[courseId] ?? [],
+      },
+    ]);
+  };
 
   // Open a link in an in-app WebView window, sharing the SSO session cookie.
   const handleOpenInBrowser = async (url?: string) => {
@@ -136,6 +174,12 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     () => assignments.filter((a) => a.courseId === courseId),
     [assignments, courseId]
   );
+  // Assignments come from the full sync (fetched live on every login): seed the local
+  // state from it so the tab renders instantly. The skeleton only appears when the sync
+  // hasn't covered this course yet and an on-demand fetch is actually running.
+  const [loadingAssessments, setLoadingAssessments] = useState(courseAssignments.length === 0);
+  const [assessments, setAssessments] = useState<Assignment[]>(courseAssignments);
+  const [assessmentsError, setAssessmentsError] = useState<string | null>(null);
   const courseAnnouncements = useMemo(
     () => announcements.filter((a) => a.courseId === courseId),
     [announcements, courseId]
@@ -203,19 +247,29 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     }
   };
 
-  // Auto-preload contacts: fetch immediately on course detail mount / course switch, no need to switch tabs
+  // Contacts come from the full sync when available; only fetch on demand when the data
+  // is missing (sync not finished yet, or a course not covered by the last sync).
   useEffect(() => {
+    if (cachedContacts !== undefined) {
+      setContacts(cachedContacts);
+      setLoadingContacts(false);
+      return;
+    }
     let ignore = false;
     setContacts([]);
     setContactsError(null);
     setLoadingContacts(true);
     fetchCourseContacts(courseId)
-      .then((res) => { if (!ignore) setContacts(res); })
+      .then((res) => {
+        if (ignore) return;
+        setContacts(res);
+        patchTabData({ contacts: res });
+      })
       .catch((err) => { if (!ignore) setContactsError(`Fetch failed: ${err}`); })
       .finally(() => { if (!ignore) setLoadingContacts(false); });
     return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId]);
+  }, [courseId, cachedContacts]);
 
   // Task #38 — fetch the handbook (&section=1) and schedule (&section=2) in parallel
   const handleFetchUnitInfo = async () => {
@@ -228,6 +282,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
       ]);
       setUnitInfo(ui);
       setSchedule(sc);
+      patchTabData({ unitInfo: ui, schedule: sc });
     } catch (err) {
       setUnitInfoError(t("course.unitInfo.error", { error: String(err) }));
     } finally {
@@ -242,6 +297,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     try {
       const res = await fetchCourseRecordings(courseId);
       setRecordings(res);
+      setRecordingsLoaded(true);
+      patchTabData({ recordings: res });
     } catch (err) {
       setRecordingsError(t("course.recordings.error", { error: String(err) }));
     } finally {
@@ -256,6 +313,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     try {
       const res = await fetchUnitDashboard(courseId);
       setDashboardData(res);
+      patchTabData({ dashboard: res });
     } catch (err) {
       setDashboardError(String(err));
     }
@@ -272,7 +330,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "recordings" && recordings.length === 0 && !loadingRecordings && !recordingsError) {
+    if (activeTab === "recordings" && !recordingsLoaded && !loadingRecordings && !recordingsError) {
       handleFetchRecordings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,6 +342,73 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // When the full sync finishes while this course is already open, adopt the fresh data
+  // so the tabs update without a reload (values are identical when nothing changed).
+  useEffect(() => {
+    if (cachedDashboard) setDashboardData(cachedDashboard);
+  }, [cachedDashboard]);
+  useEffect(() => {
+    if (cachedUnitInfo) setUnitInfo(cachedUnitInfo);
+    if (cachedSchedule) setSchedule(cachedSchedule);
+  }, [cachedUnitInfo, cachedSchedule]);
+  useEffect(() => {
+    if (cachedRecordings !== undefined) {
+      setRecordings(cachedRecordings);
+      setRecordingsLoaded(true);
+    }
+  }, [cachedRecordings]);
+
+  // Real download via the shared download manager (visible in the top-bar
+  // download panel), same as the Dashboard resource rows.
+  // NOTE: the download-manager key MUST be the plain URL — the backend emits
+  // "download-progress" with key=file_url, so a composite row key would never
+  // receive progress updates (spinner without percentage).
+  const [resourceDownloadingKey, setResourceDownloadingKey] = useState<string | null>(null);
+  const handleDownloadResource = async (resource: { key: string; name: string; url?: string }) => {
+    if (!resource.url || resourceDownloadingKey) return;
+    const { upsertDownload } = useAppStore.getState();
+    const settings = useAppStore.getState().settings;
+    const dlKey = resource.url;
+    setResourceDownloadingKey(resource.key);
+    upsertDownload({
+      key: dlKey,
+      name: resource.name,
+      received: 0,
+      total: null,
+      speed: 0,
+      status: "downloading",
+      lastTick: Date.now(),
+    });
+    try {
+      const savedPath = await downloadFile(resource.url, settings.downloadPath || "");
+      upsertDownload({
+        key: dlKey,
+        name: resource.name,
+        received: 1,
+        total: 1,
+        speed: 0,
+        status: "done",
+        path: savedPath,
+        lastTick: Date.now(),
+      });
+      showToast(t("dashboard.downloaded", { path: savedPath }));
+    } catch (err) {
+      upsertDownload({
+        key: dlKey,
+        name: resource.name,
+        received: 0,
+        total: null,
+        speed: 0,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        lastTick: Date.now(),
+      });
+      showToast(t("dashboard.downloadFailed", { error: err instanceof Error ? err.message : "Unknown error" }));
+    } finally {
+      setResourceDownloadingKey(null);
+    }
+  };
 
   const handleOpenSection = async (sectionNum: number) => {
     const url = `https://learning.monash.edu/course/view.php?id=${courseId}&section=${sectionNum}`;
@@ -336,11 +461,23 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     }
   };
 
-  // Auto-fetch assessments (load on entering course detail, no longer requires a manual button click to get weights)
+  // Assessments are pre-fetched by the full sync (login / launch). Only fetch on demand
+  // when the store has no cached data for this course yet.
   useEffect(() => {
-    handleFetchAssessments();
+    if (courseAssignments.length === 0) {
+      handleFetchAssessments();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // When the full sync finishes while this course is already open, adopt the fresh store
+  // data — but only if the local state is still empty (a manually refreshed list is newer).
+  useEffect(() => {
+    if (courseAssignments.length > 0 && assessments.length === 0) {
+      setAssessments(courseAssignments);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseAssignments]);
 
   // Task #39 — open the submission status / feedback dialog for a single assignment
   const handleOpenSubmission = async (assignmentId: number) => {
@@ -571,6 +708,9 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
               {course?.shortName || t("course.courseNumber", { id: courseId })}
             </h1>
           </div>
+          {/* Same download manager as the Dashboard — users don't have to go back
+              to the home page to check download progress. */}
+          <DownloadCenter autoCloseKey={courseId} />
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-auto p-6 relative">
@@ -659,14 +799,47 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                                   )}
                                 </div>
                                 {isDownloadable ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => window.open(resource.url, "_blank")}
-                                    title={t("course.materials.openExternal")}
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </Button>
+                                  (() => {
+                                    const rowKey = `${idx}-${resource.url ?? "no-url"}`;
+                                    const isThisDownloading = resourceDownloadingKey === rowKey;
+                                    // Progress for THIS file only (download-manager key = url, matches backend events)
+                                    const dlItem = resource.url
+                                      ? downloads.find((d) => d.key === resource.url)
+                                      : undefined;
+                                    const pct =
+                                      isThisDownloading && dlItem && dlItem.total
+                                        ? Math.round(((dlItem.received ?? 0) / dlItem.total) * 100)
+                                        : null;
+                                    return (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        // NOTE: `disabled` would apply pointer-events-none (button.tsx)
+                                        // and swallow the native title tooltip — use aria-disabled +
+                                        // visual dimming instead; handleDownloadResource guards clicks.
+                                        className={isThisDownloading ? "opacity-50 cursor-not-allowed" : ""}
+                                        onClick={() =>
+                                          handleDownloadResource({
+                                            key: rowKey,
+                                            name: resource.name,
+                                            url: resource.url,
+                                          })
+                                        }
+                                        aria-disabled={isThisDownloading}
+                                        title={
+                                          isThisDownloading
+                                            ? t("course.materials.downloading")
+                                            : t("course.materials.download")
+                                        }
+                                      >
+                                        {isThisDownloading ? (
+                                          <DownloadProgressRing percent={pct} size={22} />
+                                        ) : (
+                                          <Download className="w-4 h-4" />
+                                        )}
+                                      </Button>
+                                    );
+                                  })()
                                 ) : resource.url ? (
                                   <Button
                                     variant="ghost"
@@ -698,7 +871,9 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
             {/* Assignments tab */}
             {activeTab === "assignments" && (
               <div className="space-y-3">
-                {loadingAssessments && (
+                {loadingAssessments && assessments.length === 0 ? (
+                  // Loading: skeleton only. The store fallback list is NOT rendered during
+                  // loading — mixing skeleton + stale list caused a flash of wrong statuses.
                   <div className="space-y-3" aria-hidden="true">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="rounded-2xl border bg-card p-4 flex items-center gap-3">
@@ -711,7 +886,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                       </div>
                     ))}
                   </div>
-                )}
+                ) : (
+                  <>
                 {assessmentsError && (
                   <div className="text-xs text-destructive break-all flex items-center gap-2 flex-wrap">
                     <span>{assessmentsError}</span>
@@ -805,6 +981,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                     </motion.div>
                   ));
                 })()}
+                  </>
+                )}
               </div>
             )}
 
@@ -1360,17 +1538,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                         {summaryLoading && (
                           <span className="ai-stream-cursor" aria-hidden="true">▍</span>
                         )}
-                        {savedSummary && (
-                        <div className="mt-4 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
-                          <span>
-                            {t("course.ai.generatedAt", {
-                              date: savedSummary.generatedAt
-                                ? new Date(savedSummary.generatedAt).toLocaleString()
-                                : "—",
-                            })}
-                          </span>
-                        </div>
-                        )}
+
                       </div>
                     )}
                   </CardContent>
