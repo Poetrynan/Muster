@@ -29,11 +29,14 @@ impl Default for ThrottleConfig {
     fn default() -> Self {
         Self {
             // Balance between politeness and UX: a full sync of ~12 courses
-            // (~250 pages) takes roughly 6-13s (network-bound) instead of a
-            // ~40-request burst, while concurrency stays capped at 8.
+            // (~250 pages) takes roughly 2-4s (network-bound) instead of a
+            // ~40-request burst. Concurrency 16 keeps slots well utilized
+            // (see acquire() order change: interval wait happens BEFORE
+            // taking a slot), while 100ms minimum gap stays within human-like
+            // pacing (much gentler than a real crawler).
             // Tune with MUSTER_THROTTLE_MS / MUSTER_THROTTLE_CONCURRENCY.
-            min_interval: Duration::from_millis(200),
-            max_concurrency: 8,
+            min_interval: Duration::from_millis(100),
+            max_concurrency: 16,
         }
     }
 }
@@ -91,11 +94,10 @@ impl RequestGate {
     /// held for the duration of the request (it keeps the concurrency slot
     /// occupied until dropped).
     pub async fn acquire(&self) -> RequestPermit<'_> {
-        let permit = self
-            .semaphore
-            .acquire()
-            .await
-            .expect("request gate semaphore is never closed");
+        // Wait for the minimum interval FIRST — without holding a concurrency
+        // slot. This keeps every slot productive: no slot sits idle just
+        // waiting for the interval to elapse. The slot is only taken once
+        // the request is actually ready to fire.
         {
             let mut last = self.last_request.lock().await;
             let now = Instant::now();
@@ -109,6 +111,11 @@ impl RequestGate {
                 *last = now;
             }
         }
+        let permit = self
+            .semaphore
+            .acquire()
+            .await
+            .expect("request gate semaphore is never closed");
         RequestPermit { _permit: permit }
     }
 }

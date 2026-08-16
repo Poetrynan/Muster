@@ -341,3 +341,21 @@ pub struct GradeOverviewRow {
     /// Raw grade text; "-" when not yet graded.
     pub grade: String,
 }
+
+
+/// All tab data of one course, aggregated by the background pre-fetch (part of the full
+/// sync) so the course detail page can render every tab instantly from cache — Unit
+/// Dashboard (section=0), Unit Info (section=1), Schedule (section=2), Recordings
+/// (Panopto block) and Contacts are fetched while the user is still on the Dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseTabData {
+    pub course_id: u64,
+    pub dashboard: Option<UnitDashboard>,
+    pub unit_info: Option<UnitInfo>,
+    pub schedule: Option<Schedule>,
+    #[serde(default)]
+    pub recordings: Vec<Recording>,
+    #[serde(default)]
+    pub contacts: Vec<CourseContact>,
+}

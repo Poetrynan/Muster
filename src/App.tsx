@@ -1,13 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Dashboard } from "./pages/Dashboard";
 import { LoginPage } from "./pages/LoginPage";
 import { useAppStore } from "./stores/useAppStore";
+import { ToastHost } from "./components/ui/toast";
 import { loadSavedSession, onSessionExpired } from "./services/api";
 import { ACCENT_COLORS } from "./types";
 
 function App() {
   const { isLoggedIn, settings, setLoggedIn, setUser, reset } = useAppStore();
+  // Startup gate: keep the login page hidden until the saved session has been restored.
+  // Rendering LoginPage before loadSavedSession() resolves made an already-signed-in
+  // user see a flash of the landing page on every launch.
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   // Apply theme to document
   useEffect(() => {
@@ -87,6 +92,9 @@ function App() {
       })
       .catch((err) => {
         console.log("Background session check error:", err);
+      })
+      .finally(() => {
+        setSessionChecked(true);
       });
   }, [setLoggedIn, setUser, reset]);
 
@@ -102,9 +110,18 @@ function App() {
     };
   }, [reset]);
 
+  if (!sessionChecked) {
+    // The boot screen still covers the window at this point; render nothing but the
+    // page background so a signed-in user never sees the landing page flash before
+    // the Dashboard mounts.
+    return <div className="min-h-screen bg-background" />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {isLoggedIn ? <Dashboard /> : <LoginPage />}
+      {/* Global toast host: showToast() from anywhere */}
+      <ToastHost />
     </div>
   );
 }

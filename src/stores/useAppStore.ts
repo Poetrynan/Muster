@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AppSettings, SyncStatus, Summary } from "../types";
-import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow } from "../services/api";
+import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData } from "../services/api";
 
 interface AppState {
   // User state
@@ -34,6 +34,16 @@ interface AppState {
   // Cross-course grade overview (/grade/report/overview)
   gradeOverview: GradeOverviewRow[];
 
+  // Per-course tab data from the full sync. unitInfos / schedules / contacts are semester-fixed
+  // (persisted cache — fetched once, reused on later launches); unitDashboards / recordings are
+  // dynamic (fetched live on every login, memory only). Within a session all of it is shared so
+  // tab switches render instantly without waiting for a tab switch to trigger scraping.
+  unitDashboards: Record<number, UnitDashboard>;
+  unitInfos: Record<number, UnitInfo>;
+  schedules: Record<number, Schedule>;
+  recordings: Record<number, Recording[]>;
+  contacts: Record<number, CourseContact[]>;
+
   // Download manager (not persisted)
   downloads: DownloadItem[];
 
@@ -55,6 +65,7 @@ interface AppState {
   setSyncStatus: (status: Partial<SyncStatus>) => void;
   setCalendarEvents: (events: CalendarEvent[]) => void;
   setGradeOverview: (rows: GradeOverviewRow[]) => void;
+  setCourseTabData: (tabs: CourseTabData[]) => void;
   upsertDownload: (item: DownloadItem) => void;
   removeDownload: (key: string) => void;
   clearDownloads: () => void;
@@ -67,6 +78,7 @@ interface AppState {
     resources?: Resource[];
     assignments?: Assignment[];
     announcements?: Announcement[];
+    tabs?: CourseTabData[];
   }) => void;
   reset: () => void;
 }
@@ -128,6 +140,11 @@ export const useAppStore = create<AppState>()(
   syncStatus: defaultSyncStatus,
   calendarEvents: [],
   gradeOverview: [],
+  unitDashboards: {},
+  unitInfos: {},
+  schedules: {},
+  recordings: {},
+  contacts: {},
   downloads: [],
   reminderBanner: null,
   settings: defaultSettings,
@@ -167,6 +184,24 @@ export const useAppStore = create<AppState>()(
     })),
   setCalendarEvents: (calendarEvents) => set({ calendarEvents }),
   setGradeOverview: (gradeOverview) => set({ gradeOverview }),
+  setCourseTabData: (tabs) =>
+    set((state) => {
+      const unitDashboards = { ...state.unitDashboards };
+      const unitInfos = { ...state.unitInfos };
+      const schedules = { ...state.schedules };
+      const recordings = { ...state.recordings };
+      const contacts = { ...state.contacts };
+      for (const tab of tabs) {
+        // A failed tab (null) keeps the previous in-memory data instead of wiping it.
+        if (tab.dashboard) unitDashboards[tab.courseId] = tab.dashboard;
+        if (tab.unitInfo) unitInfos[tab.courseId] = tab.unitInfo;
+        if (tab.schedule) schedules[tab.courseId] = tab.schedule;
+        // Empty arrays are meaningful ("fetched, nothing there") and overwrite the data.
+        recordings[tab.courseId] = tab.recordings;
+        contacts[tab.courseId] = tab.contacts;
+      }
+      return { unitDashboards, unitInfos, schedules, recordings, contacts };
+    }),
   upsertDownload: (item) =>
     set((state) => ({
       downloads: [item, ...state.downloads.filter((x) => x.key !== item.key)],
@@ -185,6 +220,23 @@ export const useAppStore = create<AppState>()(
       const updatedResources = data.resources || state.allResources;
       const updatedAssignments = data.assignments || state.assignments;
       const updatedAnnouncements = data.announcements || state.announcements;
+
+      // Adopt the aggregated per-course tab data (Dashboard / Unit Info / Schedule /
+      // Recordings / Contacts) from the full sync.
+      const newUnitDashboards = { ...state.unitDashboards };
+      const newUnitInfos = { ...state.unitInfos };
+      const newSchedules = { ...state.schedules };
+      const newRecordings = { ...state.recordings };
+      const newContacts = { ...state.contacts };
+      if (data.tabs && Array.isArray(data.tabs)) {
+        for (const tab of data.tabs) {
+          if (tab.dashboard) newUnitDashboards[tab.courseId] = tab.dashboard;
+          if (tab.unitInfo) newUnitInfos[tab.courseId] = tab.unitInfo;
+          if (tab.schedule) newSchedules[tab.courseId] = tab.schedule;
+          newRecordings[tab.courseId] = tab.recordings;
+          newContacts[tab.courseId] = tab.contacts;
+        }
+      }
 
       const newCourseResources = { ...state.courseResources };
       if (data.resources && Array.isArray(data.resources)) {
@@ -206,6 +258,11 @@ export const useAppStore = create<AppState>()(
         assignments: updatedAssignments,
         announcements: updatedAnnouncements,
         courseResources: newCourseResources,
+        unitDashboards: newUnitDashboards,
+        unitInfos: newUnitInfos,
+        schedules: newSchedules,
+        recordings: newRecordings,
+        contacts: newContacts,
         syncStatus: {
           ...state.syncStatus,
           isRunning: false,
@@ -226,7 +283,16 @@ export const useAppStore = create<AppState>()(
       announcements: [],
       readAnnouncementIds: [],
       syncStatus: defaultSyncStatus,
-  downloads: [],
+      unitDashboards: {},
+      unitInfos: {},
+      schedules: {},
+      recordings: {},
+      contacts: {},
+      // Cross-course data belongs to the previous account/session: clear it too,
+      // otherwise stale deadlines and grades survive a logout.
+      calendarEvents: [],
+      gradeOverview: [],
+      downloads: [],
     }),
     }),
     {
@@ -234,6 +300,11 @@ export const useAppStore = create<AppState>()(
       // The persisted cache is the key to an "instant open": the Dashboard renders from this cache on mount,
       // and syncAll is deferred to a background refresh in an idle frame. So resources/assignments/announcements
       // must stay persisted, otherwise the first screen shows empty lists while waiting on the network, which is a worse experience.
+      //
+      // Per-course tab data follows the user's fetch strategy: unitInfos / schedules / contacts are
+      // semester-fixed content — fetched once and persisted (cache), so regular logins skip them.
+      // unitDashboards / recordings are dynamic (the dashboard's "current week" rolls weekly,
+      // recordings appear per week) — fetched live on every login, kept in memory only.
       //
       // `user` and `isLoggedIn` are deliberately NOT persisted. The source of truth for auth is the
       // Rust-side keyring session, checked on startup by loadSavedSession(). Persisting the flag made
@@ -248,6 +319,12 @@ export const useAppStore = create<AppState>()(
         courseResources: state.courseResources,
         calendarEvents: state.calendarEvents,
         gradeOverview: state.gradeOverview,
+        // Semester-fixed tabs (unit info / schedule / contacts) are cached: fetch once,
+        // reuse across launches. The dynamic tabs (dashboard / recordings) are NOT
+        // persisted — they are re-fetched live on every login.
+        unitInfos: state.unitInfos,
+        schedules: state.schedules,
+        contacts: state.contacts,
         summaries: state.summaries,
         settings: state.settings,
       }),

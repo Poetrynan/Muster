@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::moodle::auth::MoodleAuth;
 use crate::moodle::models::{
     Announcement, AssessmentType, Assignment, AssignmentStatus, CalendarEvent, Course, CourseContact,
-    GradeEntry, GradeOverviewRow, Member, Quiz, Recording, Schedule, ScheduleItem, SubmissionStatus, UnitDashboard,
+    CourseTabData, GradeEntry, GradeOverviewRow, Member, Quiz, Recording, Schedule, ScheduleItem, SubmissionStatus, UnitDashboard,
     UnitInfo, UnitInfoSection, Resource, ResourceType, UnitWeek,
     LearningObjective, LearningNavItem,
 };
@@ -142,11 +142,10 @@ impl MoodleScraper {
     /// the real HTML of Assessments / Unit Information / Schedule / Submission subpages
     /// to calibrate selectors. `suffix` distinguishes them (section number or assignment id).
     fn dump_course_view_section_html(course_id: u64, suffix: u64, html: &str) {
-        // section=56 (the Assessments page) is **always** dumped for diagnosing weight parsing --
-        // there's only one per course, and overwriting won't pollute samples/. Other sections
-        // still go through the env var switch, avoiding a flood of dumps during sync_all.
-        let always_dump = suffix == 56;
-        if !always_dump && std::env::var("MONASH_DUMP_COURSE_VIEW").is_err() {
+        // Controlled by MONASH_DUMP_COURSE_VIEW so routine syncs never write debug files.
+        // (section=56 used to always dump while calibrating the assessment weight parser; that
+        // phase is over — set the env var again when selectors need recalibration.)
+        if std::env::var("MONASH_DUMP_COURSE_VIEW").is_err() {
             return;
         }
         let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../samples");
@@ -379,7 +378,11 @@ impl MoodleScraper {
         let url = format!("{}/course/view.php?id={}&section=56", self.base_url, course_id);
         let html = Self::fetch_course_view_text(&client, &self.request_gate, &url).await?;
         Self::dump_course_view_section_html(course_id, 56, &html);
-        self.parse_assessments_from_html(&html, course_id)
+        let mut assignments = self.parse_assessments_from_html(&html, course_id)?;
+        // The widget's STATUS column is rendered by JS and stays empty in static HTML, so enrich
+        // real submission state from each item's detail page + the course gradebook.
+        self.enrich_assessment_statuses(&client, course_id, &mut assignments).await;
+        Ok(assignments)
     }
 
     /// Fetch the unit handbook (Unit Information section, `&section=1`): structure the MST CMS blocks
@@ -805,6 +808,84 @@ impl MoodleScraper {
         Ok(out)
     }
 
+    /// Best-effort enrichment of assessment submission state.
+    ///
+    /// The assessment widget's STATUS column is rendered by JS and stays empty in the static
+    /// HTML (verified on live_course_assessments_46961.html), so the real submission state must
+    /// come from the item's own detail page:
+    ///   - quiz (mod/quiz/view.php): a finished attempt renders "Status Finished" with
+    ///     Started/Completed timestamps (verified on the real Quiz 1 2026 S2 page);
+    ///   - assign (mod/assign/view.php): the submissionstatustable shows "Submitted for grading".
+    ///
+    /// Then the course gradebook is fetched once: an item carrying an actual grade is Graded
+    /// (overrides Submitted) and the grade text is attached.
+    ///
+    /// All requests go through the global request gate; any failure leaves the item's current
+    /// status untouched (pending), so a transient network error never breaks the list.
+    async fn enrich_assessment_statuses(
+        &self,
+        client: &reqwest::Client,
+        course_id: u64,
+        assignments: &mut [Assignment],
+    ) {
+        use futures_util::StreamExt;
+        if assignments.is_empty() {
+            return;
+        }
+
+        // ---- 1) detail pages, bounded concurrency via the shared gate ----
+        let urls: Vec<(usize, String)> = assignments
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| a.url.clone().map(|u| (i, u)))
+            .collect();
+        if !urls.is_empty() {
+            let fetches = urls.into_iter().map(|(i, u)| {
+                let client = client.clone();
+                let gate = self.request_gate.clone();
+                async move { (i, Self::fetch_course_view_text(&client, &gate, &u).await) }
+            });
+            let results: Vec<(usize, Result<String, String>)> =
+                futures_util::stream::iter(fetches).buffered(8).collect().await;
+
+            for (i, res) in results {
+                let Ok(html) = res else { continue };
+                let a = &mut assignments[i];
+                // A successfully fetched detail page means the item's submission state is trackable
+                a.has_submission_status = true;
+                let submitted = match a.assessment_type {
+                    AssessmentType::Quiz => parse_quiz_submission_from_html(&html),
+                    AssessmentType::Assignment => self
+                        .parse_submission_status_from_html(&html, a.id)
+                        .map(|s| s.submitted)
+                        .unwrap_or(false),
+                };
+                if submitted {
+                    a.status = AssignmentStatus::Submitted;
+                }
+            }
+        }
+
+        // ---- 2) gradebook: a real grade => Graded (overrides Submitted) ----
+        if let Ok(gradebook) = self.fetch_course_gradebook(course_id).await {
+            for a in assignments.iter_mut() {
+                let Some(entry) = gradebook
+                    .iter()
+                    .find(|e| cmid_from_url(e.url.as_deref()) == Some(a.id))
+                else {
+                    continue;
+                };
+                if let Some(g) = entry.grade.as_deref() {
+                    let g = g.trim();
+                    if !g.is_empty() && g != "-" {
+                        a.status = AssignmentStatus::Graded;
+                        a.grade = Some(g.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     /// Parse assignments from Moodle assignments index page HTML. CMS blocks of (`&section=1`) -> list of sections.
     ///
     /// Monash CMS has two substructures that must be handled separately (based on the live_course_section1_46961.html sample):
@@ -1092,13 +1173,13 @@ impl MoodleScraper {
                 || lower.contains("submission status")
                 && lower.contains("submitted"));
 
-        let grade = regex::Regex::new(r"(?i)grade[^0-9]{0,40}(\d+(?:\.\d+)?)\s*/\s*\d+")
+        let grade = regex::Regex::new(r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*\d+")
             .ok()
             .and_then(|re| re.captures(text))
             .and_then(|c| c.get(1))
             .map(|m| m.as_str().to_string())
             .or_else(|| {
-                regex::Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*/\s*100")
+                regex::Regex::new(r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*100")
                     .ok()
                     .and_then(|re| re.captures(text))
                     .and_then(|c| c.get(1))
@@ -1210,10 +1291,39 @@ impl MoodleScraper {
                 })
             };
 
+            // The real grade lives in the first child div (`<div>-</div>`); the rest of the cell
+            // is the Moodle action menu ("Actions / Grade analysis") which must not leak into the
+            // grade string. Plain-text cells (e.g. a bare "-") fall back to the whole cell text.
+            let grade_text = match Selector::parse(".column-grade") {
+                Ok(c_sel) => tr.select(&c_sel).next().and_then(|td| {
+                    let text_of = |el: &scraper::ElementRef| {
+                        el.text()
+                            .collect::<String>()
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    };
+                    // `div > div` (not a leading-`>` relative selector, which cssparser rejects):
+                    // the first match in document order is the score div (`<div>-</div>`), which
+                    // precedes the moodle action-menu div ("Actions / Grade analysis").
+                    if let Ok(inner_sel) = Selector::parse("div > div") {
+                        if let Some(v) = td.select(&inner_sel).next() {
+                            let t = text_of(&v);
+                            if !t.is_empty() {
+                                return Some(t);
+                            }
+                        }
+                    }
+                    let t = text_of(&td);
+                    if t.is_empty() { None } else { Some(t) }
+                }),
+                Err(_) => None,
+            };
+
             out.push(GradeEntry {
                 course_id,
                 item,
-                grade: cell_text(".column-grade").filter(|s| !s.is_empty()),
+                grade: grade_text,
                 range: cell_text(".column-range").filter(|s| !s.is_empty()),
                 feedback: cell_text(".column-feedback").filter(|s| !s.is_empty()),
                 url,
@@ -2172,10 +2282,63 @@ impl MoodleScraper {
         Ok(rows)
     }
 
+    /// Fetch the tabs of one course in parallel — Unit Dashboard (section=0), Unit Info
+    /// (section=1), Schedule (section=2), Recordings (Panopto block) and Contacts — so the
+    /// full sync can pre-fill the course detail page. Each source degrades independently:
+    /// a failing tab never blocks the others, and never takes down the whole sync.
+    ///
+    /// `include_fixed` follows the user's fetch strategy: unit info / schedule / contacts
+    /// are semester-fixed content (fetch once and cache), so they are skipped on every
+    /// regular login sync and only fetched on first run or a manual full refresh. The
+    /// dashboard (its "current week" rolls weekly) and recordings are dynamic and always
+    /// fetched. Skipped tabs come back as `None`/empty, which the frontend merges without
+    /// overwriting its cached copies.
+    pub async fn fetch_course_tab_data(&self, course_id: u64, include_fixed: bool) -> CourseTabData {
+        let (dashboard, unit_info, schedule, recordings, contacts) = if include_fixed {
+            tokio::join!(
+                self.fetch_course_unit_dashboard(course_id),
+                self.fetch_course_unit_info(course_id),
+                self.fetch_course_schedule(course_id),
+                self.fetch_course_recordings(course_id),
+                self.fetch_course_contacts(course_id),
+            )
+        } else {
+            let (dashboard, recordings) = tokio::join!(
+                self.fetch_course_unit_dashboard(course_id),
+                self.fetch_course_recordings(course_id),
+            );
+            let skipped_unit_info: Result<UnitInfo, String> =
+                Err("skipped (fixed tab cached)".to_string());
+            let skipped_schedule: Result<Schedule, String> =
+                Err("skipped (fixed tab cached)".to_string());
+            let skipped_contacts: Result<Vec<CourseContact>, String> =
+                Err("skipped (fixed tab cached)".to_string());
+            (dashboard, skipped_unit_info, skipped_schedule, recordings, skipped_contacts)
+        };
+        CourseTabData {
+            course_id,
+            dashboard: dashboard.ok(),
+            unit_info: unit_info.ok(),
+            schedule: schedule.ok(),
+            recordings: recordings.unwrap_or_default(),
+            contacts: contacts.unwrap_or_default(),
+        }
+    }
+
     pub async fn fetch_all_data(
         &self,
         progress: Option<Arc<dyn Fn(usize, usize, &str) + Send + Sync>>,
-    ) -> Result<(Vec<Course>, Vec<Resource>, Vec<Assignment>, Vec<Announcement>), String> {
+        include_fixed_tabs: bool,
+    ) -> Result<
+        (
+            Vec<Course>,
+            Vec<Resource>,
+            Vec<Assignment>,
+            Vec<Announcement>,
+            Vec<CourseTabData>,
+        ),
+        String,
+    > {
         let courses = self.fetch_courses().await?;
         // Portal/hub courses (IT Student Portal, MUM Academic Success, etc.) are not academic courses:
         // skip fetching their resources/assignments/announcements (saves ~5 courses x 19 blocks of requests), and exclude them from the course list.
@@ -2195,16 +2358,21 @@ impl MoodleScraper {
                 let course_id = course.id;
                 tokio::spawn(async move {
                     let _permit = sem.acquire().await;
-                    // P1: fetch the 3 kinds of per-course data in parallel, cutting sync time by roughly 60%
-                    let (resources, assignments, announcements) = tokio::join!(
+                    // P1: fetch the 3 kinds of per-course data in parallel, cutting sync time by roughly 60%.
+                    // Assignments use fetch_course_assessments (Assessments section): it covers quizzes as well
+                    // as regular assignments, and enriches real submission state (detail pages + gradebook),
+                    // so the Dashboard / AssignmentsPage stats are no longer quiz-blind.
+                    let (resources, assignments, announcements, tab_data) = tokio::join!(
                         scraper.fetch_course_resources(course_id),
-                        scraper.fetch_assignments(course_id),
+                        scraper.fetch_course_assessments(course_id),
                         scraper.fetch_announcements(course_id),
+                        scraper.fetch_course_tab_data(course_id, include_fixed_tabs),
                     );
                     (
                         resources.unwrap_or_default(),
                         assignments.unwrap_or_default(),
                         announcements.unwrap_or_default(),
+                        tab_data,
                     )
                 })
             })
@@ -2213,13 +2381,15 @@ impl MoodleScraper {
         let mut all_resources = Vec::new();
         let mut all_assignments = Vec::new();
         let mut all_announcements = Vec::new();
+        let mut all_tab_data = Vec::new();
         let mut done_courses = 0usize;
 
         for handle in handles {
-            if let Ok((resources, assignments, announcements)) = handle.await {
+            if let Ok((resources, assignments, announcements, tab_data)) = handle.await {
                 all_resources.extend(resources);
                 all_assignments.extend(assignments);
                 all_announcements.extend(announcements);
+                all_tab_data.push(tab_data);
             }
             done_courses += 1;
             if let Some(p) = &progress {
@@ -2242,7 +2412,7 @@ impl MoodleScraper {
             }
         }
 
-        Ok((enriched, all_resources, all_assignments, all_announcements))
+        Ok((enriched, all_resources, all_assignments, all_announcements, all_tab_data))
     }
 
     /// Download a file from Moodle and save it to the specified path
@@ -3719,6 +3889,13 @@ fn extract_week_num(section: &str) -> Option<u32> {
 }
 
 /// Parse a Moodle human-readable due date ("Monday, 23 March 2026, 9:00 AM") into RFC3339 ISO.
+///
+/// Moodle renders deadlines in the course timezone — Monash runs
+/// Australia/Melbourne (AEST UTC+10 in winter, AEDT UTC+11 in summer). The
+/// wall-clock text must be interpreted as Melbourne local time, NOT as UTC:
+/// treating it as UTC shifted every deadline by 10-11 hours, which made the
+/// date badge (raw Moodle text) and the relative "tomorrow / in N days" label
+/// (computed from dueDateIso) disagree by a day.
 fn parse_moodle_due_date(text: &str) -> Option<String> {
     let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
     const FORMATS: &[&str] = &[
@@ -3727,12 +3904,23 @@ fn parse_moodle_due_date(text: &str) -> Option<String> {
         "%d %B %Y, %I:%M %p",
         "%d %B %Y",
     ];
+    let melbourne: chrono_tz::Tz = "Australia/Melbourne".parse().ok()?;
     for fmt in FORMATS {
         if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(&t, fmt) {
-            return Some(ndt.and_utc().to_rfc3339());
+            // single(): DST fall-back/spring-forward ambiguities resolve to None
+            // (deadlines around those hours are vanishingly rare; better None than wrong).
+            // with_timezone(Utc): normalize to UTC so the stored ISO has no +10/+11 offset.
+            return ndt
+                .and_local_timezone(melbourne)
+                .single()
+                .map(|dt| dt.with_timezone(&chrono::Utc).to_rfc3339());
         }
         if let Ok(nd) = chrono::NaiveDate::parse_from_str(&t, fmt) {
-            return nd.and_hms_opt(23, 59, 0).map(|dt| dt.and_utc().to_rfc3339());
+            let dt = nd.and_hms_opt(23, 59, 0)?;
+            return dt
+                .and_local_timezone(melbourne)
+                .single()
+                .map(|dt| dt.with_timezone(&chrono::Utc).to_rfc3339());
         }
     }
     None
@@ -3844,6 +4032,39 @@ fn classify_resource_type(url: &str, modtype: Option<&str>, name: &str) -> Resou
     }
 
     ResourceType::Other
+}
+
+/// Parse the submission state from a quiz detail page (mod/quiz/view.php).
+///
+/// Moodle renders the user's attempts server-side:
+/// - a finished attempt shows "Status Finished" in the attempt summary table (with
+///   Started / Completed timestamps);
+/// - an in-progress attempt shows "Status In progress";
+/// - before the first attempt there is no attempt list at all ("This quiz is currently
+///   not available." when closed, or just the start form when open).
+fn parse_quiz_submission_from_html(html: &str) -> bool {
+    let lower = html.to_lowercase();
+    if lower.contains("status finished") || lower.contains("status: finished") {
+        return true;
+    }
+    // Safety net: a "Your attempts" block without in-progress / never-submitted markers
+    // means at least one attempt was completed.
+    lower.contains("your attempts")
+        && !lower.contains("status in progress")
+        && !lower.contains("never submitted")
+}
+
+/// Extract the activity cmid from a Moodle view URL
+/// (".../mod/quiz/view.php?id=6121932" -> 6121932).
+fn cmid_from_url(url: Option<&str>) -> Option<u64> {
+    let url = url?;
+    url.rsplit("id=")
+        .next()?
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()
 }
 
 /// Determine assignment status from text content.
@@ -4353,6 +4574,75 @@ mod tests {
     fn test_scraper() -> MoodleScraper {
         MoodleScraper::new(Arc::new(MoodleAuth::new()))
     }
+
+    /// Regression: a quiz with a finished attempt must be detected as submitted (real page of
+    /// Quiz 1 2026 S2: attempt finished Saturday, 15 August 2026, 9:51 PM).
+    #[test]
+    fn quiz_submission_detects_finished_attempt() {
+        let finished = r#"<h4 class="card-header">Your attempts</h4>
+            <table class="generaltable"><tr>
+              <th class="cell c0">Attempt 1</th>
+              <td class="cell c1"><span class="sr-only">Attempt 1 summary</span>Status Finished</td>
+            </tr></table>"#;
+        assert!(parse_quiz_submission_from_html(finished));
+
+        let closed = r#"<div class="quizinfo">Attempts allowed: 1 Time limit: 25 mins
+            This quiz is currently not available.</div>"#;
+        assert!(!parse_quiz_submission_from_html(closed));
+
+        let in_progress = r#"<span class="sr-only">Attempt 1 summary</span>Status In progress"#;
+        assert!(!parse_quiz_submission_from_html(in_progress));
+
+        let finished_colon = r#"<td>Status: Finished</td>"#;
+        assert!(parse_quiz_submission_from_html(finished_colon));
+    }
+
+    /// Regression: cmid extraction from gradebook / activity URLs must match Assignment ids.
+    #[test]
+    fn cmid_from_url_matches_view_links() {
+        assert_eq!(
+            cmid_from_url(Some("https://learning.monash.edu/mod/quiz/view.php?id=6121932")),
+            Some(6121932)
+        );
+        assert_eq!(
+            cmid_from_url(Some("https://learning.monash.edu/mod/assign/view.php?id=6121936")),
+            Some(6121936)
+        );
+        assert_eq!(cmid_from_url(None), None);
+        assert_eq!(cmid_from_url(Some("https://learning.monash.edu/course/view.php?id=46961")), Some(46961));
+    }
+
+    /// Regression on real pages: a quiz with a finished attempt (Quiz 1 2026 S2, attempt
+    /// completed 2026-08-15 21:51) must be detected as submitted, while a closed/never-started
+    /// quiz (Quiz 2 2026 S2) must not.
+    #[test]
+    fn quiz_submission_from_real_pages() {
+        let finished = sample("live_quiz_view_finished_6121932.html");
+        assert!(
+            parse_quiz_submission_from_html(&finished),
+            "finished quiz page should be detected as submitted"
+        );
+
+        let closed = sample("live_quiz_view_closed_6121933.html");
+        assert!(
+            !parse_quiz_submission_from_html(&closed),
+            "closed/never-started quiz page should NOT be detected as submitted"
+        );
+    }
+
+    /// Regression on a real assignment detail page (submitted for grading, graded 0.50 / 1.00):
+    /// the submission parse must report submitted=true and recover the grade.
+    #[test]
+    fn assign_submission_from_real_page() {
+        let html = sample("live_assign_view_submitted_5463586.html");
+        let scraper = test_scraper();
+        let parsed = scraper
+            .parse_submission_status_from_html(&html, 5463586)
+            .expect("parse should succeed");
+        assert!(parsed.submitted, "submitted-for-grading page must be marked submitted");
+        assert_eq!(parsed.grade.as_deref(), Some("0.50"));
+    }
+
 
     /// Regression: Contacts parsing must be lenient -- a space after `mailto: `, a possibly-missing role,
     /// and email text separate from the link. The old single regex would miss these cases.
@@ -5172,13 +5462,26 @@ mod tests {
     /// which JS's Date can't parse, so the backend must convert it to ISO).
     #[test]
     fn moodle_due_date_parsed_to_iso() {
+        // 23 March 2026 is AEDT (UTC+11): 9:00 AM Melbourne == 22:00 UTC the day before.
         assert_eq!(
             parse_moodle_due_date("Monday, 23 March 2026, 9:00 AM").as_deref(),
-            Some("2026-03-23T09:00:00+00:00")
+            Some("2026-03-22T22:00:00+00:00")
         );
+        // 14 September 2025 is AEST (UTC+10): 9:55 PM Melbourne == 11:55 UTC same day.
         assert_eq!(
             parse_moodle_due_date("Sunday, 14 September 2025, 9:55 PM").as_deref(),
-            Some("2025-09-14T21:55:00+00:00")
+            Some("2025-09-14T11:55:00+00:00")
+        );
+        // The exact case from the bug report: "16 August" badge but "tomorrow" label.
+        // 16 August 2026 is AEST (UTC+10): 11:59 PM Melbourne == 13:59 UTC.
+        assert_eq!(
+            parse_moodle_due_date("Sunday, 16 August 2026, 11:59 PM").as_deref(),
+            Some("2026-08-16T13:59:00+00:00")
+        );
+        // Date-only deadlines default to 23:59 Melbourne local time.
+        assert_eq!(
+            parse_moodle_due_date("Sunday, 16 August 2026").as_deref(),
+            Some("2026-08-16T13:59:00+00:00")
         );
         assert_eq!(parse_moodle_due_date("No date here"), None);
     }

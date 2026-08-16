@@ -456,6 +456,18 @@ export interface UnitDashboard {
   learningNav: LearningNavItem[];
 }
 
+// Every tab of one course, aggregated by the full sync (sync_all) so the course detail
+// page renders instantly from cache. Fields are null when that tab failed to fetch —
+// a failing tab never blocks the others.
+export interface CourseTabData {
+  courseId: number;
+  dashboard: UnitDashboard | null;
+  unitInfo: UnitInfo | null;
+  schedule: Schedule | null;
+  recordings: Recording[];
+  contacts: CourseContact[];
+}
+
 export interface CalendarEvent {
   id: number;
   /** Course ID. Null for events that are only available from the month view. */
@@ -535,17 +547,31 @@ export async function fetchUnitDashboard(courseId: number): Promise<UnitDashboar
   return invoke<UnitDashboard>("fetch_course_unit_dashboard", { courseId });
 }
 
-export async function syncAll(): Promise<{
+/**
+ * Full sync (called on every login / launch).
+ *
+ * Fetch strategy per the user's ruling:
+ *  - dynamic content (resources / assessments / announcements / unit dashboard /
+ *    recordings) is always fetched live from Moodle;
+ *  - semester-fixed content (unit info / schedule / contacts) is only fetched when
+ *    `includeFixedTabs` is true — the first run after install, or a manual full refresh.
+ *    Regular logins pass false so the cached copies are kept and no requests are wasted.
+ */
+export async function syncAll(includeFixedTabs = true): Promise<{
   courses: Course[];
   resources: Resource[];
   assignments: Assignment[];
   announcements: Announcement[];
+  tabs: CourseTabData[];
 }> {
   const invoke = getInvoke();
   if (invoke) {
-    const result = invoke<[Course[], Resource[], Assignment[], Announcement[]]>("sync_all");
-    const [courses, resources, assignments, announcements] = await result;
-    return { courses, resources, assignments, announcements };
+    const result = invoke<[Course[], Resource[], Assignment[], Announcement[], CourseTabData[]]>(
+      "sync_all",
+      { includeFixedTabs }
+    );
+    const [courses, resources, assignments, announcements, tabs] = await result;
+    return { courses, resources, assignments, announcements, tabs };
   }
   
   // P2: parallelized mock — all 3 resource kinds for every course are requested at once, cutting wait time by about 60%
@@ -575,6 +601,7 @@ export async function syncAll(): Promise<{
     resources: allResources,
     assignments: allAssignments,
     announcements: allAnnouncements,
+    tabs: [],
   };
 }
 
