@@ -19,6 +19,11 @@ jobs:
             target: aarch64-apple-darwin
             build_script: tauri:build:mac-arm
             artifact_path: src-tauri/target/aarch64-apple-darwin/release/bundle
+          - name: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            build_script: tauri:build:mac-intel
+            artifact_path: src-tauri/target/x86_64-apple-darwin/release/bundle
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc

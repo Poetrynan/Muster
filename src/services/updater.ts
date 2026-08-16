@@ -3,6 +3,8 @@
  * Checks repository releases from GitHub API and compares SemVer versions.
  */
 
+import { invoke } from "@tauri-apps/api/core";
+
 export interface GitHubAsset {
   name: string;
   browser_download_url: string;
@@ -34,6 +36,7 @@ export const GITHUB_REPO = "Poetrynan/Muster";
 export const APP_CURRENT_VERSION = "0.1.1";
 
 type DesktopPlatform = "macos" | "windows" | "other";
+type DesktopArch = "aarch64" | "x86_64" | "other";
 
 function getDesktopPlatform(): DesktopPlatform {
   if (typeof navigator === "undefined") return "other";
@@ -43,20 +46,49 @@ function getDesktopPlatform(): DesktopPlatform {
   return "other";
 }
 
+async function getDesktopArch(platform: DesktopPlatform): Promise<DesktopArch> {
+  if (platform !== "macos") return "other";
+
+  try {
+    const arch = (await invoke<string>("get_target_arch")).toLowerCase();
+    if (arch === "aarch64" || arch === "arm64") return "aarch64";
+    if (arch === "x86_64" || arch === "x64" || arch === "amd64") return "x86_64";
+  } catch (error) {
+    console.warn("Could not determine desktop architecture:", error);
+  }
+
+  return "other";
+}
+
 /** Pick an installer for the current desktop without changing the GitHub release protocol. */
 export function selectInstallerAsset(
   assets: GitHubAsset[],
-  platform: DesktopPlatform = getDesktopPlatform()
+  platform: DesktopPlatform = getDesktopPlatform(),
+  arch: DesktopArch = "other"
 ): GitHubAsset | undefined {
   const lowerName = (asset: GitHubAsset) => asset.name.toLowerCase();
 
   if (platform === "macos") {
+    const isDmg = (asset: GitHubAsset) => lowerName(asset).endsWith(".dmg");
+    const isArm = (asset: GitHubAsset) =>
+      isDmg(asset) && /(aarch64|arm64|apple[-_ ]?silicon)/.test(lowerName(asset));
+    const isIntel = (asset: GitHubAsset) =>
+      isDmg(asset) && /(x86[_-]?64|x64|amd64|intel)/.test(lowerName(asset));
+    const isUniversal = (asset: GitHubAsset) =>
+      isDmg(asset) && /universal/.test(lowerName(asset));
+
+    if (arch === "aarch64") {
+      return assets.find(isArm) || assets.find(isUniversal);
+    }
+
+    if (arch === "x86_64") {
+      return assets.find(isIntel) || assets.find(isUniversal);
+    }
+
     return (
-      assets.find((asset) => {
-        const name = lowerName(asset);
-        return name.endsWith(".dmg") && /(aarch64|arm64|apple[-_ ]?silicon)/.test(name);
-      }) ||
-      assets.find((asset) => lowerName(asset).endsWith(".dmg")) ||
+      assets.find(isUniversal) ||
+      assets.find(isArm) ||
+      assets.find(isIntel) ||
       assets.find((asset) => lowerName(asset).endsWith(".app.tar.gz")) ||
       assets.find((asset) => lowerName(asset).endsWith(".zip"))
     );
@@ -128,7 +160,9 @@ export async function checkForAppUpdates(
 
     // Find the installer for the current desktop architecture/platform.
     const assets: GitHubAsset[] = data.assets || [];
-    const installerAsset = selectInstallerAsset(assets);
+    const platform = getDesktopPlatform();
+    const arch = await getDesktopArch(platform);
+    const installerAsset = selectInstallerAsset(assets, platform, arch);
 
     const releaseInfo: ReleaseInfo = {
       tagName,

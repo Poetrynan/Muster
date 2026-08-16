@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin",
+    "tauri:build:mac-intel": "tauri build --target x86_64-apple-darwin",
     "tauri:build:windows-x64": "tauri build --target x86_64-pc-windows-msvc",
     "coverage": "node scripts/measure_coverage.mjs",
     "sync:preview": "node scripts/sync-preview.mjs"
