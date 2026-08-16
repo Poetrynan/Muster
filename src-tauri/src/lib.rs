@@ -48,6 +48,13 @@ fn set_close_to_tray(enabled: bool, state: tauri::State<'_, AppState>) {
     state.close_to_tray.store(enabled, Ordering::Relaxed);
 }
 
+/// Return the architecture of the running desktop binary so the updater can
+/// select the matching installer without relying on the WebView user agent.
+#[tauri::command]
+fn get_target_arch() -> &'static str {
+    std::env::consts::ARCH
+}
+
 /// Login to Moodle with username and password
 #[tauri::command]
 async fn login(
@@ -971,6 +978,7 @@ pub fn run() {
             fetch_course_unit_dashboard,
             fetch_grade_overview,
             set_close_to_tray,
+            get_target_arch,
             sync_all,
             get_sync_status,
             download_file,

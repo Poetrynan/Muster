@@ -183,7 +183,7 @@ timestamp.
 ## 📦 Downloads & Installation
 
 > [!NOTE]
-> **Platform Support**: Muster supports **Windows 10 / 11 (64-bit)** and now includes a beta build for **Apple Silicon Macs running macOS 12 or later**.
+> **Platform Support**: Muster supports **Windows 10 / 11 (64-bit)** and beta builds for **Apple Silicon and Intel Macs running macOS 12 or later**.
 
 | Platform | Package Type | File | Status |
 | :--- | :--- | :--- | :--- |
@@ -191,6 +191,7 @@ timestamp.
 | **Windows** | Enterprise MSI | `Muster_0.1.1_x64_en-US.msi` | ✅ Available |
 | **Windows** | Standalone Executable | `muster.exe` | ✅ Available |
 | **macOS** | Apple Silicon DMG | `Muster_0.1.1_aarch64.dmg` | 🧪 Beta |
+| **macOS** | Intel DMG | `Muster_0.1.1_x64.dmg` | 🧪 Beta |
 
 > [!IMPORTANT]
-> The macOS beta uses an ad-hoc signature and is not notarized by Apple. On first launch, macOS may block the app. After attempting to open Muster, go to **System Settings → Privacy & Security** and choose **Open Anyway**. Intel Macs are not supported.
+> The macOS beta uses an ad-hoc signature and is not notarized by Apple. On first launch, macOS may block the app. After attempting to open Muster, go to **System Settings → Privacy & Security** and choose **Open Anyway**. Download the DMG matching your Mac's processor.
