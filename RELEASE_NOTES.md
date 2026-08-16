@@ -1,3 +1,43 @@
+# 🐛 Muster v0.1.3 — Version Display Hotfix
+
+> v0.1.3 fixes version-number inconsistencies left over from the v0.1.2 release:
+> the About page and the login footer still showed v0.1.1, and the update-check
+> baseline was stale, which would have prompted v0.1.2 users with a false
+> "new version available" notice.
+
+---
+
+## 🐛 Fixed in v0.1.3
+
+### 1. About page showed the wrong version ❌→✅
+The Settings → About page (and the login-page footer, in all four languages)
+still displayed v0.1.1. The version baseline is now **v0.1.3** everywhere:
+About page, login footer (zh/en/ja/ko), update-check baseline.
+
+### 2. Stale update-check baseline ❌→✅
+`APP_CURRENT_VERSION` had not been bumped for the multi-platform release, so
+installed v0.1.2 users would always see a false "update available" prompt.
+The baseline is now v0.1.3 and matches the installer versions.
+
+### 3. README installer names synchronized ❌→✅
+The English/中文/日本語/한국어 READMEs now reference the current installer
+names (`Muster_0.1.3_*`) for Windows and both macOS variants.
+
+---
+
+## 🪟🍏 Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 **Windows** | 64-bit NSIS Setup (Recommended) | `Muster_0.1.3_x64-setup.exe` |
+| 🪟 **Windows** | 64-bit MSI Installer | `Muster_0.1.3_x64_en-US.msi` |
+| 🍏 **macOS** | Apple Silicon (M1 / M2 / M3 / M4) | `Muster_0.1.3_aarch64.dmg` |
+| 🍏 **macOS** | Intel x86_64 | `Muster_0.1.3_x64.dmg` |
+
+> **macOS first launch:** right-click the app → **Open** (or run `xattr -dr com.apple.quarantine /Applications/Muster.app`) to bypass Gatekeeper for unsigned development builds.
+
+---
+
 # 🎉 Muster v0.1.2 — Multi-Platform Release (Windows & macOS)
 
 > **Muster** is a modern, high-performance desktop companion for Monash Moodle. It aggregates your deadlines, course resources, grades, and announcements into a clean, lightning-fast native interface.
