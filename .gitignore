@@ -121,3 +121,6 @@ ehthumbs.db
 desktop.ini
 Desktop.ini
 $RECYCLE.BIN/
+
+# Local build logs
+build_log_*.txt

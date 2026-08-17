@@ -55,7 +55,7 @@ import type {
   UnitDashboard,
 } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
-import { getEffectiveAssignmentStatus } from "../lib/utils";
+import { getEffectiveAssignmentStatus, buildCourseDownloadDir } from "../lib/utils";
 
 interface CourseDetailProps {
   courseId: number;
@@ -381,7 +381,11 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
       lastTick: Date.now(),
     });
     try {
-      const savedPath = await downloadFile(resource.url, settings.downloadPath || "");
+      const baseDir = settings.downloadPath || "";
+      const savePath = settings.groupDownloadsByCourse
+        ? buildCourseDownloadDir(baseDir, courseId, course?.fullName, course?.shortName)
+        : baseDir;
+      const savedPath = await downloadFile(resource.url, savePath);
       upsertDownload({
         key: dlKey,
         name: resource.name,
@@ -486,7 +490,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     setSubmissionError(null);
     setSubmission(null);
     try {
-      const res = await fetchAssignmentSubmission(courseId, assignmentId);
+      const target = courseAssignments.find((a) => a.id === assignmentId);
+      const res = await fetchAssignmentSubmission(courseId, assignmentId, target?.assessmentType);
       setSubmission(res);
     } catch (err) {
       setSubmissionError(t("assignments.submission.error", { error: String(err) }));
@@ -1634,9 +1639,15 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                       {t("assignments.submission.dueDate", { date: submission.dueDate })}
                     </p>
                   )}
-                  {submission.grade && (
+                  {(submission.grade ||
+                    courseAssignments.find((a) => a.id === submissionForId)?.grade) && (
                     <p className="font-medium text-green-600">
-                      {t("assignments.submission.grade", { grade: submission.grade })}
+                      {t("assignments.submission.grade", {
+                        grade:
+                          submission.grade ||
+                          courseAssignments.find((a) => a.id === submissionForId)?.grade ||
+                          "",
+                      })}
                     </p>
                   )}
                   {submission.feedback && (

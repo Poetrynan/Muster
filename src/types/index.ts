@@ -160,6 +160,8 @@ export interface AppSettings {
   downloadPath: string;
   /** Reveal downloaded file in file manager after download completes */
   openFolderAfterDownload: boolean;
+  /** Downloads are organized into per-course subfolders (e.g. Downloads/FIT5215/...) */
+  groupDownloadsByCourse: boolean;
   notifications: boolean;
   notificationSound: boolean;
   /** Notification: assignment due reminder */

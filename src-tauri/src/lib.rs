@@ -207,11 +207,14 @@ async fn fetch_course_schedule(
 async fn fetch_assignment_submission(
     course_id: u64,
     assignment_id: u64,
+    assessment_type: String,
     state: State<'_, AppState>,
 ) -> Result<SubmissionStatus, String> {
     let scraper_guard = state.scraper.lock().await;
     let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
-    scraper.fetch_assignment_submission(course_id, assignment_id).await
+    scraper
+        .fetch_assignment_submission(course_id, assignment_id, &assessment_type)
+        .await
 }
 
 /// Fetch course recordings (Panopto block).

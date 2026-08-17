@@ -372,11 +372,16 @@ export async function fetchCourseSchedule(courseId: number): Promise<Schedule> {
  */
 export async function fetchAssignmentSubmission(
   courseId: number,
-  assignmentId: number
+  assignmentId: number,
+  assessmentType?: "assignment" | "quiz"
 ): Promise<SubmissionStatus> {
   const invoke = getInvoke();
   if (invoke) {
-    return invoke<SubmissionStatus>("fetch_assignment_submission", { courseId, assignmentId });
+    return invoke<SubmissionStatus>("fetch_assignment_submission", {
+      courseId,
+      assignmentId,
+      assessmentType: assessmentType ?? "assignment",
+    });
   }
   return {
     assignmentId,

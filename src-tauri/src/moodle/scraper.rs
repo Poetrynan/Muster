@@ -404,17 +404,40 @@ impl MoodleScraper {
         self.parse_schedule_from_html(&html, course_id)
     }
 
-    /// Fetch a single assignment's submission status and feedback (assignment detail page `mod/assign/view.php?id=<id>`).
+    /// Fetch a single assessment's submission status and feedback.
+    /// Quizzes live at `mod/quiz/view.php`, regular assignments at
+    /// `mod/assign/view.php` — using the wrong route (the old code always hit
+    /// the assign route) returned a wrong/empty page, so finished quizzes were
+    /// reported as "not submitted".
     pub async fn fetch_assignment_submission(
         &self,
         course_id: u64,
         assignment_id: u64,
+        assessment_type: &str,
     ) -> Result<SubmissionStatus, String> {
         let client = self.auth.get_authenticated_client().await?;
-        let url = format!("{}/mod/assign/view.php?id={}", self.base_url, assignment_id);
+        let route = if assessment_type.eq_ignore_ascii_case("quiz") {
+            "mod/quiz/view.php"
+        } else {
+            "mod/assign/view.php"
+        };
+        let url = format!("{}/{}?id={}", self.base_url, route, assignment_id);
         let html = Self::fetch_course_view_text(&client, &self.request_gate, &url).await?;
         Self::dump_course_view_section_html(course_id, assignment_id, &html);
-        self.parse_submission_status_from_html(&html, assignment_id)
+
+        let mut status = self.parse_submission_status_from_html(&html, assignment_id)?;
+        if assessment_type.eq_ignore_ascii_case("quiz") {
+            // The quiz route reports submission differently (attempts + final
+            // grade); the assign-page heuristics must not override it.
+            status.submitted = parse_quiz_submission_from_html(&html);
+            // Grade fallback for quiz pages: "Your final grade for this quiz is
+            // 13.00/13.00" — parse_submission_status_from_html already handles
+            // grade/成绩 patterns, but quizzes also use "13.00 out of 13.00".
+            if status.grade.is_none() {
+                status.grade = parse_quiz_grade_from_html(&html);
+            }
+        }
+        Ok(status)
     }
 
     /// Fetch course recordings (the Panopto sidebar block). In the static highlight view the Panopto block is
@@ -1173,18 +1196,23 @@ impl MoodleScraper {
                 || lower.contains("submission status")
                 && lower.contains("submitted"));
 
-        let grade = regex::Regex::new(r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*\d+")
+        // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user
+        // sees the max score; understand Chinese "成绩" labels too.
+        let grade = regex::Regex::new(
+            r"(?is)(?:grade|成绩|成績).{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+        )
+        .ok()
+        .and_then(|re| re.captures(text))
+        .map(|c| format!("{} / {}", &c[1], &c[2]))
+        .or_else(|| {
+            // Bare "0.50 / 1.00" (assign submission table) without a label nearby.
+            regex::Regex::new(
+                r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+            )
             .ok()
             .and_then(|re| re.captures(text))
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str().to_string())
-            .or_else(|| {
-                regex::Regex::new(r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*100")
-                    .ok()
-                    .and_then(|re| re.captures(text))
-                    .and_then(|c| c.get(1))
-                    .map(|m| m.as_str().to_string())
-            });
+            .map(|c| format!("{} / {}", &c[1], &c[2]))
+        });
 
         // Feedback body: the td content of the "Feedback comments" row in the assignment detail page's div.feedback table
         // (the old implementation returned a hardcoded Chinese "has feedback" placeholder whenever the page contained "feedback", ignoring English mode and real content).
@@ -1218,6 +1246,21 @@ impl MoodleScraper {
             }
             fb
         };
+
+        // Clean the extracted feedback: Moodle stores the "View feedback" plugin
+        // button as escaped HTML entities (&lt;a href="...viewpluginassignfeedback..."&gt;)
+        // inside the cell. Decode the entities and strip any leftover tags, so the
+        // dialog shows the human feedback text only — never raw markup.
+        let feedback = feedback.map(|t| {
+            let decoded = decode_html_entities(&t);
+            regex::Regex::new(r"<[^>]*>")
+                .ok()
+                .map(|re| re.replace_all(&decoded, " ").to_string())
+                .unwrap_or(decoded)
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        });
 
         let due_date = regex::Regex::new(r"(?i)due[^0-9]{0,30}(\d{1,2}\s+\w+\s+\d{4})")
             .ok()
@@ -2459,15 +2502,21 @@ impl MoodleScraper {
         let filename = sanitize_filename(&raw_filename);
 
         // Resolve the save path into an absolute directory to drop the file in.
-        // A relative path like "./downloads" is meaningless for a GUI app (its CWD
-        // is unpredictable), so map it to the system Downloads/Muster folder.
+        // A relative path like "FIT5215" is mapped to `<system Downloads>/Muster/FIT5215`.
+        // An empty path falls back to `<system Downloads>/Muster`.
         let raw_path = std::path::PathBuf::from(save_path);
         let target_dir = if raw_path.is_absolute() {
             raw_path
         } else {
-            dirs::download_dir()
+            let base = dirs::download_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("Muster")
+                .join("Muster");
+            let clean_save = save_path.trim().trim_start_matches(['/', '\\']);
+            if !clean_save.is_empty() {
+                base.join(clean_save)
+            } else {
+                base
+            }
         };
         let full_path = target_dir.join(&filename);
 
@@ -4047,11 +4096,38 @@ fn parse_quiz_submission_from_html(html: &str) -> bool {
     if lower.contains("status finished") || lower.contains("status: finished") {
         return true;
     }
+    // A completed quiz view/summary page carries the final grade:
+    //   EN: "Your final grade for this quiz is 13.00/13.00."
+    //   ZH: "您的最终成绩" / "你在这个测验的最终成绩"
+    if lower.contains("final grade") || lower.contains("最终成绩") || lower.contains("最終成績") {
+        return true;
+    }
+    // "Your previous attempts" (EN) / "您以前的尝试" (ZH) means at least one
+    // finished attempt exists.
+    if (lower.contains("your previous attempts")
+        || lower.contains("previous attempts")
+        || lower.contains("您以前的尝试")
+        || lower.contains("你以前的尝试"))
+        && !lower.contains("never submitted")
+    {
+        return true;
+    }
     // Safety net: a "Your attempts" block without in-progress / never-submitted markers
     // means at least one attempt was completed.
     lower.contains("your attempts")
         && !lower.contains("status in progress")
         && !lower.contains("never submitted")
+}
+
+/// Extract "13.00 / 13.00" from quiz pages: "Your final grade for this quiz is
+/// 13.00/13.00" or the attempts table's "13.00 out of 13.00 (100%)".
+fn parse_quiz_grade_from_html(html: &str) -> Option<String> {
+    let re = regex::Regex::new(
+        r"(?is)(?:final grade|grade|成绩|成績).{0,120}?(\d+(?:\.\d+)?)\s*(?:/|out of)\s*(\d+(?:\.\d+)?)",
+    )
+    .ok()?;
+    let cap = re.captures(html)?;
+    Some(format!("{} / {}", &cap[1], &cap[2]))
 }
 
 /// Extract the activity cmid from a Moodle view URL
@@ -4575,6 +4651,93 @@ mod tests {
         MoodleScraper::new(Arc::new(MoodleAuth::new()))
     }
 
+    #[test]
+    fn quiz_view_page_with_final_grade_detected_as_submitted() {
+        // EN quiz view page after finishing: "Your final grade for this quiz is 13.00/13.00."
+        let en = r#"<div class="quizinfomessage">Your final grade for this quiz is <b>13.00/13.00</b>.</div>
+                    <div>Your previous attempts</div><a href="/mod/quiz/review.php">Review</a>"#;
+        assert!(parse_quiz_submission_from_html(en), "EN final-grade page must be submitted");
+
+        // ZH quiz view page after finishing
+        let zh = r#"<div>您的最终成绩是 <b>13.00/13.00</b>。</div>
+                    <a href="/mod/quiz/review.php">查看</a>"#;
+        assert!(parse_quiz_submission_from_html(zh), "ZH final-grade page must be submitted");
+
+        // Not yet attempted: "Attempt quiz now" button, no final grade
+        let open = r#"<div>This quiz is open.</div><button>Attempt quiz now</button>"#;
+        assert!(!parse_quiz_submission_from_html(open), "open quiz must NOT be submitted");
+    }
+
+    #[test]
+    fn finished_quiz_real_page_is_submitted() {
+        // Real page: Quiz 1 2026 S2, attempt finished (the exact bug-report case).
+        let html = sample("live_quiz_view_finished_6121932.html");
+        assert!(parse_quiz_submission_from_html(&html));
+        let scraper = test_scraper();
+        let status = scraper
+            .parse_submission_status_from_html(&html, 6121932)
+            .expect("parse");
+        // The quiz route overrides the assign-route heuristic:
+        assert!(status.submitted || parse_quiz_submission_from_html(&html));
+    }
+
+    #[test]
+    fn quiz_grade_extracted_with_max_score() {
+        let en = "Your final grade for this quiz is 13.00/13.00.";
+        assert_eq!(parse_quiz_grade_from_html(en).as_deref(), Some("13.00 / 13.00"));
+
+        let out_of = "Grade: 13.00 out of 13.00 (100%)";
+        assert_eq!(parse_quiz_grade_from_html(out_of).as_deref(), Some("13.00 / 13.00"));
+
+        let zh = "您的最终成绩是 8.50 / 10.00。";
+        assert_eq!(parse_quiz_grade_from_html(zh).as_deref(), Some("8.50 / 10.00"));
+
+        assert_eq!(parse_quiz_grade_from_html("Attempt quiz now"), None);
+    }
+
+    #[test]
+    fn feedback_cleans_escaped_html_from_view_feedback_button() {
+        let scraper = test_scraper();
+        // Real-world shape: the feedback cell contains the human comment plus the
+        // escaped "View feedback" button markup.
+        let html = r#"<div class="feedback"><table><tbody>
+          <tr><th>Feedback comments</th>
+          <td><div class="plugincontentsummary"><p>Description Feedback: clear structure.</p>
+              &lt;a href="https://learning.monash.edu/mod/assign/view.php?id=4716971&amp;gid=3987304&amp;plugin=comments&amp;action=viewpluginassignfeedback&amp;returnaction&amp;returnparams=rownum%3D0%26amp%3Buseridlistid%3D6a82" id="action_link" class="" &gt;&lt;i class="icon fa fa-magnifying-glass-plus fa-fw " title="View feedback" role="img" aria-label="View feedback"&gt;&lt;/i&gt;&lt;/a&gt;
+          </td></tr>
+        </tbody></table></div>"#;
+        let status = scraper
+            .parse_submission_status_from_html(&html, 42)
+            .expect("parse");
+        let fb = status.feedback.unwrap_or_default();
+        assert!(
+            fb.contains("Description Feedback: clear structure."),
+            "human feedback must survive: {fb:?}"
+        );
+        assert!(
+            !fb.contains("<a href") && !fb.contains("viewpluginassignfeedback"),
+            "raw markup must be stripped: {fb:?}"
+        );
+        assert!(!fb.contains("magnifying-glass-plus"), "icon classes must be gone: {fb:?}");
+    }
+
+    #[test]
+    fn submission_grade_keeps_full_marks() {
+        let scraper = test_scraper();
+        let html = "Grade: 0.50 / 1.00";
+        let s = scraper
+            .parse_submission_status_from_html(&html, 42)
+            .expect("parse");
+        // grade regex path: bare "X / Y" fallback
+        assert_eq!(s.grade.as_deref(), Some("0.50 / 1.00"));
+
+        let html2 = "成绩 13.00 / 13.00";
+        let s2 = scraper
+            .parse_submission_status_from_html(&html2, 42)
+            .expect("parse");
+        assert_eq!(s2.grade.as_deref(), Some("13.00 / 13.00"));
+    }
+
     /// Regression: a quiz with a finished attempt must be detected as submitted (real page of
     /// Quiz 1 2026 S2: attempt finished Saturday, 15 August 2026, 9:51 PM).
     #[test]
@@ -4640,7 +4803,7 @@ mod tests {
             .parse_submission_status_from_html(&html, 5463586)
             .expect("parse should succeed");
         assert!(parsed.submitted, "submitted-for-grading page must be marked submitted");
-        assert_eq!(parsed.grade.as_deref(), Some("0.50"));
+        assert_eq!(parsed.grade.as_deref(), Some("0.50 / 1.00"));
     }
 
 

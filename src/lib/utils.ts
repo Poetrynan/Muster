@@ -89,3 +89,34 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
+
+
+const COURSE_CODE_RE = /^([A-Z]{2,6}\d{2,6}(?:-[A-Z]{2,6}\d{2,6})?)/;
+
+/** Extract the pure unit code ("FIT5215", "FIT4005-FIT5125") from a course name. */
+export function getCourseCode(fullName?: string | null): string | null {
+  if (!fullName) return null;
+  return fullName.match(COURSE_CODE_RE)?.[1] ?? null;
+}
+
+/** Windows-safe folder name (no \ / : * ? " < > |). */
+export function sanitizeFolderName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]/g, "").trim();
+  return cleaned || "Course";
+}
+
+/**
+ * Download directory for a course when "group downloads by course" is enabled:
+ * "<baseDir>/<UNITCODE>". Falls back to just the unit code when no base dir is set.
+ */
+export function buildCourseDownloadDir(
+  baseDir: string,
+  courseId: number,
+  fullName?: string | null,
+  shortName?: string | null
+): string {
+  const code = getCourseCode(fullName) ?? getCourseCode(shortName) ?? `Course-${courseId}`;
+  const safe = sanitizeFolderName(code);
+  const base = (baseDir || "").replace(/[\\/]+$/, "");
+  return base ? `${base}/${safe}` : safe;
+}
