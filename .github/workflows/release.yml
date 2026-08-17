@@ -10,6 +10,14 @@ on:
         description: "Release tag (e.g., v0.1.6)"
         required: true
         default: "v0.1.6"
+      platform:
+        description: "Platforms to build"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "macos-intel"
 
 permissions:
   contents: write
@@ -20,13 +28,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-15"
+          - id: "macos-arm"
+            platform: "macos-15"
             target: "aarch64-apple-darwin"
             args: "--target aarch64-apple-darwin --bundles dmg"
-          - platform: "macos-13"
+          - id: "macos-intel"
+            platform: "macos-15-intel"
             target: "x86_64-apple-darwin"
             args: "--target x86_64-apple-darwin --bundles dmg"
-          - platform: "windows-latest"
+          - id: "windows"
+            platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
             args: "--target x86_64-pc-windows-msvc --bundles msi,nsis"
 
@@ -34,28 +45,34 @@ jobs:
 
     steps:
       - name: Checkout repository
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
 
       - name: Install Rust toolchain
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Rust cache
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
       - name: Install dependencies
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         run: npm ci
 
       - name: Read Release Notes
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         id: release_notes
         shell: bash
         run: |
@@ -69,12 +86,13 @@ jobs:
           fi
 
       - name: Build Tauri app
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name || inputs.tag }}
-          releaseName: "Muster ${{ github.ref_name || inputs.tag }}"
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          releaseName: "Muster ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: true
           prerelease: false
