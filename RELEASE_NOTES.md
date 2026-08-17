@@ -1,3 +1,26 @@
+# Muster v0.1.5
+
+## Bug Fixes
+- Quiz submission dialog no longer shows "Not submitted" for finished quizzes (wrong Moodle route used)
+- Grades now include the max score: "13" → "13 / 13"
+- Feedback no longer leaks raw HTML markup from Moodle
+- Grades panel no longer stuck at "0/0 · no data" after re-login (launch sync now fetches grades + calendar)
+- Empty-state illustration restored in the grades panel
+
+## New
+- Downloads organized into per-course folders (e.g. `Downloads/Muster/FIT5215/…`), toggle in Settings → Downloads
+
+## Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 Windows | NSIS Setup (Recommended) | `Muster_0.1.5_x64-setup.exe` |
+| 🪟 Windows | MSI | `Muster_0.1.5_x64_en-US.msi` |
+| 🍏 macOS | Apple Silicon | `Muster_0.1.5_aarch64.dmg` |
+| 🍏 macOS | Intel | `Muster_0.1.5_x64.dmg` |
+
+---
+
 # ✨ Muster v0.1.4 — Update Banner & Dynamic Versions
 
 > v0.1.4 adds a **silent update check on launch** with an in-app banner when a

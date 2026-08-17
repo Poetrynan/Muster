@@ -898,6 +898,22 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
                   <div className="flex items-center justify-between py-2 mt-3 border-t border-border/60">
                     <div>
+                      <p className="font-medium">{t("settings.download.groupByCourse")}</p>
+                      <p className="text-sm text-muted-foreground">{t("settings.download.groupByCourseDesc")}</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.groupDownloadsByCourse}
+                        onChange={(e) => updateSettings({ groupDownloadsByCourse: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-secondary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2 mt-3 border-t border-border/60">
+                    <div>
                       <p className="font-medium">{t("settings.download.openFolder")}</p>
                       <p className="text-sm text-muted-foreground">{t("settings.download.openFolderDesc")}</p>
                     </div>
@@ -911,7 +927,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       <div className="w-11 h-6 bg-secondary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
                     </label>
                   </div>
-                  
                 </CardContent>
               </Card>
 

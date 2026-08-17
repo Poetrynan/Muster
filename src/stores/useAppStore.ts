@@ -103,6 +103,7 @@ const defaultSettings: AppSettings = {
   courseSortBy: "term",
   downloadPath: "",
   openFolderAfterDownload: true,
+  groupDownloadsByCourse: true,
   notifications: true,
   notificationSound: true,
   notifyAssignmentDue: true,

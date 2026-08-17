@@ -59,7 +59,7 @@ function classifyAnnouncement(
   return "general";
 }
 
-import { isTermEnded } from "../lib/utils";
+import { isTermEnded, buildCourseDownloadDir } from "../lib/utils";
 import {
   findDueAssignments,
   diffAnnouncements,
@@ -457,7 +457,7 @@ export function Dashboard() {
                         ? t("dashboard.downloading")
                         : t("dashboard.download", { name: resource.name })
                     }
-                    onClick={() => handleDownload({ key: rowKey, name: resource.name, url: resource.url })}
+                    onClick={() => handleDownload({ key: rowKey, name: resource.name, url: resource.url, courseId: resource.courseId })}
                     className={downloadingId === rowKey ? "opacity-50 cursor-not-allowed" : ""}
                     title={
                       downloadingId === rowKey
@@ -602,7 +602,7 @@ export function Dashboard() {
   // Use `key` rather than resource.id as the spinner's unique identifier: the backend also parses
   // course/forum top-level links into Resources, whose ids are often 0 or duplicated, so clicking one
   // download button would leave every row sharing that id spinning.
-  const handleDownload = async (resource: { key: string; name: string; url?: string }) => {
+  const handleDownload = async (resource: { key: string; name: string; url?: string; courseId?: number }) => {
     const url = resource.url || "#";
     if (url === "#") {
       showToast(t("dashboard.downloadNoUrl"));
@@ -621,7 +621,11 @@ export function Dashboard() {
       lastTick: Date.now(),
     });
     try {
-      const savePath = settings.downloadPath || "";
+      const baseDir = settings.downloadPath || "";
+      const matchedCourse = courses.find((c) => c.id === (resource.courseId ?? 0));
+      const savePath = settings.groupDownloadsByCourse
+        ? buildCourseDownloadDir(baseDir, resource.courseId ?? 0, matchedCourse?.fullName, matchedCourse?.shortName)
+        : baseDir;
       const savedPath = await downloadFile(url, savePath);
       upsertDownload({
         key: url,
@@ -721,6 +725,20 @@ export function Dashboard() {
           updateAllSyncedData(synced.value);
         } else if (synced.status === "rejected") {
           setLoadError(errMsg(synced.reason, "dashboard.syncFailed"));
+        }
+
+        // Calendar events + grade overview ride along with the launch sync (the
+        // manual sync already does this). Without it, a re-login (which clears
+        // these caches) left grades stuck at "0/0 · no data" until a manual sync.
+        if (shouldAutoSync && isMounted) {
+          const [cal, grades] = await Promise.all([
+            fetchCalendarEvents().catch(() => [] as CalendarEvent[]),
+            fetchGradeOverview().catch(() => [] as GradeOverviewRow[]),
+          ]);
+          if (isMounted) {
+            setCalendarEvents(cal);
+            setGradeOverview(grades);
+          }
         }
       } catch (err) {
         console.error("Failed to load data:", err);
@@ -1503,8 +1521,11 @@ export function Dashboard() {
                 </span>
               </div>
               {(gradeOverview || []).length === 0 ? (
-                <div className="mb-8 p-4 rounded-2xl bg-card border border-border text-center">
-                  <p className="text-sm text-muted-foreground">{t("dashboard.gradesNoData")}</p>
+                <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
+                  <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                    {t("dashboard.gradesNoData")}
+                  </p>
                 </div>
               ) : gradedCount === 0 ? (
                 <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
