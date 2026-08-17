@@ -4652,6 +4652,70 @@ mod tests {
     }
 
     #[test]
+    fn mst_section_links_extracted_from_real_page_46882() {
+        // The section page includes the full MST sidebar navigation (courseindex
+        // with 222 items). extract_mst_section_links must recover the section
+        // links from this page too, otherwise the base page (which has the same
+        // nav structure) might also fail to extract them — and the fetch would
+        // fall back to single-page parsing (only the current empty week).
+        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let sections = extract_mst_section_links(&html, 46882);
+        assert!(
+            !sections.is_empty(),
+            "MST section links must be extracted from the page; found {}",
+            sections.len()
+        );
+        println!(
+            "extracted {} section links from 46882: {:?}",
+            sections.len(),
+            sections.iter().map(|(n, _)| n).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn resources_parsed_with_section_ctx_46882() {
+        // The real fetch path passes Some((section_num, label)) so parsing is
+        // scoped to the section container first. The page is "Why Research
+        // Methods?" — find which section number that is (nav says section 3),
+        // then verify the scoped parse still finds resources.
+        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let scraper = test_scraper();
+
+        // try the likely section number(s): the file came from &section=3
+        for sec in [3u64, 0, 19] {
+            let resources = scraper
+                .parse_resources_from_html(
+                    &html,
+                    46882,
+                    Some((sec, format!("Section {}", sec))),
+                )
+                .expect("parse must not error");
+            println!("section_ctx={sec}: parsed {} resources", resources.len());
+        }
+    }
+
+    #[test]
+    fn resources_parsed_from_real_section_page_46882() {
+        // Real page from FIT4005-FIT5125 (S2 2026), section "Why Research Methods?".
+        // The page carries 14 mod/resource links + books/urls/pages/quiz/assign/forum.
+        // Regression: the Mac user reported "no content" for this course — if the
+        // parser cannot see these resources, THAT is the bug.
+        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let scraper = test_scraper();
+        let resources = scraper
+            .parse_resources_from_html(&html, 46882, None)
+            .expect("parse should succeed");
+        assert!(
+            !resources.is_empty(),
+            "real section page has resources; parser found none"
+        );
+        println!(
+            "parsed {} resources from 46882 section page",
+            resources.len()
+        );
+    }
+
+    #[test]
     fn quiz_view_page_with_final_grade_detected_as_submitted() {
         // EN quiz view page after finishing: "Your final grade for this quiz is 13.00/13.00."
         let en = r#"<div class="quizinfomessage">Your final grade for this quiz is <b>13.00/13.00</b>.</div>

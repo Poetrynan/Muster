@@ -69,13 +69,13 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   };
 
   // Task #39 — open the submission status / feedback dialog for a single assignment
-  const handleOpenSubmission = async (courseId: number, assignmentId: number) => {
+  const handleOpenSubmission = async (courseId: number, assignmentId: number, assessmentType?: "assignment" | "quiz") => {
     setSubmissionForId(assignmentId);
     setSubmissionLoading(true);
     setSubmissionError(null);
     setSubmission(null);
     try {
-      const res = await fetchAssignmentSubmission(courseId, assignmentId);
+      const res = await fetchAssignmentSubmission(courseId, assignmentId, assessmentType);
       setSubmission(res);
       // Fetch the gradebook in parallel to fill in feedback/grades (does not block the dialog)
       fetchCourseGradebook(courseId).then(setGradebook).catch(() => {});
@@ -300,7 +300,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                     className="h-8 w-8"
                     title={t("assignments.submission.view")}
                     aria-label={t("assignments.submission.view")}
-                    onClick={() => handleOpenSubmission(assignment.courseId, assignment.id)}
+                    onClick={() => handleOpenSubmission(assignment.courseId, assignment.id, assignment.assessmentType)}
                   >
                     <ClipboardList className="w-4 h-4" />
                   </Button>
