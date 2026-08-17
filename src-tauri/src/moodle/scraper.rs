@@ -4646,6 +4646,25 @@ mod tests {
             .unwrap_or_else(|e| panic!("Cannot read sample {}: {}", p.display(), e))
     }
 
+    /// Like sample(), but the samples/ directory is intentionally NOT committed
+    /// (it holds real course pages with personal data), so on a fresh clone / CI
+    /// the file is missing. In that case the test prints a skip notice and
+    /// returns None instead of panicking.
+    fn sample_or_skip(name: &str) -> Option<String> {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../samples")
+            .join(name);
+        match fs::read_to_string(&p) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!(
+                    "SKIP (sample file not available in this checkout): {name}: {e}"
+                );
+                None
+            }
+        }
+    }
+
     /// Construct an offline MoodleScraper instance, used only to call parse_* methods.
     fn test_scraper() -> MoodleScraper {
         MoodleScraper::new(Arc::new(MoodleAuth::new()))
@@ -4658,7 +4677,7 @@ mod tests {
         // links from this page too, otherwise the base page (which has the same
         // nav structure) might also fail to extract them — and the fetch would
         // fall back to single-page parsing (only the current empty week).
-        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let Some(html) = sample_or_skip("live_course_section_46882_whyresearchmethods.html") else { return; };
         let sections = extract_mst_section_links(&html, 46882);
         assert!(
             !sections.is_empty(),
@@ -4678,7 +4697,7 @@ mod tests {
         // scoped to the section container first. The page is "Why Research
         // Methods?" — find which section number that is (nav says section 3),
         // then verify the scoped parse still finds resources.
-        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let Some(html) = sample_or_skip("live_course_section_46882_whyresearchmethods.html") else { return; };
         let scraper = test_scraper();
 
         // try the likely section number(s): the file came from &section=3
@@ -4700,7 +4719,7 @@ mod tests {
         // The page carries 14 mod/resource links + books/urls/pages/quiz/assign/forum.
         // Regression: the Mac user reported "no content" for this course — if the
         // parser cannot see these resources, THAT is the bug.
-        let html = sample("live_course_section_46882_whyresearchmethods.html");
+        let Some(html) = sample_or_skip("live_course_section_46882_whyresearchmethods.html") else { return; };
         let scraper = test_scraper();
         let resources = scraper
             .parse_resources_from_html(&html, 46882, None)
@@ -4735,7 +4754,7 @@ mod tests {
     #[test]
     fn finished_quiz_real_page_is_submitted() {
         // Real page: Quiz 1 2026 S2, attempt finished (the exact bug-report case).
-        let html = sample("live_quiz_view_finished_6121932.html");
+        let Some(html) = sample_or_skip("live_quiz_view_finished_6121932.html") else { return; };
         assert!(parse_quiz_submission_from_html(&html));
         let scraper = test_scraper();
         let status = scraper
@@ -4844,13 +4863,13 @@ mod tests {
     /// quiz (Quiz 2 2026 S2) must not.
     #[test]
     fn quiz_submission_from_real_pages() {
-        let finished = sample("live_quiz_view_finished_6121932.html");
+        let Some(finished) = sample_or_skip("live_quiz_view_finished_6121932.html") else { return; };
         assert!(
             parse_quiz_submission_from_html(&finished),
             "finished quiz page should be detected as submitted"
         );
 
-        let closed = sample("live_quiz_view_closed_6121933.html");
+        let Some(closed) = sample_or_skip("live_quiz_view_closed_6121933.html") else { return; };
         assert!(
             !parse_quiz_submission_from_html(&closed),
             "closed/never-started quiz page should NOT be detected as submitted"
@@ -4861,7 +4880,7 @@ mod tests {
     /// the submission parse must report submitted=true and recover the grade.
     #[test]
     fn assign_submission_from_real_page() {
-        let html = sample("live_assign_view_submitted_5463586.html");
+        let Some(html) = sample_or_skip("live_assign_view_submitted_5463586.html") else { return; };
         let scraper = test_scraper();
         let parsed = scraper
             .parse_submission_status_from_html(&html, 5463586)
@@ -5037,7 +5056,7 @@ mod tests {
         let scraper = test_scraper();
 
         // 1) Dashboard -> course list
-        let dash = sample("live_my_courses.html");
+        let Some(dash) = sample_or_skip("live_my_courses.html") else { return; };
         let courses = scraper
             .parse_courses_from_html(&dash)
             .expect("parsing the dashboard should return Ok");
@@ -5136,7 +5155,7 @@ mod tests {
     /// dumped to samples/mst_course_view_34696.html (syntax-highlighting escapes already reverted).
     #[test]
     fn mst_extracts_all_section_nav_links() {
-        let html = sample("mst_course_view_34696.html");
+        let Some(html) = sample_or_skip("mst_course_view_34696.html") else { return; };
         let links = extract_mst_section_links(&html, 34696);
 
         // After dedup, at least 17 blocks should be covered (Unit Dashboard/Information/Schedule + additional information +
@@ -5365,7 +5384,7 @@ mod tests {
     #[test]
     fn unit_info_splits_accordion_cards_from_real_sample() {
         let scraper = test_scraper();
-        let html = sample("live_course_section1_46961.html");
+        let Some(html) = sample_or_skip("live_course_section1_46961.html") else { return; };
 
         let info = scraper
             .parse_unit_info_from_html(&html, 46961)
@@ -5417,7 +5436,7 @@ mod tests {
     #[test]
     fn schedule_parses_div_based_items_with_links() {
         let scraper = test_scraper();
-        let html = sample("live_unit_schedule_46961.html");
+        let Some(html) = sample_or_skip("live_unit_schedule_46961.html") else { return; };
         let schedule = scraper
             .parse_schedule_from_html(&html, 46961)
             .expect("real Schedule page should parse successfully");
@@ -5458,7 +5477,7 @@ mod tests {
     #[test]
     fn unit_dashboard_parses_structured_objectives_and_nav() {
         let scraper = test_scraper();
-        let html = sample("live_unit_dashboard_46961.html");
+        let Some(html) = sample_or_skip("live_unit_dashboard_46961.html") else { return; };
         let dash = scraper.parse_unit_dashboard_from_html(&html, 46961);
 
         // 1) Current week card
@@ -5510,7 +5529,7 @@ mod tests {
     #[test]
     fn resources_recovered_from_courseindex_tree_in_real_sample() {
         let scraper = test_scraper();
-        let html = sample("live_course_view_46961.html");
+        let Some(html) = sample_or_skip("live_course_view_46961.html") else { return; };
 
         let resources = scraper
             .parse_resources_from_html(&html, 46961, None)
@@ -5788,7 +5807,7 @@ mod tests {
     #[test]
     fn assessments_parser_extracts_category_weights_from_real_sample() {
         let scraper = test_scraper();
-        let html = sample("live_course_assessments_46961.html");
+        let Some(html) = sample_or_skip("live_course_assessments_46961.html") else { return; };
 
         let items = scraper
             .parse_assessments_from_html(&html, 46961)
