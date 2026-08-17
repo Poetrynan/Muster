@@ -1,3 +1,22 @@
+# Muster v0.1.6
+
+## Bug Fixes
+- Quiz submission dialog on the Assignments page no longer shows "Not submitted" for finished quizzes (the v0.1.5 fix only covered the course-detail dialog)
+
+## Tests
+- Added 3 regression tests using a real FIT4005-FIT5125 (MST template) course page: section-link extraction, resource parsing, and scoped section parsing
+
+## Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 Windows | NSIS Setup (Recommended) | `Muster_0.1.6_x64-setup.exe` |
+| 🪟 Windows | MSI | `Muster_0.1.6_x64_en-US.msi` |
+| 🍏 macOS | Apple Silicon | `Muster_0.1.6_aarch64.dmg` |
+| 🍏 macOS | Intel | `Muster_0.1.6_x64.dmg` |
+
+---
+
 # Muster v0.1.5
 
 ## Bug Fixes
