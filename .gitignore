@@ -81,7 +81,10 @@ lerna-debug.log*
 # ==============================================================================
 # Internal Tools & Reference Docs
 # ==============================================================================
-scripts/
+# scripts/ holds dev scratch (session.json, *.har have dedicated rules above);
+# only whitelisted scripts are committed (e.g. the release version-bump helper).
+scripts/*
+!scripts/bump-version.mjs
 doc/
 Reference/
 
