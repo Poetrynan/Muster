@@ -120,3 +120,15 @@ export function buildCourseDownloadDir(
   const base = (baseDir || "").replace(/[\\/]+$/, "");
   return base ? `${base}/${safe}` : safe;
 }
+
+export type DesktopPlatform = "macos" | "windows" | "linux" | "other";
+
+export function getDesktopPlatform(): DesktopPlatform {
+  if (typeof navigator === "undefined") return "other";
+  const identity = `${navigator.platform || ""} ${navigator.userAgent || ""}`.toLowerCase();
+  if (identity.includes("mac")) return "macos";
+  if (identity.includes("win")) return "windows";
+  if (identity.includes("linux")) return "linux";
+  return "other";
+}
+
