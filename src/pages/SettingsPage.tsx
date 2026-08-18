@@ -44,6 +44,7 @@ import { checkForAppUpdates, getCurrentAppVersion, type UpdateCheckResult } from
 import { ACCENT_COLORS, type AccentColor } from "../types";
 import { open } from "@tauri-apps/plugin-dialog";
 import appIcon from "../assets/app-icon.png";
+import { getDesktopPlatform } from "../lib/utils";
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -327,20 +328,37 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                   <CardDescription>{t("settings.account.ssoDesc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="p-3.5 rounded-lg border bg-card/50 space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("settings.account.authMode")}</span>
-                      <span className="font-medium text-foreground">{t("settings.account.authModeValue")}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("settings.account.credStorage")}</span>
-                      <span className="font-medium text-foreground">{t("settings.account.credStorageValue")}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("settings.account.encryption")}</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">{t("settings.account.encryptionValue")}</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const platform = getDesktopPlatform();
+                    const credStorageKey: TranslationKey =
+                      platform === "macos"
+                        ? "settings.account.credStorageValueMac"
+                        : platform === "linux"
+                        ? "settings.account.credStorageValueLinux"
+                        : "settings.account.credStorageValueWin";
+                    const encryptionKey: TranslationKey =
+                      platform === "macos"
+                        ? "settings.account.encryptionValueMac"
+                        : platform === "linux"
+                        ? "settings.account.encryptionValueLinux"
+                        : "settings.account.encryptionValueWin";
+                    return (
+                      <div className="p-3.5 rounded-lg border bg-card/50 space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">{t("settings.account.authMode")}</span>
+                          <span className="font-medium text-foreground">{t("settings.account.authModeValue")}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">{t("settings.account.credStorage")}</span>
+                          <span className="font-medium text-foreground">{t(credStorageKey)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">{t("settings.account.encryption")}</span>
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">{t(encryptionKey)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     {t("settings.account.ssoNote")}
                   </p>
