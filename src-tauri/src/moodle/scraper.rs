@@ -432,7 +432,7 @@ impl MoodleScraper {
             status.submitted = parse_quiz_submission_from_html(&html);
             // Grade fallback for quiz pages: "Your final grade for this quiz is
             // 13.00/13.00" — parse_submission_status_from_html already handles
-            // grade/成绩 patterns, but quizzes also use "13.00 out of 13.00".
+            // "Grade ..." patterns, but quizzes also use "13.00 out of 13.00".
             if status.grade.is_none() {
                 status.grade = parse_quiz_grade_from_html(&html);
             }
@@ -1005,7 +1005,7 @@ impl MoodleScraper {
     /// Moodle's own class name). Assessment cells keep their `<a href>` links; the
     /// header row is synthesized since the div layout has no table header.
     fn extract_schedule_div_rows(html: &str) -> Vec<crate::moodle::models::ScheduleRow> {
-        use scraper::{ElementRef, Html, Selector};
+        use scraper::{Html, Selector};
         let doc = Html::parse_fragment(html);
         let Ok(item_sel) = Selector::parse(".schedule-item") else {
             return Vec::new();
@@ -1184,22 +1184,100 @@ impl MoodleScraper {
         Ok(Schedule { course_id, items })
     }
 
-    /// Parse submission status and feedback from the assignment detail page (best effort; exact selectors
-    /// pending calibration against a runtime dump of the assignment page).
+    /// Parse submission status and feedback from the assignment detail page.
     fn parse_submission_status_from_html(&self, html: &str, assignment_id: u64) -> Result<SubmissionStatus, String> {
+        use scraper::{Html, Selector};
         let text = html;
-        let lower = text.to_lowercase();
+        let doc = Html::parse_document(text);
 
-        let submitted = !lower.contains("no submission")
-            && !lower.contains("not submitted")
-            && (lower.contains("submitted")
-                || lower.contains("submission status")
-                && lower.contains("submitted"));
+        let mut submitted = false;
+        let mut determined_from_table = false;
 
-        // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user
-        // sees the max score; understand Chinese "成绩" labels too.
+        // 1. Target Moodle's submission status table rows
+        if let Ok(row_sel) = Selector::parse("div.submissionstatustable tr, div.submissionsummarytable tr, table.generaltable tr") {
+            let th_sel = Selector::parse("th, td.c0").ok();
+            let td_sel = Selector::parse("td.c1, td").ok();
+
+            for row in doc.select(&row_sel) {
+                let header_text = th_sel
+                    .as_ref()
+                    .and_then(|sel| row.select(sel).next())
+                    .map(|el| el.text().collect::<String>().to_lowercase())
+                    .unwrap_or_default();
+
+                if header_text.contains("submission status") || header_text.contains("submission") {
+                    if let Some(td) = td_sel.as_ref().and_then(|sel| row.select(sel).last()) {
+                        let classes: String = td.value().classes().collect::<Vec<_>>().join(" ");
+                        let cell_text = td.text().collect::<String>().trim().to_lowercase();
+
+                        if classes.contains("submissionstatussubmitted")
+                            || cell_text.contains("submitted for grading")
+                            || (cell_text.contains("submitted") && !cell_text.contains("not submitted"))
+                        {
+                            submitted = true;
+                            determined_from_table = true;
+                            break;
+                        } else if classes.contains("submissionstatusdraft")
+                            || cell_text.contains("draft")
+                            || cell_text.contains("no attempt")
+                            || cell_text.contains("no submission")
+                            || cell_text.contains("not submitted")
+                        {
+                            submitted = false;
+                            determined_from_table = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Explicit class check on td
+                if let Ok(sub_td_sel) = Selector::parse("td.submissionstatussubmitted") {
+                    if row.select(&sub_td_sel).next().is_some() {
+                        submitted = true;
+                        determined_from_table = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Scoped table fallback (if row header matching didn't trigger, check the submission table text only)
+        if !determined_from_table {
+            if let Ok(table_sel) = Selector::parse("div.submissionstatustable, div.submissionsummarytable") {
+                if let Some(tbl) = doc.select(&table_sel).next() {
+                    let tbl_text = tbl.text().collect::<String>().to_lowercase();
+                    let has_no_sub = tbl_text.contains("no attempt")
+                        || tbl_text.contains("no submission")
+                        || tbl_text.contains("not submitted")
+                        || tbl_text.contains("draft (not submitted)");
+
+                    if !has_no_sub && (
+                        tbl_text.contains("submitted for grading")
+                            || tbl_text.contains("was submitted")
+                            || tbl_text.contains("submitted")
+                    ) {
+                        submitted = true;
+                        determined_from_table = true;
+                    } else if has_no_sub {
+                        submitted = false;
+                        determined_from_table = true;
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback for non-table / raw text input (e.g. minimal unit tests)
+        if !determined_from_table {
+            let lower = text.to_lowercase();
+            submitted = !lower.contains("no submission")
+                && !lower.contains("not submitted")
+                && (lower.contains("submitted")
+                    || (lower.contains("submission status") && lower.contains("submitted")));
+        }
+
+        // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user sees the max score.
         let grade = regex::Regex::new(
-            r"(?is)(?:grade|成绩|成績).{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+            r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
         )
         .ok()
         .and_then(|re| re.captures(text))
@@ -4097,17 +4175,12 @@ fn parse_quiz_submission_from_html(html: &str) -> bool {
         return true;
     }
     // A completed quiz view/summary page carries the final grade:
-    //   EN: "Your final grade for this quiz is 13.00/13.00."
-    //   ZH: "您的最终成绩" / "你在这个测验的最终成绩"
-    if lower.contains("final grade") || lower.contains("最终成绩") || lower.contains("最終成績") {
+    //   "Your final grade for this quiz is 13.00/13.00."
+    if lower.contains("final grade") {
         return true;
     }
-    // "Your previous attempts" (EN) / "您以前的尝试" (ZH) means at least one
-    // finished attempt exists.
-    if (lower.contains("your previous attempts")
-        || lower.contains("previous attempts")
-        || lower.contains("您以前的尝试")
-        || lower.contains("你以前的尝试"))
+    // "Your previous attempts" (EN) means at least one finished attempt exists.
+    if (lower.contains("your previous attempts") || lower.contains("previous attempts"))
         && !lower.contains("never submitted")
     {
         return true;
@@ -4123,7 +4196,7 @@ fn parse_quiz_submission_from_html(html: &str) -> bool {
 /// 13.00/13.00" or the attempts table's "13.00 out of 13.00 (100%)".
 fn parse_quiz_grade_from_html(html: &str) -> Option<String> {
     let re = regex::Regex::new(
-        r"(?is)(?:final grade|grade|成绩|成績).{0,120}?(\d+(?:\.\d+)?)\s*(?:/|out of)\s*(\d+(?:\.\d+)?)",
+        r"(?is)(?:final grade|grade).{0,120}?(\d+(?:\.\d+)?)\s*(?:/|out of)\s*(\d+(?:\.\d+)?)",
     )
     .ok()?;
     let cap = re.captures(html)?;
@@ -4147,11 +4220,11 @@ fn cmid_from_url(url: Option<&str>) -> Option<u64> {
 fn determine_assignment_status(text: &str) -> AssignmentStatus {
     let lower = text.to_lowercase();
 
-    if lower.contains("submitted") || lower.contains("已提交") {
+    if lower.contains("submitted") {
         AssignmentStatus::Submitted
-    } else if lower.contains("graded") || lower.contains("已评分") {
+    } else if lower.contains("graded") {
         AssignmentStatus::Graded
-    } else if lower.contains("due") || lower.contains("待提交") || lower.contains("pending") {
+    } else if lower.contains("due") || lower.contains("pending") {
         AssignmentStatus::Pending
     } else {
         AssignmentStatus::Upcoming
@@ -4159,10 +4232,9 @@ fn determine_assignment_status(text: &str) -> AssignmentStatus {
 }
 
 /// Extract author name from text content.
-/// Extract author name from text content.
 fn extract_author(text: &str) -> String {
     // Patterns seen on Monash Moodle: "by John Smith" / "John Smith | 29 May 2026".
-    let re = regex::Regex::new(r"(?:by\s+|作者\s*[:：]\s*)([A-Za-z][A-Za-z.\'\- ]{1,60}?)(?=\s*[,|\n]|\s+\d|$)").ok();
+    let re = regex::Regex::new(r"(?:by\s+)([A-Za-z][A-Za-z.\'\- ]{1,60}?)(?=\s*[,|\n]|\s+\d|$)").ok();
     if let Some(cap) = re.and_then(|re| re.captures(text)) {
         let name = cap[1].trim().to_string();
         if !name.is_empty() {
@@ -4741,11 +4813,6 @@ mod tests {
                     <div>Your previous attempts</div><a href="/mod/quiz/review.php">Review</a>"#;
         assert!(parse_quiz_submission_from_html(en), "EN final-grade page must be submitted");
 
-        // ZH quiz view page after finishing
-        let zh = r#"<div>您的最终成绩是 <b>13.00/13.00</b>。</div>
-                    <a href="/mod/quiz/review.php">查看</a>"#;
-        assert!(parse_quiz_submission_from_html(zh), "ZH final-grade page must be submitted");
-
         // Not yet attempted: "Attempt quiz now" button, no final grade
         let open = r#"<div>This quiz is open.</div><button>Attempt quiz now</button>"#;
         assert!(!parse_quiz_submission_from_html(open), "open quiz must NOT be submitted");
@@ -4771,9 +4838,6 @@ mod tests {
 
         let out_of = "Grade: 13.00 out of 13.00 (100%)";
         assert_eq!(parse_quiz_grade_from_html(out_of).as_deref(), Some("13.00 / 13.00"));
-
-        let zh = "您的最终成绩是 8.50 / 10.00。";
-        assert_eq!(parse_quiz_grade_from_html(zh).as_deref(), Some("8.50 / 10.00"));
 
         assert_eq!(parse_quiz_grade_from_html("Attempt quiz now"), None);
     }
@@ -4814,7 +4878,7 @@ mod tests {
         // grade regex path: bare "X / Y" fallback
         assert_eq!(s.grade.as_deref(), Some("0.50 / 1.00"));
 
-        let html2 = "成绩 13.00 / 13.00";
+        let html2 = "Grade 13.00 / 13.00";
         let s2 = scraper
             .parse_submission_status_from_html(&html2, 42)
             .expect("parse");
@@ -4887,6 +4951,69 @@ mod tests {
             .expect("parse should succeed");
         assert!(parsed.submitted, "submitted-for-grading page must be marked submitted");
         assert_eq!(parsed.grade.as_deref(), Some("0.50 / 1.00"));
+    }
+
+    /// Regression: an assignment with a marking rubric containing "No submission" level definition
+    /// must still be accurately detected as submitted if the submission status table shows "Submitted for grading".
+    #[test]
+    fn assign_submission_ignores_rubric_no_submission_criterion() {
+        let scraper = test_scraper();
+        let html = r#"
+        <div class="submissionstatustable">
+          <table class="generaltable">
+            <tr>
+              <th class="cell c0">Submission status</th>
+              <td class="submissionstatussubmitted cell c1">Submitted for grading</td>
+            </tr>
+            <tr>
+              <th class="cell c0">Grading status</th>
+              <td class="submissionnotgraded cell c1">In marking</td>
+            </tr>
+          </table>
+        </div>
+        <h4>Grading criteria</h4>
+        <div id="rubric-rubric">
+          <table><tr>
+            <td>● No submission., 0 points.</td>
+          </tr></table>
+        </div>
+        "#;
+        let parsed = scraper
+            .parse_submission_status_from_html(html, 6020311)
+            .expect("parse should succeed");
+        assert!(parsed.submitted, "page with submitted table and rubric 'no submission' text must be marked submitted");
+
+        // Unsubmitted case
+        let unsubmitted_html = r#"
+        <div class="submissionstatustable">
+          <table class="generaltable">
+            <tr>
+              <th class="cell c0">Submission status</th>
+              <td class="submissionstatus cell c1">No attempt</td>
+            </tr>
+          </table>
+        </div>
+        "#;
+        let parsed_unsub = scraper
+            .parse_submission_status_from_html(unsubmitted_html, 6020312)
+            .expect("parse should succeed");
+        assert!(!parsed_unsub.submitted, "unsubmitted assignment must be marked not submitted");
+
+        // Draft case
+        let draft_html = r#"
+        <div class="submissionstatustable">
+          <table class="generaltable">
+            <tr>
+              <th class="cell c0">Submission status</th>
+              <td class="submissionstatusdraft cell c1">Draft (not submitted)</td>
+            </tr>
+          </table>
+        </div>
+        "#;
+        let parsed_draft = scraper
+            .parse_submission_status_from_html(draft_html, 6020313)
+            .expect("parse should succeed");
+        assert!(!parsed_draft.submitted, "draft assignment must be marked not submitted");
     }
 
 
