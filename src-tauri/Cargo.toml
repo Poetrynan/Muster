@@ -1,6 +1,6 @@
 [package]
 name = "muster"
-version = "0.1.6"
+version = "0.1.7"
 description = "Unofficial desktop companion that collects your own Moodle course materials and deadlines"
 authors = ["Poetrynan"]
 license = "PolyForm-Noncommercial-1.0.0"

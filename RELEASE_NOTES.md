@@ -1,3 +1,23 @@
+# Muster v0.1.7
+
+## Bug Fixes
+- Fixed macOS Intel builds stuck in queue since v0.1.2 — restored the `macos-15-intel` runner label — thanks @AndyXu02
+- Added a manual platform selector in the release workflow to backfill missing Intel DMGs
+- Fixed `workflow_dispatch` releases not honoring the requested tag
+- Fixed "Monash SSO & Credential Security" showing Windows-specific details (Credential Manager / DPAPI) on macOS — now detects the platform and shows macOS Keychain instead — thanks @Mashirl
+- Download links in release notes now point directly to the assets (no more scrolling to the bottom)
+
+## Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 Windows | NSIS Setup (Recommended) | [Muster_0.1.7_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.7/Muster_0.1.7_x64-setup.exe) |
+| 🪟 Windows | MSI | [Muster_0.1.7_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.7/Muster_0.1.7_x64_en-US.msi) |
+| 🍏 macOS | Apple Silicon | [Muster_0.1.7_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.7/Muster_0.1.7_aarch64.dmg) |
+| 🍏 macOS | Intel | [Muster_0.1.7_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.7/Muster_0.1.7_x64.dmg) |
+
+---
+
 # Muster v0.1.6
 
 ## Bug Fixes
@@ -10,10 +30,10 @@
 
 | Platform | Type | File |
 |---|---|---|
-| 🪟 Windows | NSIS Setup (Recommended) | `Muster_0.1.6_x64-setup.exe` |
-| 🪟 Windows | MSI | `Muster_0.1.6_x64_en-US.msi` |
-| 🍏 macOS | Apple Silicon | `Muster_0.1.6_aarch64.dmg` |
-| 🍏 macOS | Intel | `Muster_0.1.6_x64.dmg` |
+| 🪟 Windows | NSIS Setup (Recommended) | [Muster_0.1.6_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.6/Muster_0.1.6_x64-setup.exe) |
+| 🪟 Windows | MSI | [Muster_0.1.6_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.6/Muster_0.1.6_x64_en-US.msi) |
+| 🍏 macOS | Apple Silicon | [Muster_0.1.6_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.6/Muster_0.1.6_aarch64.dmg) |
+| 🍏 macOS | Intel | [Muster_0.1.6_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.6/Muster_0.1.6_x64.dmg) |
 
 ---
 
