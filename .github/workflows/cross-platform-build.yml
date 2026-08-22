@@ -46,6 +46,14 @@ jobs:
 
       - name: Build application
         run: npm run ${{ matrix.build_script }}
+        env:
+          # tauri.conf.json sets `createUpdaterArtifacts: true` globally, so every
+          # `tauri build` — including this compile-check workflow — needs the signing
+          # key. Without it the bundler errors with "a public key has been found, but
+          # no private key".
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
 
       - uses: actions/upload-artifact@v4
         with:
