@@ -1,5 +1,32 @@
 # Muster v0.1.8
 
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.8_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.8_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.8_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.8_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Updates install themselves now.** Click **Update Now** in the app, watch the progress bar, click **Restart Now**. No browser, no hunting for an installer. This is the last version you have to install by hand.
+- **Grades finally show up.** Marked assignments were stuck on "submitted" because Monash displays grades as `76.00 (D)` and the parser only understood `8 / 10`. All Moodle grade formats now work, including assignments marked with the score hidden.
+- **Last semester's work gets out of the way.** Finished units now collapse into a "Past courses" group instead of sitting in your active list.
+- **Batch download.** Select multiple resources — or a whole unit — and download them in one go, skipping files you already have.
+- **Auto-sync on launch actually runs.** A failed sync used to silently block the next hour of syncing, and on some machines the startup sync never fired at all. New users saw an empty Dashboard.
+
+## Worth knowing
+
+- **Auto update starts from here.** v0.1.8 is the first build that contains the updater, so this one is a manual install. From v0.1.8 onward it is automatic.
+- **Known issue:** if your Moodle session expires, the app keeps showing the last synced data without telling you. If things look stale, sign out and back in. A "session expired" banner is planned.
+
+<details>
+<summary><b>Full changelog</b> — 16 bug fixes, 5 new features, test results, technical detail</summary>
+
 ## Bug Fixes
 - Settings → Sync button now gives feedback (it used to be a fire-and-forget no-op): it awaits the full sync, writes data back into the store, and shows a success/failure toast
 - Sync button state now survives navigation — switching to another page mid-sync no longer resets the button to its idle look; the spinner/"Syncing…" state is driven by the global store and persists across tabs (was lost on component unmount)
@@ -56,16 +83,7 @@ Nothing is downloaded until you click, and no update is ever installed silently 
 
 **If Update Now does not work** (corporate network blocking GitHub, no disk space, antivirus intercepting the installer), the **Download Installer** button next to it still does the old thing: opens the release page in your browser so you can install manually. It is deliberately kept as an escape hatch.
 
-
-
-## Downloads
-
-| Platform | Type | File |
-|---|---|---|
-| 🪟 Windows | NSIS Setup (Recommended) | [Muster_0.1.8_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64-setup.exe) |
-| 🪟 Windows | MSI | [Muster_0.1.8_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64_en-US.msi) |
-| 🍏 macOS | Apple Silicon | [Muster_0.1.8_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_aarch64.dmg) |
-| 🍏 macOS | Intel | [Muster_0.1.8_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64.dmg) |
+</details>
 
 ---
 
