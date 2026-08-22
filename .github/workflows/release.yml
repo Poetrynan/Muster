@@ -79,7 +79,10 @@ jobs:
           if [ -f RELEASE_NOTES.md ]; then
             EOF=$(openssl rand -hex 8)
             echo "notes<<$EOF" >> $GITHUB_OUTPUT
-            cat RELEASE_NOTES.md >> $GITHUB_OUTPUT
+            # Only the newest section. RELEASE_NOTES.md keeps every past version,
+            # and `cat` used to paste all of them into the release body, so the
+            # v0.1.8 page carried the notes of v0.1.2 through v0.1.7 as well.
+            awk '/^# Muster v/ { n++ } n > 1 { exit } { print }' RELEASE_NOTES.md >> $GITHUB_OUTPUT
             echo "$EOF" >> $GITHUB_OUTPUT
           else
             echo "notes=See the assets below to download Muster for your platform." >> $GITHUB_OUTPUT
