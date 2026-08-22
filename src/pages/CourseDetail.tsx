@@ -31,6 +31,8 @@ import { useAppStore } from "../stores/useAppStore";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { downloadFile } from "../services/api";
+import { batchDownload } from "../services/batchDownload";
+import { isDownloadableUrl } from "../lib/utils";
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import {
@@ -193,6 +195,13 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     if (courseResources.length > 0) return courseResources;
     return allResources.filter((r) => r.courseId === courseId);
   }, [courseResources, allResources, courseId]);
+
+  // Only the downloadable subset (pluginfile.php / mod/resource/view.php) can be
+  // pulled into the batch runner — same filter batchDownload applies internally.
+  const downloadableCount = useMemo(
+    () => displayedResources.filter((r) => r.url && isDownloadableUrl(r.url)).length,
+    [displayedResources]
+  );
 
   useEffect(() => {
     if (displayedResources.length === 0 && !loadingResources) {
@@ -365,6 +374,9 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   // "download-progress" with key=file_url, so a composite row key would never
   // receive progress updates (spinner without percentage).
   const [resourceDownloadingKey, setResourceDownloadingKey] = useState<string | null>(null);
+  // "Download all in this course" reuses the shared batchDownload runner (same
+  // concurrency pool, skipExisting dedup, and single summary toast as the Dashboard).
+  const [courseBatchDownloading, setCourseBatchDownloading] = useState(false);
   const handleDownloadResource = async (resource: { key: string; name: string; url?: string }) => {
     if (!resource.url || resourceDownloadingKey) return;
     const { upsertDownload } = useAppStore.getState();
@@ -385,7 +397,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
       const savePath = settings.groupDownloadsByCourse
         ? buildCourseDownloadDir(baseDir, courseId, course?.fullName, course?.shortName)
         : baseDir;
-      const savedPath = await downloadFile(resource.url, savePath);
+      const { path: savedPath } = await downloadFile(resource.url, savePath);
       upsertDownload({
         key: dlKey,
         name: resource.name,
@@ -411,6 +423,20 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
       showToast(t("dashboard.downloadFailed", { error: err instanceof Error ? err.message : "Unknown error" }));
     } finally {
       setResourceDownloadingKey(null);
+    }
+  };
+
+  // Download every downloadable resource in this course at once. batchDownload
+  // filters to downloadable URLs and routes each file into its per-course folder
+  // via computeSavePath, so this is just "select all + download" scoped to one course.
+  const handleDownloadCourseAll = async () => {
+    if (courseBatchDownloading) return;
+    if (displayedResources.length === 0) return;
+    setCourseBatchDownloading(true);
+    try {
+      await batchDownload(displayedResources, t);
+    } finally {
+      setCourseBatchDownloading(false);
     }
   };
 
@@ -737,6 +763,23 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
             {/* Materials tab */}
             {activeTab === "materials" && (
               <div className="space-y-3">
+                {!loadingResources && downloadableCount > 0 && (
+                  <div className="flex items-center justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadCourseAll}
+                      disabled={courseBatchDownloading}
+                    >
+                      {courseBatchDownloading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      {t("course.materials.downloadAll")}
+                    </Button>
+                  </div>
+                )}
                 {loadingResources && (
                   <div className="space-y-3" aria-hidden="true">
                     {Array.from({ length: 4 }).map((_, i) => (

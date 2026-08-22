@@ -35,12 +35,13 @@ import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustratio
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { useAppStore } from "../stores/useAppStore";
-import { checkForAppUpdates, getCurrentAppVersion, type ReleaseInfo } from "../services/updater";
+import { checkForAppUpdates, getCurrentAppVersion, installUpdateInApp, relaunchApp, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
+import { batchDownload } from "../services/batchDownload";
 // Reopening the app within this window after the last auto sync renders from local
 // data instead of re-scraping everything (user request: "1 小时内关闭再打开不重新抓取").
 const LAUNCH_SYNC_COOLDOWN_MS = 60 * 60 * 1000;
@@ -59,7 +60,7 @@ function classifyAnnouncement(
   return "general";
 }
 
-import { isTermEnded, buildCourseDownloadDir } from "../lib/utils";
+import { isTermEnded, computeSavePath, isDownloadableUrl } from "../lib/utils";
 import {
   findDueAssignments,
   diffAnnouncements,
@@ -200,6 +201,28 @@ export function Dashboard() {
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number; phase: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // Batch download: selection is keyed by resource URL (matches the download-manager key).
+  const [selectedResourceUrls, setSelectedResourceUrls] = useState<Set<string>>(new Set());
+  const [batchDownloading, setBatchDownloading] = useState(false);
+  const toggleResource = (url: string) =>
+    setSelectedResourceUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  const handleBatchDownloadSelected = async () => {
+    if (batchDownloading) return;
+    const selected = resources.filter((r) => r.url && isDownloadableUrl(r.url) && selectedResourceUrls.has(r.url));
+    if (selected.length === 0) return;
+    setBatchDownloading(true);
+    try {
+      await batchDownload(selected, t);
+      setSelectedResourceUrls(new Set());
+    } finally {
+      setBatchDownloading(false);
+    }
+  };
   const [manualSyncCooldown, setManualSyncCooldown] = useState(false);
   const {
     user,
@@ -248,6 +271,24 @@ export function Dashboard() {
   const announcements = Array.isArray(rawAnnouncements) ? rawAnnouncements : [];
   // Portal/hub courses are excluded from stats and resource aggregation
   const realCourses = courses.filter((c: any) => !c.isPortal);
+
+  // Assignment stat counts — aligned with the AssignmentsPage left sidebar so
+  // the dashboard numbers never disagree with the assignments list:
+  //   - Untracked items (hasSubmissionStatus === false, the "41 无提交状态" group)
+  //     are excluded from the pending denominator
+  //   - Ended-term courses are excluded so last-semester leftovers don't inflate
+  //     the dashboard pending count
+  const pendingAssignmentsCount = assignments.filter((a: any) => {
+    if (!a) return false;
+    if (a.status === "submitted" || a.status === "graded") return false;
+    if (a.hasSubmissionStatus === false) return false;
+    const course = courses.find((c: any) => c?.id === a.courseId);
+    if (isTermEnded(course?.fullName || course?.shortName)) return false;
+    return true;
+  }).length;
+  const completedAssignmentsCount = assignments.filter((a: any) =>
+    a && (a.status === "submitted" || a.status === "graded")
+  ).length;
 
   // ---- Download manager (browser-style: progress + speed + status) ----
   const dlTick = useRef(new Map<string, { t: number; r: number }>());
@@ -322,6 +363,21 @@ export function Dashboard() {
         (r.section || "").toLowerCase().includes(q)
     );
   }, [resources, resourceQuery, resourceTypeFilter]);
+
+  // Batch-download selection helpers (depend on the filtered list above)
+  const filteredDownloadable = filteredResources.filter((r) => r.url && isDownloadableUrl(r.url));
+  const allFilteredSelected =
+    filteredDownloadable.length > 0 && filteredDownloadable.every((r) => selectedResourceUrls.has(r.url!));
+  const toggleSelectAll = () =>
+    setSelectedResourceUrls((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const r of filteredDownloadable) next.delete(r.url!);
+      } else {
+        for (const r of filteredDownloadable) next.add(r.url!);
+      }
+      return next;
+    });
 
   const groupedResources = useMemo(() => {
     const map = new Map<number, Resource[]>();
@@ -415,6 +471,15 @@ export function Dashboard() {
       <div key={rowKey} role="listitem">
         <Card className="card-hover">
           <CardContent className="flex items-center gap-4 p-4">
+            {isDownloadable && (
+              <input
+                type="checkbox"
+                checked={selectedResourceUrls.has(resource.url!)}
+                onChange={() => toggleResource(resource.url!)}
+                className="h-4 w-4 shrink-0 cursor-pointer rounded accent-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label={t("dashboard.selectAll")}
+              />
+            )}
             {getFileIcon(resource.resourceType || "other")}
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate text-foreground">{resource.name}</p>
@@ -496,8 +561,7 @@ export function Dashboard() {
       </div>
     );
   };
-  const pendingAssignmentsCount = (assignments || []).filter((a: any) => a && a.status !== "submitted" && a.status !== "graded").length;
-  const completedAssignmentsCount = (assignments || []).filter((a: any) => a && (a.status === "submitted" || a.status === "graded")).length;
+  // Stats counts are defined below after courses/assignments are declared (L268)
 
   const handleLogout = () => {
     reset();
@@ -520,11 +584,11 @@ export function Dashboard() {
     setLoadError(null);
     try {
       const prevState = useAppStore.getState();
-      // Refresh the cooldown timestamp so a manual sync also suppresses the
-      // launch auto-sync for the next hour.
-      prevState.updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       const data = await syncAll();
       updateAllSyncedData(data);
+      // Stamp the cooldown timestamp only after a successful sync — writing it before
+      // meant a failed manual sync would suppress the next launch auto-sync for an hour.
+      useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       // Calendar events + grade overview (parallel; failures never block the main flow)
       const [cal, grades] = await Promise.all([
         fetchCalendarEvents().catch(() => [] as CalendarEvent[]),
@@ -622,11 +686,12 @@ export function Dashboard() {
     });
     try {
       const baseDir = settings.downloadPath || "";
-      const matchedCourse = courses.find((c) => c.id === (resource.courseId ?? 0));
-      const savePath = settings.groupDownloadsByCourse
-        ? buildCourseDownloadDir(baseDir, resource.courseId ?? 0, matchedCourse?.fullName, matchedCourse?.shortName)
-        : baseDir;
-      const savedPath = await downloadFile(url, savePath);
+      const savePath = computeSavePath(resource, {
+        downloadPath: baseDir,
+        groupByCourse: settings.groupDownloadsByCourse,
+        courses,
+      });
+      const { path: savedPath } = await downloadFile(url, savePath);
       upsertDownload({
         key: url,
         name: resource.name,
@@ -678,6 +743,10 @@ export function Dashboard() {
       }
       setLoadError(null);
 
+      // Whether this run raised the sync-running flag itself — declared outside the try so
+      // the finally below can see it: only the run that raised the flag may lower it again.
+      let startedSyncHere = false;
+
       try {
         // Fire fetchCourses + syncAll in parallel to cut total wait time.
         //
@@ -689,12 +758,17 @@ export function Dashboard() {
         // 1-hour launch cooldown: reopening the app shortly after the last sync renders
         // from local data (no re-scrape). First run (no timestamp) always syncs.
         const st = useAppStore.getState();
+        // The periodic auto-sync check runs before this deferred load() and may already have
+        // a full sync in flight. Don't stack a second scrape on top of it, and remember that
+        // this run doesn't own the isRunning flag in that case (see the finally below).
+        const syncAlreadyRunning = st.syncStatus.isRunning;
         const lastAutoSyncTs = st.settings.lastAutoSyncAt ? Date.parse(st.settings.lastAutoSyncAt) : 0;
         const withinCooldown =
           !Number.isNaN(lastAutoSyncTs) &&
           lastAutoSyncTs > 0 &&
           Date.now() - lastAutoSyncTs < LAUNCH_SYNC_COOLDOWN_MS;
-        const shouldAutoSync = !import.meta.env.DEV && !withinCooldown;
+        const shouldAutoSync = !import.meta.env.DEV && !withinCooldown && !syncAlreadyRunning;
+        startedSyncHere = shouldAutoSync;
         // Semester-fixed tabs (unit info / schedule / contacts) are cached: after the first
         // full sync they are skipped on regular launches (fetch strategy per user ruling).
         const hasFixedTabCache =
@@ -705,7 +779,11 @@ export function Dashboard() {
           // Mark the startup sync as running so the progress banner shows and manual
           // syncs are de-duplicated; skipped entirely when the cooldown applies.
           setSyncStatus({ isRunning: true });
-          st.updateSettings({ lastAutoSyncAt: new Date().toISOString() });
+          // NOTE: the cooldown timestamp (lastAutoSyncAt) is intentionally NOT written
+          // here. It is stamped only after a successful sync below — writing it before
+          // meant a failed auto-sync polluted the timestamp and suppressed every
+          // subsequent launch auto-sync for the next hour (fresh users saw a blank
+          // Dashboard until they hit manual sync).
         }
         const [fetched, synced] = await Promise.allSettled([
           shouldAutoSync && courses.length === 0 ? fetchCourses() : Promise.resolve(null),
@@ -723,6 +801,9 @@ export function Dashboard() {
         // In dev mode shouldAutoSync=false, so synced.value is null and we simply skip
         if (synced.status === "fulfilled" && synced.value) {
           updateAllSyncedData(synced.value);
+          // Stamp the cooldown timestamp ONLY after a successful sync. A failed auto-sync
+          // must not suppress the next launch's auto-sync (see note above).
+          useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
         } else if (synced.status === "rejected") {
           setLoadError(errMsg(synced.reason, "dashboard.syncFailed"));
         }
@@ -748,30 +829,27 @@ export function Dashboard() {
       } finally {
         if (isMounted) {
           setIsLoadingCourses(false);
-          // Mark sync as finished (prevents syncAllData from firing again)
-          setSyncStatus({ isRunning: false });
+          // Only lower the flag this run raised. When the periodic auto-sync already had a
+          // sync in flight, clearing here made the sync banner vanish within a second of
+          // login while the scrape was still running — a fresh user saw an empty dashboard
+          // that looked like sync never started.
+          if (startedSyncHere) {
+            setSyncStatus({ isRunning: false });
+          }
         }
       }
     };
 
-    // Let the first frame paint before kicking off network requests during idle time
-    const ric = (window as any).requestIdleCallback as
-      | ((cb: () => void, opts?: { timeout: number }) => number)
-      | undefined;
-    let idleHandle: number | undefined;
-    let timerHandle: ReturnType<typeof setTimeout> | undefined;
-
-    if (typeof ric === "function") {
-      idleHandle = ric(() => { if (isMounted) load(); }, { timeout: 300 });
-    } else {
-      timerHandle = setTimeout(() => { if (isMounted) load(); }, 0);
-    }
+    // Defer the network-heavy load() to the next tick so the first paint is never blocked.
+    // Deliberately NOT using requestIdleCallback here: under Tauri's WebView2 it can stay
+    // pending indefinitely (no idle period is ever detected / background throttling), which
+    // left a fresh user's Dashboard blank until they hit the manual sync button. A plain
+    // setTimeout(0) gives the same "render cached data first" benefit with guaranteed execution.
+    const timerHandle = setTimeout(() => { if (isMounted) load(); }, 0);
 
     return () => {
       isMounted = false;
-      const cic = (window as any).cancelIdleCallback as ((h: number) => void) | undefined;
-      if (idleHandle !== undefined && typeof cic === "function") cic(idleHandle);
-      if (timerHandle !== undefined) clearTimeout(timerHandle);
+      clearTimeout(timerHandle);
     };
   }, [isLoggedIn]);
 
@@ -784,6 +862,32 @@ export function Dashboard() {
       await openUrl(url);
     } catch {
       /* silent */
+    }
+  };
+
+  // One-click update straight from the banner. Falls back to the release page when
+  // the running build has no updater (v0.1.7 and earlier) or the install fails.
+  const [bannerInstalling, setBannerInstalling] = useState(false);
+  const [bannerPercent, setBannerPercent] = useState<number | null>(null);
+  const [bannerInstalled, setBannerInstalled] = useState(false);
+  const installFromBanner = async () => {
+    if (!updateBanner) return;
+    setBannerInstalling(true);
+    setBannerPercent(null);
+    try {
+      const outcome = await installUpdateInApp((p) => setBannerPercent(p.percent ?? null));
+      if (outcome.status === "installed") {
+        setBannerInstalled(true);
+      } else if (outcome.status === "upToDate") {
+        setUpdateBanner(null);
+      } else {
+        await openReleaseUrl(updateBanner.downloadUrl || updateBanner.htmlUrl);
+      }
+    } catch (e: any) {
+      showToast(e?.message || String(e));
+      await openReleaseUrl(updateBanner.htmlUrl);
+    } finally {
+      setBannerInstalling(false);
     }
   };
 
@@ -808,8 +912,18 @@ export function Dashboard() {
   // Periodic auto-sync: on mount, check whether more than autoSyncIntervalDays (default 7 days) has passed since the last auto-sync.
   // No setInterval — a desktop app restarts often enough that a single check on mount is sufficient.
   // Settings are read via getState() to avoid putting settings in the dependency array and re-running on every settings change.
+  // syncAllData is likewise reached through a ref: its identity flips every time syncStatus.isRunning
+  // toggles, and keeping it in the dependency list re-armed "sync on launch" after every finished
+  // sync — an endless background sync loop (sync → finish → effect re-runs → sync again…).
+  const syncAllDataRef = useRef(syncAllData);
+  useEffect(() => {
+    syncAllDataRef.current = syncAllData;
+  });
   useEffect(() => {
     if (!isLoggedIn) return;
+    // A sync may already be in flight (launch auto-sync via the mount effect, or a manual sync):
+    // stacking the launch check on top of it ran two full scrapes concurrently.
+    if (useAppStore.getState().syncStatus.isRunning) return;
 
     const { settings: current } = useAppStore.getState();
     const intervalDays = current.autoSyncIntervalDays ?? 0;
@@ -820,9 +934,12 @@ export function Dashboard() {
     const elapsed = Date.now() - (Number.isNaN(last) ? 0 : last);
     if (!launchSync && elapsed < intervalDays * 86_400_000) return;
 
-    updateSettings({ lastAutoSyncAt: new Date().toISOString() });
-    syncAllData();
-  }, [isLoggedIn, updateSettings, syncAllData]);
+    // lastAutoSyncAt is stamped by syncAllData() itself, but only after a SUCCESSFUL sync.
+    // Stamping it here first meant a failed (or interrupted) first sync still counted as
+    // "synced just now": the next launch hit the 1h cooldown and the periodic check then
+    // waited out the whole interval — a brand-new user could end up with no data and no retry.
+    syncAllDataRef.current();
+  }, [isLoggedIn]);
 
   // Due-date reminders: check on mount + hourly poll (data refreshes after sync).
   useEffect(() => {
@@ -1348,6 +1465,19 @@ export function Dashboard() {
                   {t("dashboard.updateBanner", { version: updateBanner.version || updateBanner.tagName })}
                 </p>
               </button>
+              {bannerInstalled ? (
+                <Button size="sm" onClick={() => relaunchApp()}>
+                  {t("settings.about.restartNow")}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={installFromBanner} disabled={bannerInstalling}>
+                  {bannerInstalling
+                    ? bannerPercent === null
+                      ? t("settings.about.installingUnknown")
+                      : t("settings.about.installingUpdate", { percent: bannerPercent })
+                    : t("settings.about.installUpdate")}
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => setUpdateBanner(null)} aria-label={t("common.close")}>
                 <X className="w-4 h-4" />
               </Button>
@@ -1772,7 +1902,37 @@ export function Dashboard() {
                     {label}
                   </Button>
                 ))}
+                {filteredDownloadable.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    className="ml-auto shrink-0"
+                  >
+                    {allFilteredSelected ? t("common.cancel") : t("dashboard.selectAll")}
+                  </Button>
+                )}
               </div>
+
+              {/* Batch-download action bar: appears once at least one resource is selected */}
+              {selectedResourceUrls.size > 0 && (
+                <div className="flex items-center gap-3 mb-4 rounded-lg border border-border bg-card px-4 py-2 shadow-sm">
+                  <span className="text-sm font-medium">{t("dashboard.selectedCount", { count: selectedResourceUrls.size })}</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setSelectedResourceUrls(new Set())} disabled={batchDownloading}>
+                      {t("common.cancel")}
+                    </Button>
+                    <Button size="sm" onClick={handleBatchDownloadSelected} disabled={batchDownloading}>
+                      {batchDownloading ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-1" />
+                      )}
+                      {t("dashboard.downloadSelected")}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {unitScopedResources.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 text-center">

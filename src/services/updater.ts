@@ -211,3 +211,93 @@ export async function checkForAppUpdates(
     };
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * In-app install (Tauri updater plugin)
+ *
+ * The GitHub API check above stays as-is: it is what powers the release
+ * notes card and works even in the browser dev server. What follows is the
+ * *install* half — it asks the updater plugin for the signed artifact listed
+ * in `latest.json`, streams it down, verifies the minisign signature and
+ * hands it to the platform installer. No browser, no manual download.
+ * ------------------------------------------------------------------ */
+
+export interface InstallProgress {
+  /** Bytes received so far. */
+  downloaded: number;
+  /** Total bytes, when the server sent a Content-Length. */
+  total?: number;
+  /** 0-100, only meaningful once `total` is known. */
+  percent?: number;
+}
+
+export type InstallOutcome =
+  /** Downloaded, verified, installed. Caller should relaunch. */
+  | { status: "installed"; version: string }
+  /** Plugin says we are already current — nothing to do. */
+  | { status: "upToDate" }
+  /** No updater available (browser dev server, or a build without the plugin).
+   *  Caller should fall back to opening the release page. */
+  | { status: "unsupported"; reason: string };
+
+/**
+ * Download and install the pending update in place.
+ *
+ * Deliberately returns `unsupported` instead of throwing when the plugin is
+ * missing: v0.1.7 and earlier were built without it, and the dev server has no
+ * Tauri runtime at all. Callers keep the "open the download page" path alive
+ * for those cases, so the button never becomes a dead end.
+ */
+export async function installUpdateInApp(
+  onProgress?: (p: InstallProgress) => void
+): Promise<InstallOutcome> {
+  let check: typeof import("@tauri-apps/plugin-updater").check;
+  try {
+    ({ check } = await import("@tauri-apps/plugin-updater"));
+  } catch (err: any) {
+    return { status: "unsupported", reason: err?.message || "updater plugin not bundled" };
+  }
+
+  let update: Awaited<ReturnType<typeof check>>;
+  try {
+    update = await check();
+  } catch (err: any) {
+    // Missing `plugins.updater` config, an unreachable endpoint or a signature
+    // mismatch all land here. Surfacing it lets the UI show the real reason.
+    throw new Error(err?.message || String(err));
+  }
+
+  if (!update) return { status: "upToDate" };
+
+  let downloaded = 0;
+  let total: number | undefined;
+
+  await update.downloadAndInstall((event) => {
+    switch (event.event) {
+      case "Started":
+        total = event.data.contentLength;
+        downloaded = 0;
+        onProgress?.({ downloaded, total, percent: total ? 0 : undefined });
+        break;
+      case "Progress":
+        downloaded += event.data.chunkLength;
+        onProgress?.({
+          downloaded,
+          total,
+          percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : undefined,
+        });
+        break;
+      case "Finished":
+        onProgress?.({ downloaded, total: total ?? downloaded, percent: 100 });
+        break;
+    }
+  });
+
+  return { status: "installed", version: update.version };
+}
+
+/** Restart into the freshly installed version. No-op outside Tauri. */
+export async function relaunchApp(): Promise<void> {
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
+}

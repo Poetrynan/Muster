@@ -23,6 +23,7 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            style={{ pointerEvents: open ? "auto" : "none" }}
             onClick={onClose}
           />
           {/* Dialog */}
@@ -35,6 +36,7 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
               "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-background p-6 shadow-2xl",
               className
             )}
+            style={{ pointerEvents: open ? "auto" : "none" }}
           >
             {children}
           </motion.div>

@@ -19,6 +19,19 @@ pub struct MoodleScraper {
     request_gate: Arc<crate::moodle::throttle::RequestGate>,
 }
 
+/// Result of a single file download.
+///
+/// `skipped` is true when `skip_existing` was requested and the target file
+/// already existed on disk, so it was not re-fetched. This lets the caller
+/// distinguish "downloaded fresh" from "already present" — previously the
+/// command returned only the path string and the two cases were indistinguishable.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadResult {
+    pub path: String,
+    pub skipped: bool,
+}
+
 impl MoodleScraper {
     pub fn new(auth: Arc<MoodleAuth>) -> Self {
         let ai_client = reqwest::Client::builder()
@@ -436,6 +449,7 @@ impl MoodleScraper {
             if status.grade.is_none() {
                 status.grade = parse_quiz_grade_from_html(&html);
             }
+            status.graded = status.grade.is_some();
         }
         Ok(status)
     }
@@ -876,33 +890,83 @@ impl MoodleScraper {
                 let a = &mut assignments[i];
                 // A successfully fetched detail page means the item's submission state is trackable
                 a.has_submission_status = true;
-                let submitted = match a.assessment_type {
-                    AssessmentType::Quiz => parse_quiz_submission_from_html(&html),
-                    AssessmentType::Assignment => self
-                        .parse_submission_status_from_html(&html, a.id)
-                        .map(|s| s.submitted)
-                        .unwrap_or(false),
-                };
-                if submitted {
-                    a.status = AssignmentStatus::Submitted;
+                match a.assessment_type {
+                    AssessmentType::Quiz => {
+                        let submitted = parse_quiz_submission_from_html(&html);
+                        if submitted {
+                            a.status = AssignmentStatus::Submitted;
+                        }
+                        // Grade fallback for quizzes: if the page carries a final grade,
+                        // treat it as Graded so the list badge matches the detail view.
+                        if let Some(g) = parse_quiz_grade_from_html(&html) {
+                            a.status = AssignmentStatus::Graded;
+                            a.grade = Some(g);
+                        }
+                    }
+                    AssessmentType::Assignment => {
+                        if let Ok(s) = self.parse_submission_status_from_html(&html, a.id) {
+                            if s.submitted {
+                                a.status = AssignmentStatus::Submitted;
+                            }
+                            // Marked wins over submitted. `graded` covers the case where the unit
+                            // released feedback but hid the score, so there is no grade text to show.
+                            if s.graded {
+                                a.status = AssignmentStatus::Graded;
+                            }
+                            // Preserve the grade extracted from the detail page — the list
+                            // view uses it to show the score badge.
+                            if let Some(g) = s.grade {
+                                a.grade = Some(g);
+                            }
+                        }
+                    }
                 }
             }
         }
 
         // ---- 2) gradebook: a real grade => Graded (overrides Submitted) ----
         if let Ok(gradebook) = self.fetch_course_gradebook(course_id).await {
+            // Normalize an activity name for fuzzy matching (strip weight like "(35%)",
+            // collapse whitespace) so gradebook entries without a direct cmid link can
+            // still be paired with the corresponding assignment.
+            let norm = |s: &str| -> String {
+                s.to_lowercase()
+                    .replace(|c: char| c.is_whitespace(), " ")
+                    .replace("  ", " ")
+                    .trim()
+                    .to_string()
+            };
+            let normalize_for_match = |s: &str| -> String {
+                use regex::Regex;
+                let re = Regex::new(r"\(\s*\d+(?:\.\d+)?\s*%\s*\)").unwrap();
+                let stripped = re.replace_all(s, "").to_string();
+                norm(&stripped)
+            };
+
             for a in assignments.iter_mut() {
-                let Some(entry) = gradebook
+                // 2a) Primary match: direct cmid from the gradebook entry URL
+                let by_cmid = gradebook
                     .iter()
-                    .find(|e| cmid_from_url(e.url.as_deref()) == Some(a.id))
-                else {
-                    continue;
-                };
+                    .find(|e| cmid_from_url(e.url.as_deref()) == Some(a.id));
+                // 2b) Fallback: fuzzy name match (weight % stripped) for entries without a URL
+                let entry = by_cmid.or_else(|| {
+                    let target = normalize_for_match(&a.name);
+                    gradebook.iter().find(|e| {
+                        !target.is_empty()
+                            && normalize_for_match(&e.item) == target
+                    })
+                });
+                let Some(entry) = entry else { continue };
+
                 if let Some(g) = entry.grade.as_deref() {
                     let g = g.trim();
                     if !g.is_empty() && g != "-" {
                         a.status = AssignmentStatus::Graded;
-                        a.grade = Some(g.to_string());
+                        // Keep the richer "X / Y" format from the detail page when
+                        // available; fall back to the gradebook raw score otherwise.
+                        if a.grade.is_none() {
+                            a.grade = Some(g.to_string());
+                        }
                     }
                 }
             }
@@ -1184,6 +1248,47 @@ impl MoodleScraper {
         Ok(Schedule { course_id, items })
     }
 
+    /// Collapse Moodle cell text into a single-spaced string. `&nbsp;` decodes to U+00A0, which
+    /// `char::is_whitespace` covers, so "0.50\u{a0}/\u{a0}1.00" normalises to "0.50 / 1.00".
+    fn normalize_cell_text(el: &scraper::ElementRef) -> String {
+        el.text()
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Value cell of the row labelled `label` inside `scope` (a Moodle `th`/`td` two-column table).
+    /// Returns None when the row is absent or its value cell is empty / a bare "-".
+    fn labelled_row_value(scope: &scraper::ElementRef, label: &str) -> Option<String> {
+        use scraper::Selector;
+        let tr_sel = Selector::parse("tr").ok()?;
+        let head_sel = Selector::parse("th, td.c0").ok()?;
+        let td_sel = Selector::parse("td.c1, td").ok()?;
+
+        for tr in scope.select(&tr_sel) {
+            let head = tr
+                .select(&head_sel)
+                .next()
+                .map(|el| Self::normalize_cell_text(&el).to_lowercase())
+                .unwrap_or_default();
+            if head != label {
+                continue;
+            }
+            let value = tr
+                .select(&td_sel)
+                .last()
+                .map(|td| Self::normalize_cell_text(&td))
+                .unwrap_or_default();
+            let value = value.trim();
+            if value.is_empty() || value == "-" {
+                return None;
+            }
+            return Some(value.to_string());
+        }
+        None
+    }
+
     /// Parse submission status and feedback from the assignment detail page.
     fn parse_submission_status_from_html(&self, html: &str, assignment_id: u64) -> Result<SubmissionStatus, String> {
         use scraper::{Html, Selector};
@@ -1275,22 +1380,81 @@ impl MoodleScraper {
                     || (lower.contains("submission status") && lower.contains("submitted")));
         }
 
-        // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user sees the max score.
-        let grade = regex::Regex::new(
-            r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
-        )
-        .ok()
-        .and_then(|re| re.captures(text))
-        .map(|c| format!("{} / {}", &c[1], &c[2]))
-        .or_else(|| {
-            // Bare "0.50 / 1.00" (assign submission table) without a label nearby.
-            regex::Regex::new(
-                r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+        // ---- Grading status + grade text ----
+        //
+        // Moodle renders the Feedback table's grade cell in whatever shape the activity's grade
+        // type / display setting dictates:
+        //   "0.50 / 1.00"   point grade, "real" display
+        //   "76.00 (D)"     point grade + letter display  <- the Monash default
+        //   "76.00"         point grade, no denominator
+        //   "HD" / "Pass"   scale or letter-only grade
+        // Reading the cell out of `div.feedback` covers all of them, so the old
+        // "must look like `<number> / <number>`" regex is now only a fallback for raw-text input
+        // that carries no table markup at all.
+        //
+        // `graded` comes from Moodle's own "Grading status" row and is deliberately independent of
+        // the grade text: a unit can release feedback while hiding the score, and an assignment
+        // whose marks are out must still read as 已评分 in that case.
+        let mut graded = false;
+        let mut grade: Option<String> = None;
+        let mut structured = false;
+
+        if let Ok(status_sel) =
+            Selector::parse("div.submissionstatustable, div.submissionsummarytable, div.feedback")
+        {
+            for scope in doc.select(&status_sel) {
+                structured = true;
+                if let Some(v) = Self::labelled_row_value(&scope, "grading status") {
+                    let v = v.to_lowercase();
+                    if v.contains("graded") || v.contains("marked") {
+                        graded = !v.contains("not graded") && !v.contains("not marked");
+                    }
+                }
+                if grade.is_none() {
+                    grade = Self::labelled_row_value(&scope, "grade");
+                }
+            }
+        }
+        // Moodle also carries the marked state as a css class on the value cell.
+        if !graded {
+            if let Ok(sel) = Selector::parse("td.submissiongraded") {
+                graded = doc.select(&sel).next().is_some();
+            }
+        }
+
+        // Text-scraping fallback, only for input with no Moodle table markup at all (raw snippets).
+        // On a real page the cells above are authoritative: scanning the whole document for
+        // "grade ... <number>" there would happily read the "Graded" of a "Not graded" row.
+        if grade.is_none() && !structured {
+            // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user sees the max score.
+            grade = regex::Regex::new(
+                r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
             )
             .ok()
             .and_then(|re| re.captures(text))
             .map(|c| format!("{} / {}", &c[1], &c[2]))
-        });
+            .or_else(|| {
+                // Bare "0.50 / 1.00" (assign submission table) without a label nearby.
+                regex::Regex::new(
+                    r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+                )
+                .ok()
+                .and_then(|re| re.captures(text))
+                .map(|c| format!("{} / {}", &c[1], &c[2]))
+            })
+            .or_else(|| {
+                // Denominator-less labelled grade: "Grade: 76.00 (D)", "Grade 76.00".
+                regex::Regex::new(
+                    r"(?i)grade[\s:]*(\d+(?:\.\d+)?(?:[\s\x{A0}]*\([A-Za-z][A-Za-z+-]{0,3}\))?)",
+                )
+                .ok()
+                .and_then(|re| re.captures(text))
+                .map(|c| c[1].split_whitespace().collect::<Vec<_>>().join(" "))
+            });
+        }
+        if grade.is_some() {
+            graded = true;
+        }
 
         // Feedback body: the td content of the "Feedback comments" row in the assignment detail page's div.feedback table
         // (the old implementation returned a hardcoded Chinese "has feedback" placeholder whenever the page contained "feedback", ignoring English mode and real content).
@@ -1349,6 +1513,7 @@ impl MoodleScraper {
         Ok(SubmissionStatus {
             assignment_id,
             submitted,
+            graded,
             grade,
             feedback,
             due_date,
@@ -2542,7 +2707,8 @@ impl MoodleScraper {
         file_url: &str,
         save_path: &str,
         app_handle: Option<&tauri::AppHandle>,
-    ) -> Result<String, String> {
+        skip_existing: bool,
+    ) -> Result<DownloadResult, String> {
         let client = self.auth.get_authenticated_client().await?;
 
         let _permit = self.request_gate.acquire().await;
@@ -2598,6 +2764,15 @@ impl MoodleScraper {
         };
         let full_path = target_dir.join(&filename);
 
+        // Batch downloads pass skip_existing=true: if the file is already on disk, don't
+        // re-fetch it. This keeps re-runs of "download all" cheap and avoids clobbering.
+        if skip_existing && full_path.exists() {
+            return Ok(DownloadResult {
+                path: full_path.to_string_lossy().to_string(),
+                skipped: true,
+            });
+        }
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = full_path.parent() {
             std::fs::create_dir_all(parent)
@@ -2637,7 +2812,10 @@ impl MoodleScraper {
             }
         }
 
-        Ok(full_path.to_string_lossy().to_string())
+        Ok(DownloadResult {
+            path: full_path.to_string_lossy().to_string(),
+            skipped: false,
+        })
     }
 
     /// Generate an AI summary of course content using OpenAI/Anthropic compatible API.
@@ -4220,10 +4398,14 @@ fn cmid_from_url(url: Option<&str>) -> Option<u64> {
 fn determine_assignment_status(text: &str) -> AssignmentStatus {
     let lower = text.to_lowercase();
 
-    if lower.contains("submitted") {
-        AssignmentStatus::Submitted
-    } else if lower.contains("graded") {
+    // Graded takes priority over Submitted: Moodle's rendered table can contain both
+    // keywords (e.g. "Submitted for grading" + a graded badge in the same row), and a
+    // real grade should always win in the initial parse. The detail-page + gradebook
+    // pass runs later and can still override this if needed.
+    if lower.contains("graded") {
         AssignmentStatus::Graded
+    } else if lower.contains("submitted") {
+        AssignmentStatus::Submitted
     } else if lower.contains("due") || lower.contains("pending") {
         AssignmentStatus::Pending
     } else {
@@ -4951,6 +5133,85 @@ mod tests {
             .expect("parse should succeed");
         assert!(parsed.submitted, "submitted-for-grading page must be marked submitted");
         assert_eq!(parsed.grade.as_deref(), Some("0.50 / 1.00"));
+    }
+
+    /// Regression: the Feedback table's grade cell must be read whatever display format the unit
+    /// uses. Monash's default is a letter display ("76.00 (D)"), which has no denominator and used
+    /// to fall through the `<number> / <number>` regex, leaving graded work stuck on "submitted".
+    #[test]
+    fn assign_grade_accepts_every_display_format() {
+        let scraper = test_scraper();
+        let page = |grade_cell: &str| {
+            format!(
+                r#"<div class="submissionstatustable"><div class="submissionsummarytable"><table class="generaltable">
+<tbody>
+<tr><th class="cell c0" scope="row">Submission status</th>
+    <td class="submissionstatussubmitted cell c1 lastcol">Submitted for grading</td></tr>
+<tr><th class="cell c0" scope="row">Grading status</th>
+    <td class="submissiongraded cell c1 lastcol">Graded</td></tr>
+</tbody></table></div></div>
+<div class="feedback"><div class="feedbacktable"><table class="generaltable">
+<tbody>
+<tr><th class="cell c0" scope="row">Grade</th><td class="cell c1 lastcol">{grade_cell}</td></tr>
+<tr><th class="cell c0" scope="row">Graded on</th><td class="cell c1 lastcol">Friday, 29 May 2026, 3:41 PM</td></tr>
+</tbody></table></div></div>"#
+            )
+        };
+
+        for (cell, expected) in [
+            ("76.00&nbsp;(D)", "76.00 (D)"),   // point grade, letter display (Monash default)
+            ("0.50&nbsp;/&nbsp;1.00", "0.50 / 1.00"), // point grade, real display
+            ("76.00", "76.00"),                // point grade, no denominator
+            ("HD", "HD"),                      // scale / letter-only grade
+        ] {
+            let s = scraper
+                .parse_submission_status_from_html(&page(cell), 42)
+                .expect("parse");
+            assert!(s.submitted, "{cell}: must be submitted");
+            assert!(s.graded, "{cell}: must be graded");
+            assert_eq!(s.grade.as_deref(), Some(expected), "grade cell {cell:?}");
+        }
+    }
+
+    /// Regression: marks released with the score hidden. Moodle still reports
+    /// "Grading status: Graded", so the item must read as graded even though there is no grade text.
+    #[test]
+    fn assign_graded_without_visible_score() {
+        let scraper = test_scraper();
+        let html = r#"<div class="submissionstatustable"><div class="submissionsummarytable"><table class="generaltable">
+<tbody>
+<tr><th class="cell c0" scope="row">Submission status</th>
+    <td class="submissionstatussubmitted cell c1 lastcol">Submitted for grading</td></tr>
+<tr><th class="cell c0" scope="row">Grading status</th>
+    <td class="submissiongraded cell c1 lastcol">Graded</td></tr>
+</tbody></table></div></div>
+<div class="feedback"><div class="feedbacktable"><table class="generaltable">
+<tbody><tr><th class="cell c0" scope="row">Grade</th><td class="cell c1 lastcol">-</td></tr></tbody>
+</table></div></div>"#;
+        let s = scraper
+            .parse_submission_status_from_html(html, 42)
+            .expect("parse");
+        assert!(s.graded, "Grading status=Graded must mark the item graded");
+        assert_eq!(s.grade, None, "a bare '-' is not a grade");
+    }
+
+    /// Regression: "Not graded" must not be mistaken for graded by a substring match.
+    #[test]
+    fn assign_not_graded_stays_ungraded() {
+        let scraper = test_scraper();
+        let html = r#"<div class="submissionstatustable"><div class="submissionsummarytable"><table class="generaltable">
+<tbody>
+<tr><th class="cell c0" scope="row">Submission status</th>
+    <td class="submissionstatussubmitted cell c1 lastcol">Submitted for grading</td></tr>
+<tr><th class="cell c0" scope="row">Grading status</th>
+    <td class="submissionnotgraded cell c1 lastcol">Not graded</td></tr>
+</tbody></table></div></div>"#;
+        let s = scraper
+            .parse_submission_status_from_html(html, 42)
+            .expect("parse");
+        assert!(s.submitted);
+        assert!(!s.graded, "'Not graded' must stay ungraded");
+        assert_eq!(s.grade, None);
     }
 
     /// Regression: an assignment with a marking rubric containing "No submission" level definition

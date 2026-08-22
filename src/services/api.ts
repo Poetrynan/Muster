@@ -100,6 +100,8 @@ export interface ScheduleItem {
 export interface SubmissionStatus {
   assignmentId: number;
   submitted: boolean;
+  /** Moodle's "Grading status" row. True even when the score itself is hidden. */
+  graded?: boolean;
   grade?: string | null;
   feedback?: string | null;
   dueDate?: string | null;
@@ -692,15 +694,24 @@ export async function startSSOLoginWebView(): Promise<LoginResponse> {
 }
 
 
-/// Download a file from Moodle to local storage
-export async function downloadFile(fileUrl: string, savePath: string): Promise<string> {
+/// Structured result of a single file download, matching the Rust `DownloadResult`
+/// (serde `rename_all = "camelCase"` => `path` / `skipped`).
+export interface DownloadResult {
+  path: string;
+  skipped: boolean;
+}
+
+/// Download a file from Moodle to local storage.
+/// Returns a structured result so callers can tell a fresh download from a
+/// skipped one (when `skipExisting` is set and the file is already on disk).
+export async function downloadFile(fileUrl: string, savePath: string, skipExisting = false): Promise<DownloadResult> {
   const invoke = getInvoke();
   if (invoke) {
-    return invoke<string>("download_file", { fileUrl, savePath });
+    return invoke<DownloadResult>("download_file", { fileUrl, savePath, skipExisting });
   }
   console.log("[Mock] Download file:", fileUrl, "to", savePath);
   await new Promise(resolve => setTimeout(resolve, 1000));
-  return savePath;
+  return { path: savePath, skipped: false };
 }
 
 /// Save AI configuration in Rust backend
