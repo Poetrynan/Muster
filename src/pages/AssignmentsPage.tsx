@@ -175,13 +175,15 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
       : sortedAssignments.filter((a) => a.courseId === selectedAssignmentCourseId);
 
   // ── Bucket by due date: assignments have no week field, so due_date_iso is the natural grouping axis.
-  // done (submitted/graded) gets its own bucket — finished items do not need urgency buckets.
+  // submitted and graded get separate buckets so the two states are never visually mixed.
   const DAY_MS = 1000 * 60 * 60 * 24;
   const bucketOf = (a: (typeof annotated)[number]): string => {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
-    if (eff === "submitted" || eff === "graded") return "done";
-    // Unsubmitted assignments from an ended term → archived bucket (no longer flagged "overdue", which would be pointless)
+    // Anything from an ended term → archived bucket, whatever its state. This has to come before
+    // the submitted/graded checks or last semester's handed-in work never leaves the active list.
     if (isTermEnded(courseFullMap.get(a.courseId))) return "archived";
+    if (eff === "submitted") return "submitted";
+    if (eff === "graded") return "graded";
     const iso = a.dueDateIso || a.dueDate;
     if (!iso) return "noDate";
     const days = Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
@@ -192,7 +194,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     return "later";
   };
 
-  const BUCKET_ORDER = ["overdue", "today", "thisWeek", "nextWeek", "later", "noDate", "done", "archived"];
+  const BUCKET_ORDER = ["overdue", "today", "thisWeek", "nextWeek", "later", "noDate", "submitted", "graded", "archived"];
   const bucketLabelKey: Record<string, TranslationKey> = {
     overdue: "assignments.bucketOverdue",
     today: "assignments.bucketToday",
@@ -200,7 +202,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     nextWeek: "assignments.bucketNextWeek",
     later: "assignments.bucketLater",
     noDate: "assignments.bucketNoDate",
-    done: "assignments.bucketDone",
+    submitted: "assignments.bucketSubmitted",
+    graded: "assignments.bucketGraded",
     archived: "assignments.bucketArchived",
   };
 
@@ -226,6 +229,23 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   // A single assignment card (reused by every bucket); index drives the entrance animation stagger (capped so the tail is not too slow)
   const renderAssignmentCard = (assignment: (typeof annotated)[number], index: number) => {
     const daysUntil = getDaysUntilDue(assignment.dueDateIso || assignment.dueDate);
+    // Grade display: prefer the assignment's own grade (which carries "X / Y" from detail pages).
+    // Fall back to the gradebook row matched by normalized name so graded quizzes show the full
+    // max score in the list instead of a bare number.
+    const norm = (s?: string) =>
+      (s || "").toLowerCase().replace(/\(\d+(?:\.\d+)?%\)/g, "").replace(/\s+/g, " ").trim();
+    const gbForCard = gradebook.length > 0
+      ? gradebook.find((g) => norm(g.item) === norm(assignment.name))
+      : undefined;
+    const gradeForCard = (() => {
+      const ag = assignment.grade;
+      if (!ag) return;
+      // Already has "X / Y" format from the detail-page or new gradebook path: use directly.
+      if (ag.includes("/")) return ag;
+      // Bare number: try to append the gradebook range so the list shows the max score too.
+      if (gbForCard?.range) return `${ag} / ${gbForCard.range}`;
+      return ag;
+    })();
     return (
       <motion.div
         key={assignment.id}
@@ -276,8 +296,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                       {t("assignments.category", { category: assignment.category })}
                     </Badge>
                   )}
-                  {assignment.grade && (
-                    <span className="text-sm text-green-600">{t("assignments.grade", { grade: assignment.grade })}</span>
+                  {assignment.grade && gradeForCard && (
+                    <span className="text-sm text-green-600">{t("assignments.grade", { grade: gradeForCard })}</span>
                   )}
                 </div>
               </div>
@@ -330,7 +350,11 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const tracked = annotated.filter((a) => a.hasSubmissionStatus !== false);
   const untracked = annotated.filter((a) => a.hasSubmissionStatus === false);
   const totalCount = tracked.length;
-  const pendingCount = tracked.filter((a) => a.status === "pending" || a.status === "upcoming").length;
+  const pendingCount = tracked.filter((a) => {
+    const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
+    return (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
+      !isTermEnded(courseFullMap.get(a.courseId));
+  }).length;
   const doneCount = tracked.filter((a) => a.status === "submitted" || a.status === "graded").length;
   const completionPct = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
 
@@ -683,23 +707,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
               {submissionError && <p className="text-sm text-destructive">{submissionError}</p>}
               {submission && (
                 <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    {submission.submitted ? (
-                      <Badge variant="success">
-                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                        {t("assignments.submission.submitted")}
-                      </Badge>
-                    ) : (
-                      <Badge variant="warning">{t("assignments.submission.notSubmitted")}</Badge>
-                    )}
-                  </div>
-                  {submission.dueDate && (
-                    <p className="text-muted-foreground">
-                      {t("assignments.submission.dueDate", { date: submission.dueDate })}
-                    </p>
-                  )}
                   {(() => {
-                    // Gradebook matching: compare assignment names with the bracketed weight stripped, to fill in feedback/grades
+                    // Gradebook matching runs once so the badge and the grade/range/feedback block share one result.
                     const current = annotated.find((x) => x.id === submissionForId);
                     const norm = (s?: string) =>
                       (s || "").toLowerCase().replace(/\(\d+(?:\.\d+)?%\)/g, "").replace(/\s+/g, " ").trim();
@@ -707,8 +716,31 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                     const gradeText = submission.grade || gb?.grade || undefined;
                     const rangeText = gb?.range || undefined;
                     const feedbackText = submission.feedback || gb?.feedback || undefined;
+                    // Status badge priority: a real grade (from detail page or gradebook) wins,
+                    // then submitted flag, finally not-submitted.
+                    const hasGrade = !!gradeText && gradeText.trim() !== "" && gradeText.trim() !== "-";
                     return (
                       <>
+                        <div className="flex items-center gap-2">
+                          {hasGrade ? (
+                            <Badge variant="success">
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              {t("assignments.submission.graded")}
+                            </Badge>
+                          ) : submission.submitted ? (
+                            <Badge variant="info">
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              {t("assignments.submission.submitted")}
+                            </Badge>
+                          ) : (
+                            <Badge variant="warning">{t("assignments.submission.notSubmitted")}</Badge>
+                          )}
+                        </div>
+                        {submission.dueDate && (
+                          <p className="text-muted-foreground">
+                            {t("assignments.submission.dueDate", { date: submission.dueDate })}
+                          </p>
+                        )}
                         {gradeText && (
                           <p className="font-medium text-green-600">
                             {t("assignments.submission.grade", {

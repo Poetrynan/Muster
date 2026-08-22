@@ -8,6 +8,7 @@ mod server;
 
 use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
 use moodle::scraper::MoodleScraper;
+use moodle::scraper::DownloadResult;
 use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, CourseTabData, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording};
 use std::sync::Arc;
 use tauri::{Emitter, State};
@@ -337,12 +338,13 @@ async fn get_sync_status(state: State<'_, AppState>) -> Result<SyncStatus, Strin
 async fn download_file(
     file_url: String,
     save_path: String,
+    skip_existing: bool,
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
-) -> Result<String, String> {
+) -> Result<DownloadResult, String> {
     let scraper_guard = state.scraper.lock().await;
     let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
-    scraper.download_file(&file_url, &save_path, Some(&app_handle)).await
+    scraper.download_file(&file_url, &save_path, Some(&app_handle), skip_existing).await
 }
 
 /// Fetch all-course calendar events (month view merged with upcoming).
@@ -881,6 +883,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::new())
         .on_window_event(|window, event| {
             // Main window close button: hide instead of exiting when "minimize to tray on close" is enabled

@@ -32,15 +32,18 @@ export function formatRelativeTime(date: string | Date): string {
 /**
  * Determine whether a course's teaching period has ended (Monash: S1 ~ late Feb-June, S2 ~ late July-November).
  * For cross-semester courses ("S1 2026 - S2 2026") the last semester is used; returns false when nothing can be parsed.
+ * Accepts the separators Monash actually uses between term and year — space, ASCII hyphen, en/em dash,
+ * underscore — and the reversed "2026 S1" / "2026S1" spelling.
  */
 export function isTermEnded(courseName?: string): boolean {
   if (!courseName) return false;
-  const re = /\bS([12])\s*[–—]?\s*(\d{4})\b/gi;
+  const re = /\bS([12])\s*[-–—_]?\s*(\d{4})\b|\b(\d{4})\s*[-–—_]?\s*S([12])\b/gi;
   const matches = [...courseName.matchAll(re)];
   if (matches.length === 0) return false;
   const last = matches[matches.length - 1];
-  const year = parseInt(last[2], 10);
-  const sem = parseInt(last[1], 10);
+  // Either the "S1 2026" branch (groups 1,2) or the "2026S1" branch (groups 3,4) matched.
+  const sem = parseInt(last[1] ?? last[4], 10);
+  const year = parseInt(last[2] ?? last[3], 10);
   const now = new Date();
   const curSem = now.getMonth() >= 6 ? 2 : 1;
   return year < now.getFullYear() || (year === now.getFullYear() && sem < curSem);
@@ -119,6 +122,36 @@ export function buildCourseDownloadDir(
   const safe = sanitizeFolderName(code);
   const base = (baseDir || "").replace(/[\\/]+$/, "");
   return base ? `${base}/${safe}` : safe;
+}
+
+/** A Moodle resource URL that points at a real downloadable file (not a page/link). */
+export function isDownloadableUrl(url?: string): boolean {
+  return !!url && (url.includes("pluginfile.php") || url.includes("mod/resource/view.php"));
+}
+
+export interface SavePathInput {
+  courseId?: number;
+  url?: string;
+}
+
+/**
+ * Resolve the on-disk *directory* a resource should be saved into. Mirrors the single-download
+ * rule in handleDownload: when "group by course" is on the file lands in `<baseDir>/<UNITCODE>`,
+ * otherwise in `baseDir`. Batch downloads call this per resource, so files from different courses
+ * naturally fall into their own course folders — no special "batch" destination needed.
+ */
+export function computeSavePath(
+  resource: SavePathInput,
+  opts: {
+    downloadPath: string;
+    groupByCourse: boolean;
+    courses: { id: number; fullName?: string | null; shortName?: string | null }[];
+  }
+): string {
+  const baseDir = (opts.downloadPath || "").replace(/[\\/]+$/, "");
+  if (!opts.groupByCourse) return baseDir;
+  const course = opts.courses.find((c) => c.id === (resource.courseId ?? 0));
+  return buildCourseDownloadDir(baseDir, resource.courseId ?? 0, course?.fullName, course?.shortName);
 }
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "other";

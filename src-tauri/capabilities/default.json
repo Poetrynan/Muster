@@ -22,6 +22,8 @@
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "/**" }]
     },
-    "dialog:default"
+    "dialog:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

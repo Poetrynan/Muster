@@ -40,7 +40,7 @@ import { saveAiConfig, syncAll, logout, testAiConnection } from "../services/api
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { requestNotificationPermission, clearReminded } from "../services/reminders";
-import { checkForAppUpdates, getCurrentAppVersion, type UpdateCheckResult } from "../services/updater";
+import { checkForAppUpdates, getCurrentAppVersion, installUpdateInApp, relaunchApp, type UpdateCheckResult } from "../services/updater";
 import { ACCENT_COLORS, type AccentColor } from "../types";
 import { open } from "@tauri-apps/plugin-dialog";
 import appIcon from "../assets/app-icon.png";
@@ -87,7 +87,7 @@ function formatAiError(
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
-  const { user, settings, updateSettings } = useAppStore();
+  const { user, settings, updateSettings, updateAllSyncedData, setSyncStatus, syncStatus } = useAppStore();
   const { t } = useTranslation();
 
   // GitHub Release update check state
@@ -95,6 +95,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [showUpToDateToast, setShowUpToDateToast] = useState(false);
+  // In-app install state. installPercent === null means "downloading, total size unknown".
+  const [installing, setInstalling] = useState(false);
+  const [installPercent, setInstallPercent] = useState<number | null>(null);
+  const [installedVersion, setInstalledVersion] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // Sync "minimize to tray on close" to the Rust side (the window close event reads it); degrades silently in the browser dev environment
   useEffect(() => {
@@ -136,6 +141,27 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   });
   const toggleDeleteOption = (key: keyof typeof deleteSelection) =>
     setDeleteSelection((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  // Manual sync from the Sync settings section — mirrors the Dashboard manual sync so users get
+  // feedback (toast + button state + data applied to the store) instead of a silent fire-and-forget.
+  const handleSettingsSync = async () => {
+    if (syncStatus.isRunning) return;
+    try {
+      setSyncStatus({ isRunning: true });
+      const data = await syncAll();
+      updateAllSyncedData(data);
+      // Stamp the cooldown timestamp only after a successful sync, so a failed one
+      // never suppresses the next launch auto-sync.
+      updateSettings({ lastAutoSyncAt: new Date().toISOString() });
+      setSyncStatus({ isRunning: false, lastSync: new Date().toISOString() });
+      showToast(t("dashboard.syncSuccess"));
+    } catch (err) {
+      console.error("Settings sync failed:", err);
+      setSyncStatus({ isRunning: false });
+      const detail = err instanceof Error ? err.message : String(err);
+      showToast(detail ? `${t("dashboard.syncFailed")} (${detail})` : t("dashboard.syncFailed"));
+    }
+  };
   const handleDeleteSelected = async () => {
     if (deleting) return;
     if (!Object.values(deleteSelection).some(Boolean)) return;
@@ -203,6 +229,12 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     };
   }, []);
 
+  // Free-API recommendations: fill the AI config with a provider's Base URL + model.
+  const fillFreeProvider = (base: string, model: string) => {
+    updateSettings({ aiFormat: "openai", aiCompatType: "openai", aiBaseUrl: base, aiModel: model });
+    showToast(t("settings.ai.freeFilled"));
+  };
+
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
     setUpdateResult(null);
@@ -227,12 +259,45 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     }
   };
 
-  const handleOpenReleaseUrl = async (url: string) => {
+  const openExternal = async (url: string) => {
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(url);
     } catch (err) {
-      console.error("Failed to open release URL:", err);
+      console.error("Failed to open external URL:", err);
+    }
+  };
+
+  const handleOpenReleaseUrl = async (url: string) => {
+    await openExternal(url);
+  };
+
+  /**
+   * One-click update: download + verify + install in place, then offer a restart.
+   * Falls back to the browser download when the running build predates the
+   * updater plugin (v0.1.7 and earlier) or when running in the dev server.
+   */
+  const handleInstallUpdate = async () => {
+    setInstalling(true);
+    setInstallError(null);
+    setInstallPercent(null);
+    try {
+      const outcome = await installUpdateInApp((p) => setInstallPercent(p.percent ?? null));
+      if (outcome.status === "installed") {
+        setInstalledVersion(outcome.version);
+      } else if (outcome.status === "upToDate") {
+        setUpdateResult({ hasUpdate: false, currentVersion: appVersion });
+        setShowUpToDateToast(true);
+        setTimeout(() => setShowUpToDateToast(false), 4000);
+      } else {
+        setInstallError(t("settings.about.installFallback"));
+        const url = updateResult?.latestRelease?.downloadUrl;
+        if (url) await openExternal(url);
+      }
+    } catch (e: any) {
+      setInstallError(t("settings.about.installFailed", { error: e?.message || String(e) }));
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -660,6 +725,36 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                   <CardDescription>{t("settings.ai.subtitle")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Free-API recommendations: lowers the barrier for trying AI features */}
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <b className="text-sm text-foreground">{t("settings.ai.freeRecoTitle")}</b>
+                      <span className="text-xs text-muted-foreground">{t("settings.ai.freeRecoDesc")}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 mt-3">
+                      {/* Z.ai (Zhipu international) */}
+                      <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">Z</span>
+                          <b className="text-sm text-foreground">{t("settings.ai.freeZaiTitle")}</b>
+                          <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
+                            {t("settings.ai.freeTag")}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground mt-2 leading-relaxed">{t("settings.ai.freeZaiDesc")}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{t("settings.ai.freeZaiModels")}</p>
+                        <div className="flex gap-2 mt-auto pt-3">
+                          <Button variant="outline" className="flex-1 h-8 text-xs" onClick={() => openExternal("https://z.ai/model-api")}>
+                            {t("settings.ai.freeGetKey")}
+                          </Button>
+                          <Button className="flex-1 h-8 text-xs" onClick={() => fillFreeProvider("https://api.z.ai/api/paas/v4", "glm-4.7-flash")}>
+                            {t("settings.ai.freeFill")}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t("settings.ai.format")}</label>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -949,9 +1044,13 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               </Card>
 
               <div className="flex gap-3">
-                <Button onClick={() => { useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() }); syncAll().catch(console.error); }}>
-                  <Download className="w-4 h-4 mr-2" />
-                  {t("dashboard.sync")}
+                <Button onClick={handleSettingsSync} disabled={syncStatus.isRunning}>
+                  {syncStatus.isRunning ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 mr-2" />
+                  )}
+                  {syncStatus.isRunning ? t("dashboard.syncing") : t("dashboard.sync")}
                 </Button>
                 <Button variant="outline" onClick={() => setDeleteOpen(true)}>
                   {t("common.delete")} {t("dashboard.resources")}
@@ -1050,12 +1149,49 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                         {updateResult.latestRelease.body}
                       </div>
                     )}
-                    <div className="flex flex-wrap gap-2.5 pt-1">
-                      {updateResult.latestRelease.downloadUrl && (
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                      {installedVersion ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                            <Check className="w-4 h-4" />
+                            {t("settings.about.installReady", { version: installedVersion })}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => relaunchApp()}
+                            className="gap-2 shadow-sm font-medium"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            {t("settings.about.restartNow")}
+                          </Button>
+                        </>
+                      ) : (
                         <Button
                           size="sm"
-                          onClick={() => handleOpenReleaseUrl(updateResult.latestRelease!.downloadUrl!)}
+                          onClick={handleInstallUpdate}
+                          disabled={installing}
                           className="gap-2 shadow-sm font-medium"
+                        >
+                          {installing ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4" />
+                          )}
+                          {installing
+                            ? installPercent === null
+                              ? t("settings.about.installingUnknown")
+                              : t("settings.about.installingUpdate", { percent: installPercent })
+                            : t("settings.about.installUpdate")}
+                        </Button>
+                      )}
+                      {/* Manual download stays available: it is the escape hatch when the
+                          in-app installer cannot run (unsigned build, blocked endpoint). */}
+                      {updateResult.latestRelease.downloadUrl && !installedVersion && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenReleaseUrl(updateResult.latestRelease!.downloadUrl!)}
+                          className="gap-2"
                         >
                           <Download className="w-4 h-4" />
                           {t("settings.about.downloadUpdate")}
@@ -1071,6 +1207,20 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                         {t("settings.about.viewRelease")}
                       </Button>
                     </div>
+                    {installing && installPercent !== null && (
+                      <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-200"
+                          style={{ width: `${installPercent}%` }}
+                        />
+                      </div>
+                    )}
+                    {installError && (
+                      <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{installError}</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1140,7 +1290,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    // h-screen + overflow-hidden (same pattern as Dashboard): locks the page inside the
+    // viewport so only <main> scrolls. With the previous min-h-screen, a section taller
+    // than the viewport stretched the whole flex container and the page scrolled in #root,
+    // dragging the sidebar (and the selected tab highlight) along with the content.
+    <div className="h-screen overflow-hidden bg-background flex">
       {/* Sidebar */}
       <motion.aside
         initial={{ x: -280 }}
@@ -1172,8 +1326,10 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         </nav>
       </motion.aside>
 
-      {/* Main content area */}
-      <main className="flex-1 overflow-auto p-8">
+      {/* Main content area — the only scroller on this page now. scrollbar-gutter reserves
+          the scrollbar track so switching between sections of different heights doesn't
+          shift the column horizontally when the scrollbar appears/disappears. */}
+      <main className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <motion.div
           key={activeSection}
           initial={{ opacity: 0, y: 10 }}

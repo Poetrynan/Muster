@@ -222,6 +222,10 @@ pub struct ScheduleItem {
 pub struct SubmissionStatus {
     pub assignment_id: u64,
     pub submitted: bool,
+    /// Moodle's own "Grading status" row says the work has been marked. Independent of `grade`:
+    /// a unit can release feedback while hiding the score, so this is the authoritative signal
+    /// for "已评分" and `grade` only carries the display text when there is one.
+    pub graded: bool,
     pub grade: Option<String>,
     pub feedback: Option<String>,
     pub due_date: Option<String>,

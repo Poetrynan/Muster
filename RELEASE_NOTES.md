@@ -1,3 +1,74 @@
+# Muster v0.1.8
+
+## Bug Fixes
+- Settings → Sync button now gives feedback (it used to be a fire-and-forget no-op): it awaits the full sync, writes data back into the store, and shows a success/failure toast
+- Sync button state now survives navigation — switching to another page mid-sync no longer resets the button to its idle look; the spinner/"Syncing…" state is driven by the global store and persists across tabs (was lost on component unmount)
+- Settings → AI provider cards: the "Get API key / Auto-fill" buttons are now bottom-aligned across both cards regardless of description length
+- Confirm dialogs no longer swallow clicks during their exit animation — after closing a dialog (e.g. "Clear all local data") the backdrop kept intercepting clicks for 200ms while fading out, so clicking a sidebar tab right after could land on the neighbor tab instead; the overlay now releases pointer events as soon as it starts closing
+- **Launch auto-sync is reliable again** — root cause was two compounding defects:
+  1. The cooldown timestamp (`lastAutoSyncAt`) was written *before* the sync started, so a failed sync still stamped it and suppressed every subsequent launch auto-sync for the next hour (fresh users saw a blank Dashboard until they hit manual sync);
+  2. The startup sync was deferred via `requestIdleCallback`, which can stay pending indefinitely under Tauri's WebView2 (no idle period detected / background throttling), so `load()` never ran for users without cached data.
+  Fix: the timestamp is now stamped only after a successful sync (all three sync entry points), and the startup sync uses a guaranteed `setTimeout(0)` instead of idle callbacks. "Render cached data first" is preserved.
+- More robust submission/grade detection via table-based parsing — rubric pages that say "No submission" in the table heading but actually have "Submitted for grading" in the status cell now parse correctly
+- Narrowed grade/submission regex to English-only patterns — tighter, more precise matching on Monash (English) Moodle
+- Fixed graded assignments showing as "submitted" — root cause was keyword-match priority in `determine_assignment_status` (submitted was checked before graded, and Moodle often renders both keywords in one row); now graded takes precedence. Also preserves the parsed grade through the detail-page and gradebook enrichment pass so the list card shows the full "X / Y" score.
+- Submitted/Graded assignments now have their own independent buckets and tabs instead of being mixed into the urgency-time buckets (overdue / thisWeek / nextWeek…) — fixes the logical contradiction of a "submitted" assignment still showing a due-date countdown
+- Dashboard pending count and the Assignments sidebar pending count are now aligned — both use the same four rules (exclude submitted/graded, exclude non-submittable items, exclude ended terms, include overdue)
+- Fixed TS2367 compile error caused by TypeScript type narrowing — `overdue` is a frontend-derived state (not a backend enum value) and must be compared after calling `getEffectiveAssignmentStatus()`, not against the raw `a.status` enum directly
+- **Graded assignments still showed as "submitted" — the real fix.** The earlier fix in this release corrected keyword priority in `determine_assignment_status`, but that function belongs to the legacy `mod/assign/index.php` path; the live sync actually runs `fetch_course_assessments` → `enrich_assessment_statuses`. There, "graded" was decided solely by whether a grade string could be extracted, and the extraction regex required a literal `<number> / <number>`. Monash's default grade display is a **letter grade with no denominator** (e.g. `76.00 (D)`), so nothing matched and the status stayed "submitted" even with marks and feedback released. Grade extraction now reads the Feedback table cell directly instead of pattern-matching text, so **every Moodle grade display format works**: `0.50 / 1.00` (point/real), `76.00 (D)` (point/letter — the Monash default), `76.00` (no denominator), and `HD` / `Pass` (scale or letter-only)
+- Assignments whose marks were released with the **score hidden** now read as graded. Moodle's own `Grading status` row (and the `submissiongraded` cell class) is now parsed as an independent, authoritative signal — previously it was never read anywhere in the app, and "graded" was inferred indirectly from the presence of a grade string. Grade text is now purely for display; it no longer decides state
+- `Not graded` is no longer mistaken for graded. The whole-page text fallback is now only used for input that carries no Moodle table markup at all; on a real page the table cell is authoritative, so a substring of "Not graded" can never be read as a score
+- **Past-semester assignments no longer sit in the active list.** `bucketOf` checked "term ended" *after* the submitted/graded checks and returned early, so the documented "past-semester items are automatically archived" behaviour only ever applied to *unsubmitted* old work. Last semester's submitted/graded assignments now move into the "Past courses (term ended)" group at the bottom of the list, where they stay reachable without cluttering current work
+- Term-end detection now recognises the separators Monash actually uses. The pattern only accepted en/em dashes, so `S1-2026` (plain ASCII hyphen), `2026S1` (reversed) and `2026_S1` were all treated as "not a semester" and never archived. Verified against real course names: `- S1 2026`, `- S1-2026`, `2026S1`, `2026_S1`, `MUM S2 2025` all archive correctly, while the current `S2 2026` correctly does not
+
+## Tests
+- 3 new regression tests around grade parsing: all four Moodle grade display formats in one loop; "graded with the score hidden"; and a negative test asserting `Not graded` stays ungraded. Suite is at **58 passing, 0 failing** with no regressions in the existing 55
+
+
+## New
+- Batch download on the Dashboard Resources tab — multi-select checkbox + action bar, Promise-pool concurrency, `skipExisting` dedup
+- Structured download result (`{ path, skipped }`) from Rust — the batch summary toast now reports precise downloaded / skipped / failed counts
+- "Download all in course" button on the CourseDetail materials tab — reuses the same batch runner; files land in the same per-course folder as the Dashboard
+- Free-API recommendation card now points to **Z.ai** (Zhipu's international platform, English UI) — GLM-4.7-Flash is permanently free ($0 in / $0 out, no credit card, no China phone number required), replacing the China-only Volcengine/Zhipu cards that overseas users couldn't sign up for. One-click auto-fill configures `https://api.z.ai/api/paas/v4` + `glm-4.7-flash`
+- **In-app auto update.** "Update Now" in the Dashboard banner and on Settings → About now downloads, signature-verifies and installs the new version in place, then offers a one-click restart — no browser, no manual installer run. Powered by `tauri-plugin-updater` with minisign-signed artifacts and a `latest.json` manifest published alongside each GitHub release. The manual "Download Installer" button is still there as a fallback.
+
+## Notes
+- Submission/grade parsing is now English-only — non-English (e.g., Chinese/Japanese) Moodle instances will no longer detect submission status correctly. Monash Moodle is English, so this is a no-op for the target audience. Flagged for transparency since it's a deliberate scope cut.
+- Users on older builds with a stale `lastAutoSyncAt` (stamped by a previously failed sync) don't need to clear anything: the next successful sync — manual or automatic — overwrites it and cooldown behavior normalizes.
+- The English-only scope cut above is now largely moot for grades: grade and grading status are read from the Feedback table's cells rather than matched as text, so they are format- and wording-independent. Submission status still uses some text matching.
+- Past-semester assignments are grouped, not hidden. Submitted/graded work from an ended term moves to the "Past courses (term ended)" group at the bottom of the list so last semester's marks stay reachable. Whether the Submitted/Graded tabs should filter ended terms out entirely is still an open product decision.
+- **Known issue (not fixed in this release):** if the Moodle session expires, the app can keep showing the last successfully synced data while the sidebar still displays your account — there is no "session expired" indicator. Expiry detection exists in the auth layer but is not wired into every fetch path, so a fetch that returns the Okta sign-in page is logged as a parse failure instead of triggering re-login. If your data looks stale, sign out and sign back in. A persistent "session expired" banner is planned.
+- **Auto update starts here.** v0.1.8 is the first build that contains the updater, so this one still has to be installed by hand (v0.1.7 has no updater code to run). From v0.1.8 onward, updates install themselves inside the app.
+- **Windows: install with the NSIS `-setup.exe`, not the `.msi`, if you want auto updates to stay clean.** The update manifest points at the NSIS package. An app originally installed from the MSI will still update, but mixing the two installer types on one machine can leave two entries in "Apps & features".
+- **macOS is still ad-hoc signed** (`signingIdentity: "-"`). Gatekeeper will ask you to allow the app on first launch, and the same applies after an auto update.
+
+## How Updating Works From Now On
+
+Install v0.1.8 by hand this once. After that:
+
+1. Muster checks for a new release quietly when you open it. If there is one, a banner appears at the top of the Dashboard (and Settings → About shows a card with the release notes).
+2. Click **Update Now**. The download happens inside the app with a live percentage — no browser, no file to find in your Downloads folder.
+3. When it finishes the button turns into **Restart Now**. Click it and you are on the new version. Your login session and settings are untouched.
+
+Nothing is downloaded until you click, and no update is ever installed silently in the background.
+
+**Why this is safe to automate.** Every update package is signed with a private key that only the release pipeline holds, and Muster has the matching public key compiled in. The signature is checked *before* the archive is opened — if it does not match, the file is discarded and the update stops. A tampered or substituted download cannot be installed, even in a hostile network.
+
+**If Update Now does not work** (corporate network blocking GitHub, no disk space, antivirus intercepting the installer), the **Download Installer** button next to it still does the old thing: opens the release page in your browser so you can install manually. It is deliberately kept as an escape hatch.
+
+
+
+## Downloads
+
+| Platform | Type | File |
+|---|---|---|
+| 🪟 Windows | NSIS Setup (Recommended) | [Muster_0.1.8_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64-setup.exe) |
+| 🪟 Windows | MSI | [Muster_0.1.8_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64_en-US.msi) |
+| 🍏 macOS | Apple Silicon | [Muster_0.1.8_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_aarch64.dmg) |
+| 🍏 macOS | Intel | [Muster_0.1.8_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.8/Muster_0.1.8_x64.dmg) |
+
+---
+
 # Muster v0.1.7
 
 ## Bug Fixes
