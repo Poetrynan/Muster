@@ -1,3 +1,24 @@
+# Muster v0.1.9
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.9_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.9/Muster_0.1.9_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.9_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.9/Muster_0.1.9_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.9_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.9/Muster_0.1.9_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.9_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.9/Muster_0.1.9_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Search the whole app from the top bar.** Type to search across courses, assignments, resources and announcements — results are grouped, and one click takes you straight there.
+- **Batch download now shows its work.** Live progress (`3/12`) on the button, a clear done/skipped/failed summary when it finishes, and correct accessibility labels on every checkbox.
+- **The cache quota crash is gone.** Course data is now cached in IndexedDB instead of localStorage, so large caches no longer hit the WebView storage limit — this fixes the `quota has been exceeded` error that appeared after a successful sync.
+
+---
+
 # Muster v0.1.8
 
 ## Download

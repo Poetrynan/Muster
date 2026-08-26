@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { idbStorage } from "../services/idbStorage";
 import type { AppSettings, SyncStatus, Summary } from "../types";
 import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData } from "../services/api";
 
@@ -298,6 +299,11 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "muster-settings",
+      // IndexedDB backend: localStorage (~5 MB WebView quota) overflowed once the
+      // course cache (announcements / resources / unit tabs / summaries) grew past
+      // it, crashing sync completion with "[unhandledrejection] quota exceeded".
+      // IndexedDB quota is far larger and failed writes degrade silently.
+      storage: createJSONStorage(() => idbStorage),
       // The persisted cache is the key to an "instant open": the Dashboard renders from this cache on mount,
       // and syncAll is deferred to a background refresh in an idle frame. So resources/assignments/announcements
       // must stay persisted, otherwise the first screen shows empty lists while waiting on the network, which is a worse experience.

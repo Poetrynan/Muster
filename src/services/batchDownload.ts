@@ -24,7 +24,8 @@ export interface BatchResult {
 export async function batchDownload(
   resources: Resource[],
   t: (k: TranslationKey, vars?: Record<string, string | number>) => string,
-  concurrency = 4
+  concurrency = 4,
+  onProgress?: (done: number, total: number) => void
 ): Promise<BatchResult> {
   const downloadable = resources.filter((r) => r.url && isDownloadableUrl(r.url));
   const result: BatchResult = { done: 0, skipped: 0, failed: 0 };
@@ -35,6 +36,11 @@ export async function batchDownload(
 
   const { courses, settings, upsertDownload } = useAppStore.getState();
   let cursor = 0;
+  let finished = 0;
+  const bump = () => {
+    finished += 1;
+    onProgress?.(finished, downloadable.length);
+  };
 
   const worker = async () => {
     while (cursor < downloadable.length) {
@@ -71,6 +77,7 @@ export async function batchDownload(
         } else {
           result.done++;
         }
+        bump();
       } catch (err) {
         console.error("Batch download failed:", err);
         upsertDownload({
@@ -84,6 +91,7 @@ export async function batchDownload(
           lastTick: Date.now(),
         });
         result.failed++;
+        bump();
       }
     }
   };

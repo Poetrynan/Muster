@@ -204,6 +204,7 @@ export function Dashboard() {
   // Batch download: selection is keyed by resource URL (matches the download-manager key).
   const [selectedResourceUrls, setSelectedResourceUrls] = useState<Set<string>>(new Set());
   const [batchDownloading, setBatchDownloading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const toggleResource = (url: string) =>
     setSelectedResourceUrls((prev) => {
       const next = new Set(prev);
@@ -216,14 +217,22 @@ export function Dashboard() {
     const selected = resources.filter((r) => r.url && isDownloadableUrl(r.url) && selectedResourceUrls.has(r.url));
     if (selected.length === 0) return;
     setBatchDownloading(true);
+    setBatchProgress({ done: 0, total: selected.length });
     try {
-      await batchDownload(selected, t);
+      await batchDownload(
+        selected,
+        t,
+        4,
+        (done, total) => setBatchProgress({ done, total })
+      );
       setSelectedResourceUrls(new Set());
     } finally {
       setBatchDownloading(false);
+      setBatchProgress(null);
     }
   };
   const [manualSyncCooldown, setManualSyncCooldown] = useState(false);
+
   const {
     user,
     isLoggedIn,
@@ -269,6 +278,36 @@ export function Dashboard() {
   const resources = Array.isArray(rawResources) ? rawResources : [];
   const assignments = Array.isArray(rawAssignments) ? rawAssignments : [];
   const announcements = Array.isArray(rawAnnouncements) ? rawAnnouncements : [];
+  // ---- Global search (top bar): courses / assignments / resources / announcements ----
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const globalResults = useMemo(() => {
+    const q = globalQuery.trim().toLowerCase();
+    if (!q) return null;
+    const hit = (...parts: (string | undefined)[]) =>
+      parts.some((p) => p && p.toLowerCase().includes(q));
+    return {
+      courses: courses.filter((c) => hit(c.fullName, c.shortName)).slice(0, 5),
+      assignments: assignments.filter((a) => hit(a.name)).slice(0, 5),
+      resources: resources.filter((r) => hit(r.name, r.section)).slice(0, 5),
+      announcements: announcements.filter((a) => hit(a.title, a.content)).slice(0, 5),
+    };
+  }, [globalQuery, courses, assignments, resources, announcements]);
+  const globalResultCount = globalResults
+    ? globalResults.courses.length +
+      globalResults.assignments.length +
+      globalResults.resources.length +
+      globalResults.announcements.length
+    : 0;
+  const closeGlobalSearch = () => {
+    setGlobalSearchOpen(false);
+    setGlobalQuery("");
+  };
+  const goGlobalResult = (fn: () => void) => {
+    fn();
+    closeGlobalSearch();
+  };
+
   // Portal/hub courses are excluded from stats and resource aggregation
   const realCourses = courses.filter((c: any) => !c.isPortal);
 
@@ -477,7 +516,7 @@ export function Dashboard() {
                 checked={selectedResourceUrls.has(resource.url!)}
                 onChange={() => toggleResource(resource.url!)}
                 className="h-4 w-4 shrink-0 cursor-pointer rounded accent-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label={t("dashboard.selectAll")}
+                aria-label={t("dashboard.selectResource", { name: resource.name })}
               />
             )}
             {getFileIcon(resource.resourceType || "other")}
@@ -1385,11 +1424,115 @@ export function Dashboard() {
               />
               <input
                 type="search"
+                value={globalQuery}
                 placeholder={t("dashboard.searchPlaceholder")}
+                onChange={(e) => {
+                  setGlobalQuery(e.target.value);
+                  setGlobalSearchOpen(true);
+                }}
+                onFocus={() => setGlobalSearchOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeGlobalSearch();
+                }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-secondary/50 border-0 text-foreground placeholder:text-muted-foreground transition-shadow duration-150 focus:outline-none focus:ring-2 focus:ring-ring"
                 aria-label={t("dashboard.search")}
               />
             </div>
+
+            {/* Global search results dropdown */}
+            {globalSearchOpen && globalQuery.trim() !== "" && (
+              <div className="absolute left-0 right-0 top-full mt-2 z-50">
+                <div className="rounded-xl border border-border bg-card shadow-2xl overflow-hidden">
+                  {globalResultCount === 0 ? (
+                    <p className="px-4 py-4 text-center text-sm text-muted-foreground">
+                      {t("dashboard.searchNoResults", { query: globalQuery.trim() })}
+                    </p>
+                  ) : (
+                    <div className="max-h-[60vh] overflow-y-auto py-1">
+                      {globalResults!.courses.length > 0 && (
+                        <div>
+                          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {t("nav.courses")} ({globalResults!.courses.length})
+                          </p>
+                          {globalResults!.courses.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() =>
+                                goGlobalResult(() => setSelectedCourseId(c.id))
+                              }
+                              className="w-full text-left px-4 py-2 hover:bg-muted/50 flex items-baseline gap-2"
+                            >
+                              <BookOpen className="w-4 h-4 text-primary shrink-0 self-center" />
+                              <span className="text-sm truncate">{c.fullName || c.shortName}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {globalResults!.assignments.length > 0 && (
+                        <div>
+                          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {t("nav.assignments")} ({globalResults!.assignments.length})
+                          </p>
+                          {globalResults!.assignments.map((a) => (
+                            <button
+                              key={`${a.courseId}-${a.id}`}
+                              type="button"
+                              onClick={() => goGlobalResult(() => setActiveTab("assignments"))}
+                              className="w-full text-left px-4 py-2 hover:bg-muted/50 flex items-baseline gap-2"
+                            >
+                              <ClipboardList className="w-4 h-4 text-primary shrink-0 self-center" />
+                              <span className="text-sm truncate">{a.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {globalResults!.resources.length > 0 && (
+                        <div>
+                          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {t("nav.resources")} ({globalResults!.resources.length})
+                          </p>
+                          {globalResults!.resources.map((r) => (
+                            <button
+                              key={r.url}
+                              type="button"
+                              onClick={() =>
+                                goGlobalResult(() => {
+                                  setActiveTab("resources");
+                                  setSelectedResourceCourseId(r.courseId);
+                                })
+                              }
+                              className="w-full text-left px-4 py-2 hover:bg-muted/50 flex items-baseline gap-2"
+                            >
+                              <FileText className="w-4 h-4 text-primary shrink-0 self-center" />
+                              <span className="text-sm truncate">{r.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {globalResults!.announcements.length > 0 && (
+                        <div>
+                          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {t("nav.notifications")} ({globalResults!.announcements.length})
+                          </p>
+                          {globalResults!.announcements.map((an) => (
+                            <button
+                              key={an.id}
+                              type="button"
+                              onClick={() => goGlobalResult(() => setActiveTab("notifications"))}
+                              className="w-full text-left px-4 py-2 hover:bg-muted/50 flex items-baseline gap-2"
+                            >
+                              <Bell className="w-4 h-4 text-primary shrink-0 self-center" />
+                              <span className="text-sm truncate">{an.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <DownloadCenter autoCloseKey={activeTab} />
@@ -1909,7 +2052,7 @@ export function Dashboard() {
                     onClick={toggleSelectAll}
                     className="ml-auto shrink-0"
                   >
-                    {allFilteredSelected ? t("common.cancel") : t("dashboard.selectAll")}
+                    {allFilteredSelected ? t("dashboard.deselectAll") : t("dashboard.selectAll")}
                   </Button>
                 )}
               </div>
@@ -1924,7 +2067,12 @@ export function Dashboard() {
                     </Button>
                     <Button size="sm" onClick={handleBatchDownloadSelected} disabled={batchDownloading}>
                       {batchDownloading ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          {batchProgress
+                            ? `${batchProgress.done}/${batchProgress.total}`
+                            : ""}
+                        </>
                       ) : (
                         <Download className="w-4 h-4 mr-1" />
                       )}
