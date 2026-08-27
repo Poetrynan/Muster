@@ -32,6 +32,78 @@ pub struct DownloadResult {
     pub skipped: bool,
 }
 
+/// Parse a `Content-Disposition` header value and return the suggested filename.
+///
+/// Handles both forms Moodle sends:
+///   - `attachment; filename="Lecture 1.pdf"` (plain, ASCII-safe)
+///   - `attachment; filename*=UTF-8''%E8%AE%B2%E4%B9%89.pdf` (RFC 5987, percent-encoded)
+///   - both at once (Moodle sends both for non-ASCII names; the plain one is preferred)
+///
+/// The old implementation split on `filename=` and took the whole remainder, so a
+/// header like `filename="a.pdf"; filename*=UTF-8''b.pdf` produced the filename
+/// `a.pdf"; ` — trailing `"; ` broke extension detection on macOS (files that
+/// "cannot be opened" / show an error when double-clicked).
+fn parse_content_disposition_filename(value: &str) -> Option<String> {
+    // 1. Plain `filename="..."` / `filename=...` (skip if it is actually `filename*=`).
+    if let Some(idx) = value.find("filename=") {
+        let rest = &value[idx + "filename=".len()..];
+        if !rest.starts_with('*') {
+            let end = rest.find(';').unwrap_or(rest.len());
+            let fname = rest[..end].trim().trim_matches('"').trim();
+            if !fname.is_empty() {
+                return Some(fname.to_string());
+            }
+        }
+    }
+    // 2. RFC 5987 `filename*=charset'lang'percent-encoded` — take the part after the
+    //    second `'` and percent-decode it.
+    if let Some(idx) = value.find("filename*=") {
+        let rest = &value[idx + "filename*=".len()..];
+        let end = rest.find(';').unwrap_or(rest.len());
+        let raw = &rest[..end];
+        if let Some(first) = raw.find('\'') {
+            if let Some(second_rel) = raw[first + 1..].find('\'') {
+                let encoded = &raw[first + 1 + second_rel + 1..];
+                if !encoded.is_empty() {
+                    return Some(percent_decode(encoded));
+                }
+            }
+        }
+        if !raw.is_empty() {
+            return Some(percent_decode(raw));
+        }
+    }
+    None
+}
+
+/// Decode `%XX` percent-escapes (UTF-8). Invalid sequences are kept as-is.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
 impl MoodleScraper {
     pub fn new(auth: Arc<MoodleAuth>) -> Self {
         let ai_client = reqwest::Client::builder()
@@ -2711,9 +2783,18 @@ impl MoodleScraper {
     ) -> Result<DownloadResult, String> {
         let client = self.auth.get_authenticated_client().await?;
 
+        // `mod/resource/view.php` serves an HTML wrapper page, not the file itself.
+        // Appending `redirect=1` makes Moodle 302 straight to the real file
+        // (pluginfile.php), so downloads save the actual PDF/PPTX/DOCX bytes.
+        let mut url = file_url.to_string();
+        if url.contains("mod/resource/view.php") && !url.contains("redirect=") {
+            url.push_str(if url.contains('?') { "&" } else { "?" });
+            url.push_str("redirect=1");
+        }
+
         let _permit = self.request_gate.acquire().await;
         let response = client
-            .get(file_url)
+            .get(&url)
             .send()
             .await
             .map_err(|e| format!("Failed to download file: {}", e))?;
@@ -2722,24 +2803,17 @@ impl MoodleScraper {
             return Err(format!("Download failed with status: {}", response.status()));
         }
 
-        // Try to get filename from Content-Disposition header
+        // Try to get filename from Content-Disposition header (plain `filename=` and
+        // RFC 5987 `filename*=` both handled, percent-encoded names decoded).
         let raw_filename = response
             .headers()
             .get("content-disposition")
             .and_then(|val| val.to_str().ok())
-            .and_then(|s| {
-                let parts: Vec<&str> = s.split("filename=").collect();
-                if parts.len() > 1 {
-                    Some(parts[1].trim_matches('"').to_string())
-                } else {
-                    None
-                }
-            })
+            .and_then(parse_content_disposition_filename)
             .unwrap_or_else(|| {
-                file_url
-                    .split('/')
+                url.split('/')
                     .last()
-                    .map(|s| s.to_string())
+                    .map(|s| percent_decode(s.split('?').next().unwrap_or(s)))
                     .unwrap_or_else(|| "downloaded_file".to_string())
             });
 
@@ -4862,10 +4936,16 @@ fn sanitize_filename(raw: &str) -> String {
 
     let sanitized: String = name
         .chars()
-        .filter(|c| !c.is_control() && *c != '/' && *c != '\\' && *c != ':')
+        .filter(|c| !c.is_control() && *c != '/' && *c != '\\' && *c != ':' && *c != '"')
         .collect();
 
-    let trimmed = sanitized.trim_matches('.').trim();
+    // Trim trailing separators/whitespace that survive header parsing (`"; ` tails) —
+    // on macOS they break extension detection and the file "cannot be opened".
+    let trimmed = sanitized
+        .trim_matches('.')
+        .trim()
+        .trim_end_matches([';', ',', ' ', '\t'])
+        .trim();
     if trimmed.is_empty() || trimmed == ".." {
         "downloaded_file".to_string()
     } else {
@@ -4884,6 +4964,57 @@ fn sanitize_filename(raw: &str) -> String {
 // ============================================================================
 #[cfg(test)]
 mod tests {
+
+    // ---- Download filename parsing (Content-Disposition) ----
+    #[test]
+    fn content_disposition_plain_filename() {
+        assert_eq!(
+            parse_content_disposition_filename("attachment; filename=\"Lecture 1.pdf\""),
+            Some("Lecture 1.pdf".to_string())
+        );
+        assert_eq!(
+            parse_content_disposition_filename("attachment; filename=Notes.pptx"),
+            Some("Notes.pptx".to_string())
+        );
+    }
+
+    #[test]
+    fn content_disposition_filename_star_rfc5987() {
+        // Percent-encoded UTF-8 name, no plain filename
+        assert_eq!(
+            parse_content_disposition_filename("attachment; filename*=UTF-8''%E8%AE%B2%E4%B9%89.pdf"),
+            Some("讲义.pdf".to_string())
+        );
+        // Moodle sends both: plain filename must win and must NOT drag the `"; ` tail in
+        assert_eq!(
+            parse_content_disposition_filename(
+                "attachment; filename=\"Lecture1.pdf\"; filename*=UTF-8''Lecture1.pdf"
+            ),
+            Some("Lecture1.pdf".to_string())
+        );
+        // Plain filename first, extended second — the old code produced "a.pdf\"; "
+        assert_eq!(
+            parse_content_disposition_filename(
+                "attachment; filename=\"a.pdf\"; filename*=UTF-8''%E8%AE%B2%E4%B9%89.pdf"
+            ),
+            Some("a.pdf".to_string())
+        );
+    }
+
+    #[test]
+    fn content_disposition_missing_returns_none() {
+        assert_eq!(parse_content_disposition_filename("inline"), None);
+        assert_eq!(parse_content_disposition_filename(""), None);
+    }
+
+    #[test]
+    fn percent_decode_handles_utf8_and_plain() {
+        assert_eq!(percent_decode("%E8%AE%B2%E4%B9%89.pdf"), "讲义.pdf");
+        assert_eq!(percent_decode("Lecture%201.pdf"), "Lecture 1.pdf");
+        assert_eq!(percent_decode("plain.pdf"), "plain.pdf");
+        assert_eq!(percent_decode("bad%zz.pdf"), "bad%zz.pdf");
+    }
+
     use super::*;
     use crate::moodle::auth::MoodleAuth;
     use std::fs;

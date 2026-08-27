@@ -162,6 +162,8 @@ export interface AppSettings {
   openFolderAfterDownload: boolean;
   /** Downloads are organized into per-course subfolders (e.g. Downloads/FIT5215/...) */
   groupDownloadsByCourse: boolean;
+  /** When enabled, files also land in a per-week/section subfolder (e.g. Week 1). */
+  groupDownloadsBySection: boolean;
   notifications: boolean;
   notificationSound: boolean;
   /** Notification: assignment due reminder */
