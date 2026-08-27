@@ -57,7 +57,7 @@ import type {
   UnitDashboard,
 } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
-import { getEffectiveAssignmentStatus, buildCourseDownloadDir } from "../lib/utils";
+import { getEffectiveAssignmentStatus, buildCourseDownloadDir , buildSectionDownloadDir } from "../lib/utils";
 
 interface CourseDetailProps {
   courseId: number;
@@ -377,7 +377,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   // "Download all in this course" reuses the shared batchDownload runner (same
   // concurrency pool, skipExisting dedup, and single summary toast as the Dashboard).
   const [courseBatchDownloading, setCourseBatchDownloading] = useState(false);
-  const handleDownloadResource = async (resource: { key: string; name: string; url?: string }) => {
+  const handleDownloadResource = async (resource: { key: string; name: string; url?: string; section?: string }) => {
     if (!resource.url || resourceDownloadingKey) return;
     const { upsertDownload } = useAppStore.getState();
     const settings = useAppStore.getState().settings;
@@ -395,7 +395,10 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     try {
       const baseDir = settings.downloadPath || "";
       const savePath = settings.groupDownloadsByCourse
-        ? buildCourseDownloadDir(baseDir, courseId, course?.fullName, course?.shortName)
+        ? buildSectionDownloadDir(
+            buildCourseDownloadDir(baseDir, courseId, course?.fullName, course?.shortName),
+            settings.groupDownloadsBySection ? resource.section : undefined
+          )
         : baseDir;
       const { path: savedPath } = await downloadFile(resource.url, savePath);
       upsertDownload({

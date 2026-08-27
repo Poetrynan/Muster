@@ -1,3 +1,23 @@
+# Muster v0.1.10
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.10_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.10/Muster_0.1.10_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.10_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.10/Muster_0.1.10_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.10_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.10/Muster_0.1.10_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.10_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.10/Muster_0.1.10_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Downloads open properly now.** Two fixes: files are no longer saved as the web page instead of the real document (Moodle `view.php` links now redirect to the actual file), and file names with non-ASCII characters are parsed correctly — previously they could end up with a broken name on macOS and refuse to open.
+- **Downloads grouped by week.** Each week's files now land in their own subfolder (e.g. `Week 1`) inside the course folder — toggle it off in Settings → Downloads if you prefer a flat layout.
+
+---
+
 # Muster v0.1.9
 
 ## Download

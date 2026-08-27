@@ -132,6 +132,8 @@ export function isDownloadableUrl(url?: string): boolean {
 export interface SavePathInput {
   courseId?: number;
   url?: string;
+  /** Section/week label (e.g. "Week 1 - Why Research Methods?"); used for per-section subfolders. */
+  section?: string;
 }
 
 /**
@@ -145,13 +147,27 @@ export function computeSavePath(
   opts: {
     downloadPath: string;
     groupByCourse: boolean;
+    groupBySection?: boolean;
     courses: { id: number; fullName?: string | null; shortName?: string | null }[];
   }
 ): string {
   const baseDir = (opts.downloadPath || "").replace(/[\\/]+$/, "");
   if (!opts.groupByCourse) return baseDir;
   const course = opts.courses.find((c) => c.id === (resource.courseId ?? 0));
-  return buildCourseDownloadDir(baseDir, resource.courseId ?? 0, course?.fullName, course?.shortName);
+  const courseDir = buildCourseDownloadDir(baseDir, resource.courseId ?? 0, course?.fullName, course?.shortName);
+  return buildSectionDownloadDir(courseDir, opts.groupBySection ? resource.section : undefined);
+}
+
+/**
+ * Append the section/week as one more folder level: "<courseDir>/Week 1".
+ * Skips empty / unparseable section labels so resources without a section
+ * keep landing in the course root.
+ */
+export function buildSectionDownloadDir(courseDir: string, section?: string): string {
+  if (!section) return courseDir;
+  const safe = sanitizeFolderName(section);
+  if (!safe || safe === "Course") return courseDir;
+  return courseDir ? `${courseDir}/${safe}` : safe;
 }
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "other";

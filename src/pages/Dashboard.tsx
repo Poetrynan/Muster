@@ -728,6 +728,7 @@ export function Dashboard() {
       const savePath = computeSavePath(resource, {
         downloadPath: baseDir,
         groupByCourse: settings.groupDownloadsByCourse,
+        groupBySection: settings.groupDownloadsBySection,
         courses,
       });
       const { path: savedPath } = await downloadFile(url, savePath);

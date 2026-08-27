@@ -105,6 +105,7 @@ const defaultSettings: AppSettings = {
   downloadPath: "",
   openFolderAfterDownload: true,
   groupDownloadsByCourse: true,
+  groupDownloadsBySection: true,
   notifications: true,
   notificationSound: true,
   notifyAssignmentDue: true,
