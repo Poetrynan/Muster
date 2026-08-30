@@ -1499,22 +1499,32 @@ impl MoodleScraper {
         // "grade ... <number>" there would happily read the "Graded" of a "Not graded" row.
         if grade.is_none() && !structured {
             // Keep the full "13.00 / 13.00" (numerator AND denominator) so the user sees the max score.
-            grade = regex::Regex::new(
+            // Candidates that continue into a third "/<num>" segment are dates ("Available
+            // 30/08/26"), not grades — skipped the same way parse_quiz_grade_from_html does.
+            let labelled = regex::Regex::new(
                 r"(?is)grade.{0,120}?(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
             )
-            .ok()
-            .and_then(|re| re.captures(text))
-            .map(|c| format!("{} / {}", &c[1], &c[2]))
-            .or_else(|| {
-                // Bare "0.50 / 1.00" (assign submission table) without a label nearby.
-                regex::Regex::new(
-                    r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
-                )
-                .ok()
-                .and_then(|re| re.captures(text))
-                .map(|c| format!("{} / {}", &c[1], &c[2]))
-            })
-            .or_else(|| {
+            .ok();
+            let bare = regex::Regex::new(
+                r"(?i)(\d+(?:\.\d+)?)(?:[\s\x{A0}]|&nbsp;)*/(?:[\s\x{A0}]|&nbsp;)*(\d+(?:\.\d+)?)",
+            )
+            .ok();
+            let mut picked: Option<String> = None;
+            for re in [labelled, bare].into_iter().flatten() {
+                for c in re.captures_iter(text) {
+                    let rest = &text[c.get(0).unwrap().end()..];
+                    if grade_candidate_is_date_tail(rest) {
+                        continue;
+                    }
+                    picked = Some(format!("{} / {}", &c[1], &c[2]));
+                    break;
+                }
+                if picked.is_some() {
+                    break;
+                }
+            }
+            grade = picked
+                .or_else(|| {
                 // Denominator-less labelled grade: "Grade: 76.00 (D)", "Grade 76.00".
                 regex::Regex::new(
                     r"(?i)grade[\s:]*(\d+(?:\.\d+)?(?:[\s\x{A0}]*\([A-Za-z][A-Za-z+-]{0,3}\))?)",
@@ -4488,13 +4498,34 @@ fn parse_quiz_submission_from_html(html: &str) -> bool {
 
 /// Extract "13.00 / 13.00" from quiz pages: "Your final grade for this quiz is
 /// 13.00/13.00" or the attempts table's "13.00 out of 13.00 (100%)".
+/// True when a "X / Y" grade candidate is actually the head of a date like
+/// "Available 30/08/26, 21:55" — the text right after the match continues with
+/// another "/<digits>" segment. rust regex has no lookaround, so the caller
+/// checks the tail after each match and skips date-shaped candidates.
+fn grade_candidate_is_date_tail(rest: &str) -> bool {
+    let rest = rest.trim_start();
+    let Some(tail) = rest.strip_prefix('/') else {
+        return false;
+    };
+    let tail = tail.trim_start();
+    tail.chars().next().is_some_and(|c| c.is_ascii_digit())
+}
+
 fn parse_quiz_grade_from_html(html: &str) -> Option<String> {
     let re = regex::Regex::new(
         r"(?is)(?:final grade|grade).{0,120}?(\d+(?:\.\d+)?)\s*(?:/|out of)\s*(\d+(?:\.\d+)?)",
     )
     .ok()?;
-    let cap = re.captures(html)?;
-    Some(format!("{} / {}", &cap[1], &cap[2]))
+    // Skip candidates that continue into a third "/<num>" segment ("30/08/26" is a
+    // date, not a grade); take the first real grade match instead.
+    for cap in re.captures_iter(html) {
+        let rest = &html[cap.get(0).unwrap().end()..];
+        if grade_candidate_is_date_tail(rest) {
+            continue;
+        }
+        return Some(format!("{} / {}", &cap[1], &cap[2]));
+    }
+    None
 }
 
 /// Extract the activity cmid from a Moodle view URL
@@ -5006,6 +5037,40 @@ fn sanitize_filename(raw: &str) -> String {
 // ============================================================================
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_quiz_grade_skips_date_shaped_candidate() {
+        // "Available 30/08/26, 21:55" must not be read as a 30/08 grade; a real
+        // grade later in the page is still found.
+        let html = r#"<div class="quiz-info"><p>Grading status.</p><p>Available 30/08/26, 21:55</p></div>"#;
+        assert_eq!(parse_quiz_grade_from_html(html), None);
+
+        let html2 = r#"<p>Grading status.</p><p>Available 30/08/26, 21:55</p><p>Your final grade for this quiz is 13.00/15.00.</p>"#;
+        assert_eq!(parse_quiz_grade_from_html(html2), Some("13.00 / 15.00".to_string()));
+    }
+
+    #[test]
+    fn test_quiz_grade_still_parses_real_grades() {
+        assert_eq!(
+            parse_quiz_grade_from_html("<p>Your final grade for this quiz is 13.00/13.00.</p>"),
+            Some("13.00 / 13.00".to_string())
+        );
+        assert_eq!(
+            parse_quiz_grade_from_html("<p>Grade 7 out of 10 was recorded.</p>"),
+            Some("7 / 10".to_string())
+        );
+    }
+
+    #[test]
+    fn test_submission_grade_fallback_skips_dates() {
+        let scraper = MoodleScraper::new(std::sync::Arc::new(MoodleAuth::new()));
+        // No table markup (structured=false) -> raw-text fallback; the only
+        // "X / Y" candidate is a date and must be skipped entirely.
+        let html = r#"<html><body><p>Grading status.</p><p>Available 30/08/26, 21:55</p></body></html>"#;
+        let st = scraper.parse_submission_status_from_html(html, 1).unwrap();
+        assert_eq!(st.grade, None);
+        assert!(!st.graded);
+    }
+
     #[test]
     fn test_parse_due_date_strips_due_tomorrow_suffix() {
         // Moodle appends "Due tomorrow" once the deadline is within a day; the bare

@@ -1,3 +1,22 @@
+# Muster v0.1.12
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.12_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.12/Muster_0.1.12_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.12_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.12/Muster_0.1.12_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.12_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.12/Muster_0.1.12_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.12_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.12/Muster_0.1.12_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Grades display correctly again.** Quiz detail pages carry lines like "Available 30/08/26" that were being read as a "30 / 08" grade and even flipped the status to "Graded". Date-shaped look-alikes are now skipped, so real grades show and an ungraded quiz stays honestly "Submitted".
+
+---
+
 # Muster v0.1.11
 
 ## Download
