@@ -29,13 +29,14 @@ impl Default for ThrottleConfig {
     fn default() -> Self {
         Self {
             // Balance between politeness and UX: a full sync of ~12 courses
-            // (~250 pages) takes roughly 2-4s (network-bound) instead of a
-            // ~40-request burst. Concurrency 16 keeps slots well utilized
-            // (see acquire() order change: interval wait happens BEFORE
-            // taking a slot), while 100ms minimum gap stays within human-like
-            // pacing (much gentler than a real crawler).
+            // (~300+ pages incl. per-assignment detail pages) is gated by the
+            // global start-interval: 100ms made that floor alone ~30s and the
+            // sync felt dead-slow. 40ms keeps a global pace cap (<=25 starts/s,
+            // still far gentler than a crawler) while cutting that floor ~2.5x.
+            // Concurrency 16 keeps slots well utilized (see acquire() order
+            // change: interval wait happens BEFORE taking a slot).
             // Tune with MUSTER_THROTTLE_MS / MUSTER_THROTTLE_CONCURRENCY.
-            min_interval: Duration::from_millis(100),
+            min_interval: Duration::from_millis(40),
             max_concurrency: 16,
         }
     }

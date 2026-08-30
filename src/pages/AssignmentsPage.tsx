@@ -186,7 +186,11 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     if (eff === "graded") return "graded";
     const iso = a.dueDateIso || a.dueDate;
     if (!iso) return "noDate";
-    const days = Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
+    const dueMs = new Date(iso).getTime();
+    // An unparseable due string must NOT fall through to "later" — NaN fails every
+    // comparison below, which silently dumped such items into the wrong bucket.
+    if (Number.isNaN(dueMs)) return "noDate";
+    const days = Math.ceil((dueMs - Date.now()) / DAY_MS);
     if (days < 0) return "overdue";
     if (days === 0) return "today";
     if (days <= 7) return "thisWeek";
