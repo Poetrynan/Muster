@@ -51,7 +51,13 @@ export function isTermEnded(courseName?: string): boolean {
 
 export function getDaysUntilDue(date: string | Date): number {
   const now = new Date();
-  const due = new Date(date);
+  let due = new Date(date);
+  if (Number.isNaN(due.getTime()) && typeof date === "string") {
+    // Moodle due cells can carry a trailing relative label ("... 9:55 PM Due tomorrow"),
+    // which breaks strict Date parsing. Retry with just the extracted date/time core.
+    const m = date.match(/(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}(?:,?\s+\d{1,2}:\d{2}\s*(?:am|pm))?)/i);
+    if (m) due = new Date(m[1]);
+  }
   const diff = due.getTime() - now.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }

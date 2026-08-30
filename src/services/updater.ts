@@ -144,6 +144,22 @@ export function compareVersions(v1: string, v2: string): number {
 }
 
 /**
+ * fetch() with a hard timeout — GitHub API calls from mainland networks can
+ * hang for tens of seconds; the update check must fail fast into the fallback.
+ */
+async function fetchJsonWithTimeout(url: string, ms = 8000): Promise<any> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Check for updates via GitHub Releases API
  */
 export async function checkForAppUpdates(
@@ -154,13 +170,50 @@ export async function checkForAppUpdates(
     currentVersion = await getCurrentAppVersion();
   }
   try {
-    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: {
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
+    let data: any;
+    try {
+      data = await fetchJsonWithTimeout(`https://api.github.com/repos/${repo}/releases/latest`);
+      if (data?.message && String(data.message).includes("API rate limit")) {
+        throw new Error("GitHub API rate limited");
+      }
+    } catch (apiErr: any) {
+      // The API host is flaky from some networks (rate limits, blocked, timeouts).
+      // Fall back to the static latest.json that the updater plugin itself uses —
+      // it carries the version and platform installer URLs, which is all the
+      // banner needs; release notes simply fall back to the release page.
+      const lj = await fetchJsonWithTimeout(
+        `https://github.com/${repo}/releases/latest/download/latest.json`
+      );
+      const version = String(lj?.version || "").replace(/^v/i, "").trim();
+      if (!version) throw apiErr;
+      const platform = getDesktopPlatform();
+      const arch = await getDesktopArch(platform);
+      const platforms = lj?.platforms || {};
+      const want =
+        platform === "windows"
+          ? `windows-${arch === "x86_64" ? "x86_64" : arch}`
+          : platform === "macos"
+            ? `darwin-${arch === "aarch64" ? "aarch64" : "x86_64"}`
+            : "";
+      const entry = platforms[want] || Object.values(platforms)[0];
+      const htmlUrl = `https://github.com/${repo}/releases/latest`;
+      return {
+        hasUpdate: compareVersions(version, currentVersion) > 0,
+        currentVersion,
+        latestRelease: {
+          tagName: `v${version}`,
+          version,
+          name: `Muster v${version}`,
+          body: lj?.notes || "",
+          publishedAt: lj?.pub_date || "",
+          htmlUrl,
+          downloadUrl: entry?.url || htmlUrl,
+          installerName: typeof entry?.url === "string" ? entry.url.split("/").pop() : undefined,
+        },
+      };
+    }
 
-    if (response.status === 404) {
+    if (typeof data?.message === "string" && data.message.includes("Not Found")) {
       // No releases published yet on this repository (or repo not found).
       // Report it honestly instead of pretending the app is up to date.
       return {
@@ -170,11 +223,6 @@ export async function checkForAppUpdates(
       };
     }
 
-    if (!response.ok) {
-      throw new Error(`GitHub API returned HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
     const tagName = data.tag_name || "";
     const cleanLatest = tagName.replace(/^v/i, "").trim();
 
@@ -294,6 +342,30 @@ export async function installUpdateInApp(
   });
 
   return { status: "installed", version: update.version };
+}
+
+/**
+ * installUpdateInApp with bounded retries: the check/download each make network
+ * requests to github.com, which fail transiently more often than any local bug —
+ * a single hiccup used to dump the user onto the release page. 3 attempts with
+ * short backoff absorb the common case; the final error still propagates.
+ */
+export async function installUpdateInAppWithRetry(
+  onProgress?: (p: InstallProgress) => void,
+  attempts = 3
+): Promise<InstallOutcome> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await installUpdateInApp(onProgress);
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 /** Restart into the freshly installed version. No-op outside Tauri. */

@@ -35,7 +35,7 @@ import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustratio
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { useAppStore } from "../stores/useAppStore";
-import { checkForAppUpdates, getCurrentAppVersion, installUpdateInApp, relaunchApp, type ReleaseInfo } from "../services/updater";
+import { checkForAppUpdates, getCurrentAppVersion, installUpdateInAppWithRetry, relaunchApp, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
@@ -915,7 +915,7 @@ export function Dashboard() {
     setBannerInstalling(true);
     setBannerPercent(null);
     try {
-      const outcome = await installUpdateInApp((p) => setBannerPercent(p.percent ?? null));
+      const outcome = await installUpdateInAppWithRetry((p) => setBannerPercent(p.percent ?? null));
       if (outcome.status === "installed") {
         setBannerInstalled(true);
       } else if (outcome.status === "upToDate") {
@@ -924,8 +924,9 @@ export function Dashboard() {
         await openReleaseUrl(updateBanner.downloadUrl || updateBanner.htmlUrl);
       }
     } catch (e: any) {
+      // Surface the real reason and keep the banner up — silently dumping the user
+      // onto the release page made every transient network hiccup look like a bug.
       showToast(e?.message || String(e));
-      await openReleaseUrl(updateBanner.htmlUrl);
     } finally {
       setBannerInstalling(false);
     }
@@ -936,9 +937,28 @@ export function Dashboard() {
     let cancelled = false;
     getCurrentAppVersion()
       .then((version) => checkForAppUpdates(version))
-      .then((res) => {
-        if (!cancelled && res.hasUpdate && res.latestRelease) {
-          setUpdateBanner(res.latestRelease);
+      .then(async (res) => {
+        if (cancelled || !res.hasUpdate || !res.latestRelease) return;
+        setUpdateBanner(res.latestRelease);
+        // Auto-download in the background right away: the banner flips to its
+        // progress / "restart now" states through the same states the manual
+        // button drives, so closing or ignoring the banner never blocks the app.
+        try {
+          setBannerInstalling(true);
+          setBannerPercent(null);
+          const outcome = await installUpdateInAppWithRetry((p) => setBannerPercent(p.percent ?? null));
+          if (cancelled) return;
+          if (outcome.status === "installed") {
+            setBannerInstalled(true);
+            showToast(t("settings.about.updateReady"));
+          } else if (outcome.status === "upToDate") {
+            setUpdateBanner(null);
+          }
+          // unsupported/failed → the banner stays with the manual button + release-page path
+        } catch {
+          /* keep the banner; the user can retry manually or open the release page */
+        } finally {
+          if (!cancelled) setBannerInstalling(false);
         }
       })
       .catch(() => {

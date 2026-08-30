@@ -1,3 +1,24 @@
+# Muster v0.1.11
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.11_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.11/Muster_0.1.11_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.11_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.11/Muster_0.1.11_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.11_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.11/Muster_0.1.11_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.11_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.11/Muster_0.1.11_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Assignments land in the right bucket.** Moodle appends labels like "Due tomorrow" to deadlines that are close, which broke the due-date parser — assignments due tomorrow (or already past) piled up under "Later". The buckets (Overdue / This week / Later …) are correct now, and a due date that still can't be parsed never falls into the wrong group.
+- **Updates download themselves.** A new release is fetched in the background as soon as it is detected — the banner turns into a progress bar, then a Restart button. Transient network failures are retried, and if something still fails the actual reason is shown instead of silently dumping you on the release page.
+- **Faster syncs.** The global request pacing and course-level concurrency were retuned, cutting a full sync roughly in half.
+
+---
+
 # Muster v0.1.10
 
 ## Download

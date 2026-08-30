@@ -2706,7 +2706,7 @@ impl MoodleScraper {
             p(0, total_courses, "courses");
         }
 
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
 
         let handles: Vec<_> = real_courses
             .iter()
@@ -4275,8 +4275,50 @@ fn extract_week_num(section: &str) -> Option<u32> {
 /// treating it as UTC shifted every deadline by 10-11 hours, which made the
 /// date badge (raw Moodle text) and the relative "tomorrow / in N days" label
 /// (computed from dueDateIso) disagree by a day.
+/// Moodle appends relative labels to the due-date cell once a deadline is close
+/// ("Sunday, 30 August 2026, 9:55 PM Due tomorrow", "... Date passed", "已逾期").
+/// The strict-format parser below needs the bare date, so cut the label off first.
+/// ASCII markers are matched on an ASCII-lowercased copy (same UTF-8 length, so the
+/// byte offset is valid for slicing the original string); CJK markers on the original.
+fn strip_relative_labels(t: &str) -> String {
+    let ascii_lower = t.to_ascii_lowercase();
+    let mut cut: Option<usize> = None;
+    for marker in [
+        "due tomorrow",
+        "due today",
+        "due yesterday",
+        "due in ",
+        "date passed",
+        "overdue",
+    ] {
+        if let Some(pos) = ascii_lower.find(marker) {
+            cut = Some(cut.map_or(pos, |c: usize| c.min(pos)));
+        }
+    }
+    for marker in [
+        "明天截止",
+        "今天截止",
+        "天后截止",
+        "小时后截止",
+        "已逾期",
+        "已过截止",
+        "已截止",
+    ] {
+        if let Some(pos) = t.find(marker) {
+            cut = Some(cut.map_or(pos, |c: usize| c.min(pos)));
+        }
+    }
+    match cut {
+        None => t.to_string(),
+        Some(end) => t[..end]
+            .trim_end_matches(|c: char| c == ',' || c == ' ' || c == ';' || c == '-')
+            .to_string(),
+    }
+}
+
 fn parse_moodle_due_date(text: &str) -> Option<String> {
-    let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let t = strip_relative_labels(&joined);
     const FORMATS: &[&str] = &[
         "%A, %d %B %Y, %I:%M %p",
         "%A, %d %B %Y",
@@ -4964,6 +5006,34 @@ fn sanitize_filename(raw: &str) -> String {
 // ============================================================================
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_parse_due_date_strips_due_tomorrow_suffix() {
+        // Moodle appends "Due tomorrow" once the deadline is within a day; the bare
+        // date must still parse to the right instant.
+        let iso = parse_moodle_due_date("Sunday, 30 August 2026, 9:55 PM Due tomorrow").unwrap();
+        assert_eq!(iso, parse_moodle_due_date("Sunday, 30 August 2026, 9:55 PM").unwrap());
+    }
+
+    #[test]
+    fn test_parse_due_date_strips_date_passed_suffix() {
+        let iso = parse_moodle_due_date("Wednesday, 19 August 2026, 9:55 PM Date passed").unwrap();
+        assert_eq!(iso, parse_moodle_due_date("Wednesday, 19 August 2026, 9:55 PM").unwrap());
+    }
+
+    #[test]
+    fn test_parse_due_date_strips_due_in_suffix() {
+        let iso = parse_moodle_due_date("Sunday, 13 September 2026, 9:55 PM Due in 15 days").unwrap();
+        assert_eq!(iso, parse_moodle_due_date("Sunday, 13 September 2026, 9:55 PM").unwrap());
+    }
+
+    #[test]
+    fn test_strip_relative_labels_clean_dates_untouched() {
+        assert_eq!(
+            strip_relative_labels("Friday, 11 September 2026, 9:55 PM"),
+            "Friday, 11 September 2026, 9:55 PM"
+        );
+    }
+
 
     // ---- Download filename parsing (Content-Disposition) ----
     #[test]
