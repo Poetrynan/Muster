@@ -60,7 +60,7 @@ function classifyAnnouncement(
   return "general";
 }
 
-import { isTermEnded, computeSavePath, isDownloadableUrl } from "../lib/utils";
+import { isTermEnded, computeSavePath, isDownloadableUrl , parseDueTimestamp } from "../lib/utils";
 import {
   findDueAssignments,
   diffAnnouncements,
@@ -1050,10 +1050,14 @@ export function Dashboard() {
       });
     });
     (assignments || []).forEach((a) => {
-      if (!a.dueDateIso) return;
-      const t = Date.parse(a.dueDateIso);
+      // dueDateIso can be missing in caches written before v0.1.11 (the strict parser
+      // then failed on Moodle's "Due tomorrow" suffix); fall back to the raw due text
+      // so the unified timeline does not go stale until the next sync.
+      const keyDate = a.dueDateIso || a.dueDate;
+      if (!keyDate) return;
+      const t = parseDueTimestamp(keyDate);
       if (Number.isNaN(t)) return;
-      items.push({ key: `as:${a.id ?? a.name}:${a.dueDateIso}`, courseId: a.courseId, kind: "assign", title: a.name, ts: t });
+      items.push({ key: `as:${a.id ?? a.name}:${keyDate}`, courseId: a.courseId, kind: "assign", title: a.name, ts: t });
     });
     const seen = new Set<string>();
     const norm = (s: string) =>

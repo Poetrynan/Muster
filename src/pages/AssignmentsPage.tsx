@@ -24,7 +24,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Progress } from "../components/ui/progress";
 import { Tabs } from "../components/ui/tabs";
 import { useAppStore } from "../stores/useAppStore";
-import { getEffectiveAssignmentStatus, isTermEnded } from "../lib/utils";
+import { getEffectiveAssignmentStatus, isTermEnded , parseDueTimestamp } from "../lib/utils";
 
 // Determine whether a course term has ended (Monash: S1 ≈ late Feb - Jun, S2 ≈ late Jul - Nov).
 import { useTranslation } from "../i18n/useTranslation";
@@ -186,7 +186,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     if (eff === "graded") return "graded";
     const iso = a.dueDateIso || a.dueDate;
     if (!iso) return "noDate";
-    const dueMs = new Date(iso).getTime();
+    const dueMs = parseDueTimestamp(iso);
     // An unparseable due string must NOT fall through to "later" — NaN fails every
     // comparison below, which silently dumped such items into the wrong bucket.
     if (Number.isNaN(dueMs)) return "noDate";
