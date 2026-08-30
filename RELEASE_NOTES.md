@@ -1,3 +1,22 @@
+# Muster v0.1.14
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.14_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.14/Muster_0.1.14_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.14_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.14/Muster_0.1.14_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.14_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.14/Muster_0.1.14_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.14_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.14/Muster_0.1.14_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **The "Next 7 days" card works on cached data.** Deadlines cached before v0.1.11 carried no parsed date, so the card showed "no upcoming deadlines" until the next sync. Card, buckets and countdown chips now share one lenient date parser — cached data is grouped correctly without waiting for a sync.
+
+---
+
 # Muster v0.1.13
 
 ## Download

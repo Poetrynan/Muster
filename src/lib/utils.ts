@@ -49,16 +49,23 @@ export function isTermEnded(courseName?: string): boolean {
   return year < now.getFullYear() || (year === now.getFullYear() && sem < curSem);
 }
 
-export function getDaysUntilDue(date: string | Date): number {
-  const now = new Date();
+/**
+ * Parse a due date with one fallback: strict `new Date` first, then retry with just
+ * the extracted "12 March 2026, 9:55 PM" core — Moodle due cells can carry a trailing
+ * relative label ("... 9:55 PM Due tomorrow") that breaks strict parsing.
+ * Returns the timestamp (NaN when both attempts fail).
+ */
+export function parseDueTimestamp(date: string | Date): number {
   let due = new Date(date);
   if (Number.isNaN(due.getTime()) && typeof date === "string") {
-    // Moodle due cells can carry a trailing relative label ("... 9:55 PM Due tomorrow"),
-    // which breaks strict Date parsing. Retry with just the extracted date/time core.
     const m = date.match(/(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}(?:,?\s+\d{1,2}:\d{2}\s*(?:am|pm))?)/i);
     if (m) due = new Date(m[1]);
   }
-  const diff = due.getTime() - now.getTime();
+  return due.getTime();
+}
+
+export function getDaysUntilDue(date: string | Date): number {
+  const diff = parseDueTimestamp(date) - Date.now();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
