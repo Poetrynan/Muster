@@ -1,3 +1,22 @@
+# Muster v0.1.13
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.13_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.13/Muster_0.1.13_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.13_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.13/Muster_0.1.13_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.13_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.13/Muster_0.1.13_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.13_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.13/Muster_0.1.13_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Week folders apply to single downloads too.** The per-week subfolder feature missed the single-file download button on the course materials page — only batch downloads were grouped, so files landed flat in the course folder. Every download path is grouped now.
+
+---
+
 # Muster v0.1.12
 
 ## Download

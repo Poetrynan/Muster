@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.12-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.13-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -78,9 +78,9 @@ All data stays on your machine. Authentication goes through Monash Okta SSO dire
 > **Platforms**: Muster supports **Windows 10 / 11 (64-bit)** and **macOS 12+ (Apple Silicon & Intel)**.
 
 1. Download the latest installer from the [Releases](https://github.com/Poetrynan/Muster/releases) page:
-   - **Windows**: `Muster_0.1.12_x64-setup.exe` (or `.msi`)
-   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.12_aarch64.dmg`
-   - **macOS (Intel)**: `Muster_0.1.12_x64.dmg`
+   - **Windows**: `Muster_0.1.13_x64-setup.exe` (or `.msi`)
+   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.13_aarch64.dmg`
+   - **macOS (Intel)**: `Muster_0.1.13_x64.dmg`
 2. Launch the app and sign in with your Monash account (Okta SSO).
 3. Click **Sync with Moodle** — courses, assignments, resources and announcements will be fetched automatically.
 

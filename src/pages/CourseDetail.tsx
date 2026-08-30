@@ -874,6 +874,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                                             key: rowKey,
                                             name: resource.name,
                                             url: resource.url,
+                                            section: resource.section,
                                           })
                                         }
                                         aria-disabled={isThisDownloading}
