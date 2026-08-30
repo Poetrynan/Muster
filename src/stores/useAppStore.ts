@@ -219,10 +219,15 @@ export const useAppStore = create<AppState>()(
     })),
   updateAllSyncedData: (data) =>
     set((state) => {
-      const updatedCourses = data.courses || state.courses;
-      const updatedResources = data.resources || state.allResources;
-      const updatedAssignments = data.assignments || state.assignments;
-      const updatedAnnouncements = data.announcements || state.announcements;
+      // A failed/empty sync (session expired, network error mid-run) returns empty
+      // arrays; `||` treats [] as truthy and would wipe good cached data. Keep the
+      // existing store values unless the sync actually returned entries.
+      const nonEmpty = <T,>(next: T[] | undefined, prev: T[]): T[] =>
+        Array.isArray(next) && next.length > 0 ? next : prev;
+      const updatedCourses = nonEmpty(data.courses, state.courses);
+      const updatedResources = nonEmpty(data.resources, state.allResources);
+      const updatedAssignments = nonEmpty(data.assignments, state.assignments);
+      const updatedAnnouncements = nonEmpty(data.announcements, state.announcements);
 
       // Adopt the aggregated per-course tab data (Dashboard / Unit Info / Schedule /
       // Recordings / Contacts) from the full sync.

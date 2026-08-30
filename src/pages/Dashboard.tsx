@@ -1801,7 +1801,15 @@ export function Dashboard() {
                 </Button>
               </div>
               {dueSoonCount === 0 ? (
-                <p className="text-sm text-muted-foreground mb-6">{t("dashboard.upcomingEmpty")}</p>
+                <div className="mb-6">
+                  <p className="text-sm text-muted-foreground">{t("dashboard.upcomingEmpty")}</p>
+                  {/* TEMP diagnostic (v0.1.15): shows the data shape behind the empty state */}
+                  <p className="text-xs text-muted-foreground/70 mt-1 font-mono break-all">
+                    [diag] assignments={assignments.length}, withIso={assignments.filter((a) => !!a.dueDateIso).length},
+                    withDueDate={assignments.filter((a) => !!a.dueDate).length}, calEvents={(calendarEvents || []).length},
+                    calTs0={(calendarEvents || []).filter((e) => !e.timestamp).length}, deadlineItems={deadlineItems.length}
+                  </p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6" role="list" aria-label={t("dashboard.dueIn7")}>
                   {deadlineItems

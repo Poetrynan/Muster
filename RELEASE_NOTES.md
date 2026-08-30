@@ -1,3 +1,23 @@
+# Muster v0.1.15
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.15_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.15/Muster_0.1.15_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.15_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.15/Muster_0.1.15_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.15_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.15/Muster_0.1.15_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.15_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.15/Muster_0.1.15_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **A failed sync can no longer wipe your cached data.** When a sync dies halfway (session expiry, network drop), the empty result was overwriting good cached assignments/resources. The cache is now kept and only replaced by a real result.
+- **Diagnostic line on the empty "Next 7 days" card** (assignments count / parsed-date counts / calendar timestamps) to make any remaining grouping issue instantly traceable.
+
+---
+
 # Muster v0.1.14
 
 ## Download
