@@ -14,9 +14,10 @@
 > **For The Better Monash · works with Moodle™** — 帮你把自己的 Moodle 课业整理到一处的桌面助手。
 
 <p align="center">
+  <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/官网直达-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="官方网站"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.15-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.16-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -56,11 +57,14 @@ Muster 是一款面向学生的桌面应用，把散落在 Moodle 各处的课�
 
 <p align="center"><img src="assets/preview/announcements.svg" alt="Muster 通知中心：公告自动分类并按课程分组" width="840"></p>
 
-### 📥 下载管理器
-课件（PDF / 幻灯片 / 文件夹）批量下载到本地，实时显示进度和速度，下载完自动打开文件夹。没网也能复习。
-> 举个例子：坐长途飞机前，一键把本周课件全部下载。
+### 📥 下载管理器与精确按周分目录
+课件（PDF / 幻灯片 / 文件夹）无论是单文件还是批量，均自动按 `<课程代码>/Week N/<文件>` 精确分目录存放。支持实时下载进度圆环、速度显示、秒级增量跳过（`skipExisting`）与一键打开文件夹。没网也能复习。
+> 举个例子：坐长途飞机前，一键点击「下载本课全部资料」，所有课件自动按 `Week 1`、`Week 2` 分门别类整理妥当。
 
 <p align="center"><img src="assets/preview/downloads.svg" alt="Muster 下载管理器：实时进度与速度" width="640"></p>
+
+### 🔄 应用内自动静默更新
+应用启动时自动检测 GitHub Releases 新版本，后台安全静默下载安装包并支持断点重试，一键无缝完成原地更新。
 
 ### 🤖 AI 课程总结
 一键总结本周资料、作业和公告——**流式输出**（文字实时逐段出现）+ 完整 Markdown 渲染。总结语言跟随你的界面语言。
@@ -77,10 +81,10 @@ Muster 是一款面向学生的桌面应用，把散落在 Moodle 各处的课�
  
 > **支持平台**：Muster 支持 **Windows 10 / 11 (64位)** 与 **macOS 12+ (Apple Silicon M系列与 Intel 芯片)**。
 
-1. 在 [Releases](https://github.com/Poetrynan/Muster/releases) 页面下载适合你系统的安装包：
-   - **Windows**：`Muster_0.1.15_x64-setup.exe`（或 `.msi`）
-   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.1.15_aarch64.dmg`
-   - **macOS (Intel)**：`Muster_0.1.15_x64.dmg`
+1. 在 [Releases](https://github.com/Poetrynan/Muster/releases) 页面或[官方网站](https://poetrynan.github.io/Muster/)下载适合你系统的安装包：
+   - **Windows**：`Muster_0.1.16_x64-setup.exe`（或 `.msi`）
+   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.1.16_aarch64.dmg`
+   - **macOS (Intel)**：`Muster_0.1.16_x64.dmg`
 2. 打开客户端，点击登录并使用你的 Monash 学生账号完成认证（Okta SSO）。
 3. 点击 **同步 Moodle 数据** —— 所有课程、作业、课件和通知将自动拉取到本地。
 
