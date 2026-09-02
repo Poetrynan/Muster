@@ -14,9 +14,10 @@
 > **For The Better Monash · works with Moodle™** — 내 Moodle 학업을 한곳에 모아주는 데스크톱 앱.
 
 <p align="center">
+  <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/공식%20사이트-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="공식 사이트"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.15-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.16-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -56,11 +57,14 @@ Muster는 학생을 위한 데스크톱 앱입니다. Moodle 곳곳에 흩어진
 
 <p align="center"><img src="assets/preview/announcements.svg" alt="Muster 알림 센터: 공지 자동 분류 및 코스별 그룹핑" width="840"></p>
 
-### 📥 다운로드 매니저
-코스 자료(PDF/슬라이드/폴더)를 로컬에 일괄 다운로드. 진행률·속도 실시간 표시, 완료 후 폴더 자동 오픈.
-> 예: 장거리 비행 전에 이번 주 강의 자료를 원클릭으로 다운로드.
+### 📥 다운로드 매니저 (주차별 자동 폴더 정리)
+코스 자료(PDF/슬라이드/폴더)를 `<과목코드>/Week N/<파일명>` 구조로 로컬에 자동 분류하여 다운로드. 실시간 진행률 링·속도 표시·중복 건너뛰기(`skipExisting`)·완료 후 폴더 자동 오픈 지원.
+> 예: 장거리 비행 전에 "전체 자료 다운로드"를 누르면 모든 강의 자료가 `Week 1`, `Week 2` 폴더로 깔끔하게 정리됩니다.
 
 <p align="center"><img src="assets/preview/downloads.svg" alt="Muster 다운로드 매니저: 진행률과 속도 실시간 표시" width="640"></p>
+
+### 🔄 인앱 자동 업데이트
+앱 시작 시 GitHub Releases 새 버전을 자동 확인하고, 백그라운드에서 안전하게 다운로드하여 원클릭으로 손쉽게 최신 버전으로 업데이트합니다.
 
 ### 🤖 AI 코스 요약
 주간 자료·과제·공지를 원클릭 요약 — **스트리밍 출력**(글자가 실시간으로 표시) + 완전한 Markdown 렌더링. 요약 언어는 UI 언어를 따라갑니다.
@@ -77,10 +81,10 @@ Muster는 학생을 위한 데스크톱 앱입니다. Moodle 곳곳에 흩어진
 
 > **지원 플랫폼**: Muster는 **Windows 10 / 11 (64-bit)** 및 **macOS 12+ (Apple Silicon & Intel)** 를 지원합니다.
 
-1. [Releases](https://github.com/Poetrynan/Muster/releases) 페이지에서 내 운영체제에 맞는 설치 파일을 다운로드합니다:
-   - **Windows**: `Muster_0.1.15_x64-setup.exe` (또는 `.msi`)
-   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.15_aarch64.dmg`
-   - **macOS (Intel)**: `Muster_0.1.15_x64.dmg`
+1. [Releases](https://github.com/Poetrynan/Muster/releases) 페이지 또는 [공식 사이트](https://poetrynan.github.io/Muster/)에서 내 운영체제에 맞는 설치 파일을 다운로드합니다:
+   - **Windows**: `Muster_0.1.16_x64-setup.exe` (또는 `.msi`)
+   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.16_aarch64.dmg`
+   - **macOS (Intel)**: `Muster_0.1.16_x64.dmg`
 2. 앱을 실행하고 Monash 계정으로 로그인합니다 (Okta SSO).
 3. **Moodle 데이터 동기화** 를 클릭하면 과목, 과제, 자료, 공지사항을 자동으로 불러옵니다.
 

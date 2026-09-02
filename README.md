@@ -14,9 +14,10 @@
 > **For The Better Monash · works with Moodle™** — an all-in-one desktop companion for your own Moodle coursework.
 
 <p align="center">
+  <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/Website-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Official Website"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.15-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.1.16-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -56,11 +57,14 @@ Announcements are auto-classified (assignment / quiz / exam / material / grade),
 
 <p align="center"><img src="assets/preview/announcements.svg" alt="Muster notification centre with auto-classified announcements" width="840"></p>
 
-### 📥 Download Manager
-Batch-download course materials (PDFs, slides, folders) to a local folder with live progress and speed, and open the folder after download. Study offline, anywhere.
-> For example: before a long flight, download this week's lectures in one click.
+### 📥 Download Manager with Week N Folders
+Batch-download or single-download course materials (PDFs, slides, folders) automatically structured into clean `<CourseCode>/Week N/<file>` subfolders. Features real-time download progress rings, speed indicators, deduplicated fast skips (`skipExisting`), and one-click folder reveal. Study offline, anywhere.
+> For example: click "Download All" before a long flight, and all materials are neatly sorted into `Week 1`, `Week 2` folders ready to read.
 
 <p align="center"><img src="assets/preview/downloads.svg" alt="Muster download manager with live progress and speed" width="640"></p>
+
+### 🔄 In-App Auto Updater
+Muster automatically checks for new GitHub Releases on startup. Updates download in the background with automatic retries and install seamlessly in one click.
 
 ### 🤖 AI Course Summaries
 One click summarizes the week's materials, assignments and announcements — with **streaming output** (text types in live) and full Markdown rendering. The summary language follows your interface language.
@@ -77,10 +81,10 @@ All data stays on your machine. Authentication goes through Monash Okta SSO dire
 
 > **Platforms**: Muster supports **Windows 10 / 11 (64-bit)** and **macOS 12+ (Apple Silicon & Intel)**.
 
-1. Download the latest installer from the [Releases](https://github.com/Poetrynan/Muster/releases) page:
-   - **Windows**: `Muster_0.1.15_x64-setup.exe` (or `.msi`)
-   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.15_aarch64.dmg`
-   - **macOS (Intel)**: `Muster_0.1.15_x64.dmg`
+1. Download the latest installer from the [Releases](https://github.com/Poetrynan/Muster/releases) page or [Official Site](https://poetrynan.github.io/Muster/):
+   - **Windows**: `Muster_0.1.16_x64-setup.exe` (or `.msi`)
+   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.1.16_aarch64.dmg`
+   - **macOS (Intel)**: `Muster_0.1.16_x64.dmg`
 2. Launch the app and sign in with your Monash account (Okta SSO).
 3. Click **Sync with Moodle** — courses, assignments, resources and announcements will be fetched automatically.
 
