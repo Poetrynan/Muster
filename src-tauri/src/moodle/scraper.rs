@@ -2388,73 +2388,6 @@ impl MoodleScraper {
             .await
             .map_err(|e| format!("Failed to read calendar month view: {}", e))?;
 
-        // Year/month context: calendarwrapper carries data-year / data-month
-        let mut year: Option<i32> = None;
-        let mut month: Option<u32> = None;
-        if let Some(cap) = regex::Regex::new(r#"data-year="(\d{4})" data-month="(\d{1,2})""#)
-            .unwrap()
-            .captures(&month_html)
-        {
-            year = cap.get(1).and_then(|m| m.as_str().parse().ok());
-            month = cap.get(2).and_then(|m| m.as_str().parse().ok());
-        }
-
-        // Per-day cell scan: event li[data-region=event-item] following td[data-day=N]
-        let mut events: std::collections::HashMap<u64, CalendarEvent> = std::collections::HashMap::new();
-        let day_re = regex::Regex::new(r#"<td[^>]*data-day="(\d{1,2})"[^>]*>"#).unwrap();
-        let li_re = regex::Regex::new(
-            r#"<li[^>]*data-region="event-item"([^>]*)>(?s).*?<a data-action="view-event"[^>]*data-event-id="(\d+)"[^>]*href="([^"]*)"[^>]*title="([^"]*)"[^>]*>"#,
-        )
-        .unwrap();
-
-        // Note: the date of an event li is determined by "walking back to the nearest data-day" (see below).
-        for cap in li_re.captures_iter(&month_html) {
-            let li_start = cap.get(0).unwrap().start();
-            // Walk back for the current day: take the last data-day before li_start
-            let mut day_val: Option<u32> = None;
-            for dcap in day_re.captures_iter(&month_html[..li_start]) {
-                day_val = dcap.get(1).and_then(|d| d.as_str().parse().ok());
-            }
-            let attrs = cap.get(1).map(|x| x.as_str()).unwrap_or("");
-            let id: u64 = cap.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
-            let url = cap.get(3).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let title = cap.get(4).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let component = regex::Regex::new(r#"data-event-component="([^"]*)""#)
-                .unwrap()
-                .captures(attrs)
-                .and_then(|m| m.get(1).map(|x| x.as_str().to_string()))
-                .unwrap_or_else(|| "core".to_string());
-            let event_type = regex::Regex::new(r#"data-event-eventtype="([^"]*)""#)
-                .unwrap()
-                .captures(attrs)
-                .and_then(|m| m.get(1).map(|x| x.as_str().to_string()))
-                .unwrap_or_else(|| "event".to_string());
-
-            let ts = if let (Some(y), Some(mo), Some(d)) = (year, month, day_val) {
-                chrono::NaiveDate::from_ymd_opt(y, mo, d)
-                    .and_then(|d0| d0.and_hms_opt(0, 0, 0))
-                    .map(|ndt| ndt.and_utc().timestamp() as u64)
-                    .unwrap_or(0)
-            } else {
-                0
-            };
-
-            if id != 0 {
-                events.insert(
-                    id,
-                    CalendarEvent {
-                        id,
-                        course_id: None,
-                        component,
-                        event_type,
-                        title,
-                        timestamp: ts,
-                        url,
-                    },
-                );
-            }
-        }
-
         // upcoming view: 21-day window, with course ID + precise timestamps
         let up_url = format!("{}/calendar/view.php?view=upcoming", base);
         let _permit = self.request_gate.acquire().await;
@@ -2468,55 +2401,7 @@ impl MoodleScraper {
             .await
             .map_err(|e| format!("Failed to read calendar upcoming view: {}", e))?;
 
-        let ev_re = regex::Regex::new(
-            r#"<div[^>]*data-type="event"[^>]*data-course-id="(\d+)"[^>]*data-event-id="(\d+)"[^>]*data-event-component="([^"]*)"[^>]*data-event-eventtype="([^"]*)"[^>]*data-event-title="([^"]*)"[^>]*>(?s).*?<h3[^>]*>(.*?)</h3>"#,
-        )
-        .unwrap();
-        let ts_re = regex::Regex::new(r#"view=day&(?:amp;)?time=(\d+)"#).unwrap();
-
-        for cap in ev_re.captures_iter(&up_html) {
-            let course_id: u64 = cap.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
-            let id: u64 = cap.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
-            let component = cap.get(3).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let event_type = cap.get(4).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let title = cap
-                .get(6)
-                .map(|m| m.as_str().trim().to_string())
-                .filter(|s| !s.is_empty())
-                .or_else(|| cap.get(5).map(|m| m.as_str().to_string()))
-                .unwrap_or_default();
-            let ts = cap
-                .get(0)
-                .and_then(|m| ts_re.captures(m.as_str()))
-                .and_then(|t| t.get(1))
-                .and_then(|t| t.as_str().parse::<u64>().ok())
-                .unwrap_or(0);
-            let url = format!("{}/calendar/view.php?view=day&time={}", base, ts);
-            if id != 0 {
-                events
-                    .entry(id)
-                    .and_modify(|e| {
-                        e.course_id = Some(course_id);
-                        if ts > 0 {
-                            e.timestamp = ts;
-                        }
-                        e.url = url.clone();
-                    })
-                    .or_insert(CalendarEvent {
-                        id,
-                        course_id: Some(course_id),
-                        component,
-                        event_type,
-                        title,
-                        timestamp: ts,
-                        url,
-                    });
-            }
-        }
-
-        let mut out: Vec<CalendarEvent> = events.into_values().collect();
-        out.sort_by_key(|e| e.timestamp);
-        Ok(out)
+        Ok(parse_calendar_events_from_html(&month_html, &up_html, base))
     }
 
     /// Course quiz list (/mod/quiz/index.php?id=<courseId>).
@@ -3580,13 +3465,14 @@ Follow these rules strictly:\n\
                     .and_then(|s| clean_resource_title(&s))
                     .or_else(|| section_title_for_activity(&li).and_then(|s| clean_resource_title(&s)));
                 let resource_type = classify_resource_type(&full_url, modtype.as_deref(), &title);
+                let week_num = section_title.as_deref().and_then(extract_week_num);
 
                 resources.push(Resource {
                     id: resource_id,
                     course_id,
                     name: title,
                     section: section_title,
-                    week_num: None,
+                    week_num,
                     resource_type,
                     url: full_url,
                     file_size: None,
@@ -3643,16 +3529,18 @@ Follow these rules strictly:\n\
                 let Some(title) = clean_resource_title(&title) else { continue };
                 let modtype = extract_modtype_from_url(&full_url);
                 let resource_type = classify_resource_type(&full_url, modtype.as_deref(), &title);
+                let section_title = section_ctx
+                    .as_ref()
+                    .map(|(_, label)| label.clone())
+                    .and_then(|s| clean_resource_title(&s));
+                let week_num = section_title.as_deref().and_then(extract_week_num);
 
                 resources.push(Resource {
                     id: resource_id,
                     course_id,
                     name: title,
-                    section: section_ctx
-                        .as_ref()
-                        .map(|(_, label)| label.clone())
-                        .and_then(|s| clean_resource_title(&s)),
-                    week_num: None,
+                    section: section_title,
+                    week_num,
                     resource_type,
                     url: full_url,
                     file_size: None,
@@ -3710,13 +3598,18 @@ Follow these rules strictly:\n\
 
                 let modtype = extract_modtype_from_url(href);
                 let resource_type = classify_resource_type(href, modtype.as_deref(), &title);
+                let section_title = section_ctx
+                    .as_ref()
+                    .map(|(_, label)| label.clone())
+                    .and_then(|s| clean_resource_title(&s));
+                let week_num = section_title.as_deref().and_then(extract_week_num);
 
                 resources.push(Resource {
                     id: resource_id,
                     course_id,
                     name: title,
-                    section: section_ctx.as_ref().map(|(_, label)| label.clone()).and_then(|s| clean_resource_title(&s)),
-                    week_num: None,
+                    section: section_title,
+                    week_num,
                     resource_type,
                     url: if href.starts_with("http") {
                         href.to_string()
@@ -3755,13 +3648,18 @@ Follow these rules strictly:\n\
 
                 let modtype = extract_modtype_from_url(&href);
                 let resource_type = classify_resource_type(&href, modtype.as_deref(), &title);
+                let section_title = section_ctx
+                    .as_ref()
+                    .map(|(_, label)| label.clone())
+                    .and_then(|s| clean_resource_title(&s));
+                let week_num = section_title.as_deref().and_then(extract_week_num);
 
                 resources.push(Resource {
                     id: resource_id,
                     course_id,
                     name: title,
-                    section: section_ctx.as_ref().map(|(_, label)| label.clone()).and_then(|s| clean_resource_title(&s)),
-                    week_num: None,
+                    section: section_title,
+                    week_num,
                     resource_type,
                     url: if href.starts_with("http") {
                         href
@@ -3777,7 +3675,9 @@ Follow these rules strictly:\n\
         // Derived field: extract the week number from the section label ("Week 1 - Module 1 - Part A | ..." -> 1),
         // for the frontend to collapse/group by week.
         for r in &mut resources {
-            r.week_num = r.section.as_deref().and_then(extract_week_num);
+            if r.week_num.is_none() {
+                r.week_num = r.section.as_deref().and_then(extract_week_num);
+            }
         }
 
         Ok(resources)
@@ -4271,9 +4171,10 @@ fn derive_short_name(full: &str) -> Option<String> {
 
 /// Extract the week number from a section label ("Week 1 - Module 1 - Part A | ..." -> 1).
 fn extract_week_num(section: &str) -> Option<u32> {
-    let re = regex::Regex::new(r"(?i)week\s+(\d{1,2})").ok()?;
-    re.captures(section)
-        .and_then(|c| c.get(1))
+    let re = regex::Regex::new(r"(?i)(?:^|\b)(?:week|wk)\s*(\d{1,2})\b|第\s*(\d{1,2})\s*周").ok()?;
+    let cap = re.captures(section)?;
+    cap.get(1)
+        .or_else(|| cap.get(2))
         .and_then(|m| m.as_str().parse().ok())
 }
 
@@ -4363,6 +4264,182 @@ fn find_forums_section(sections: &[(u64, String)]) -> Option<u64> {
         .iter()
         .find(|(_, label)| label.to_lowercase().contains("forum"))
         .map(|(num, _)| *num)
+}
+
+/// Parse calendar events from Moodle's month view and upcoming view HTML.
+pub fn parse_calendar_events_from_html(
+    month_html: &str,
+    up_html: &str,
+    base_url: &str,
+) -> Vec<CalendarEvent> {
+    // Year/month context: calendarwrapper carries data-year and data-month in any attribute order
+    let year: Option<i32> = regex::Regex::new(r#"data-year="(\d{4})""#)
+        .unwrap()
+        .captures(month_html)
+        .and_then(|cap| cap.get(1))
+        .and_then(|m| m.as_str().parse().ok());
+    let month: Option<u32> = regex::Regex::new(r#"data-month="(\d{1,2})""#)
+        .unwrap()
+        .captures(month_html)
+        .and_then(|cap| cap.get(1))
+        .and_then(|m| m.as_str().parse().ok());
+
+    // Per-day cell scan: event li[data-region=event-item] following td[data-day=N]
+    let mut events: std::collections::HashMap<u64, CalendarEvent> = std::collections::HashMap::new();
+    let day_ts_re = regex::Regex::new(r#"data-day-timestamp="(\d+)""#).unwrap();
+    let a_ts_re = regex::Regex::new(r#"data-timestamp="(\d+)""#).unwrap();
+    let day_re = regex::Regex::new(r#"<td[^>]*data-day="(\d{1,2})"[^>]*>"#).unwrap();
+    let li_re = regex::Regex::new(
+        r#"<li[^>]*data-region="event-item"([^>]*)>(?s).*?<a data-action="view-event"[^>]*data-event-id="(\d+)"[^>]*href="([^"]*)"[^>]*title="([^"]*)"[^>]*>"#,
+    )
+    .unwrap();
+
+    for cap in li_re.captures_iter(month_html) {
+        let li_start = cap.get(0).unwrap().start();
+        // Walk back for the current day: check timestamp or day number
+        let mut day_ts_val: Option<u64> = None;
+        let mut day_val: Option<u32> = None;
+        for dtcap in day_ts_re.captures_iter(&month_html[..li_start]) {
+            day_ts_val = dtcap.get(1).and_then(|d| d.as_str().parse().ok());
+        }
+        if day_ts_val.is_none() {
+            for atcap in a_ts_re.captures_iter(&month_html[..li_start]) {
+                day_ts_val = atcap.get(1).and_then(|d| d.as_str().parse().ok());
+            }
+        }
+        for dcap in day_re.captures_iter(&month_html[..li_start]) {
+            day_val = dcap.get(1).and_then(|d| d.as_str().parse().ok());
+        }
+        let attrs = cap.get(1).map(|x| x.as_str()).unwrap_or("");
+        let id: u64 = cap.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
+        let url = cap.get(3).map(|m| m.as_str().to_string()).unwrap_or_default();
+        let title = cap.get(4).map(|m| m.as_str().to_string()).unwrap_or_default();
+        let component = regex::Regex::new(r#"data-event-component="([^"]*)""#)
+            .unwrap()
+            .captures(attrs)
+            .and_then(|m| m.get(1).map(|x| x.as_str().to_string()))
+            .unwrap_or_else(|| "core".to_string());
+        let event_type = regex::Regex::new(r#"data-event-eventtype="([^"]*)""#)
+            .unwrap()
+            .captures(attrs)
+            .and_then(|m| m.get(1).map(|x| x.as_str().to_string()))
+            .unwrap_or_else(|| "event".to_string());
+
+        let ts = if let Some(direct_ts) = day_ts_val {
+            direct_ts
+        } else if let (Some(y), Some(mo), Some(d)) = (year, month, day_val) {
+            chrono::NaiveDate::from_ymd_opt(y, mo, d)
+                .and_then(|d0| d0.and_hms_opt(0, 0, 0))
+                .map(|ndt| ndt.and_utc().timestamp() as u64)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        if id != 0 {
+            events.insert(
+                id,
+                CalendarEvent {
+                    id,
+                    course_id: None,
+                    component,
+                    event_type,
+                    title,
+                    timestamp: ts,
+                    url,
+                },
+            );
+        }
+    }
+
+    // upcoming view: 21-day window, with course ID + precise timestamps
+    let ev_re = regex::Regex::new(
+        r#"<div[^>]*data-type="event"[^>]*data-course-id="(\d+)"[^>]*data-event-id="(\d+)"([^>]*)>"#,
+    )
+    .unwrap();
+    let comp_re = regex::Regex::new(r#"data-event-component="([^"]*)""#).unwrap();
+    let type_re = regex::Regex::new(r#"data-event-eventtype="([^"]*)""#).unwrap();
+    let title_re = regex::Regex::new(r#"data-event-title="([^"]*)""#).unwrap();
+    let ts_re = regex::Regex::new(r#"view=day&(?:amp;)?time=(\d+)"#).unwrap();
+    let a_ts_re2 = regex::Regex::new(r#"data-timestamp="(\d+)""#).unwrap();
+
+    for cap in ev_re.captures_iter(up_html) {
+        let div_start = cap.get(0).unwrap().start();
+        let course_id: u64 = cap.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
+        let id: u64 = cap.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
+        let attrs = cap.get(3).map(|m| m.as_str()).unwrap_or("");
+
+        let component = comp_re
+            .captures(attrs)
+            .and_then(|m| m.get(1))
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default();
+        let event_type = type_re
+            .captures(attrs)
+            .and_then(|m| m.get(1))
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default();
+        let title = title_re
+            .captures(attrs)
+            .and_then(|m| m.get(1))
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default();
+
+        let cap_len = cap.get(0).unwrap().end() - div_start;
+        let block_end = (div_start + 4000).min(up_html.len());
+        let block_slice = &up_html[div_start..block_end];
+        let next_ev_pos = if block_slice.len() > cap_len {
+            block_slice[cap_len..]
+                .find(r#"data-type="event""#)
+                .map(|p| cap_len + p)
+                .unwrap_or(block_slice.len())
+        } else {
+            block_slice.len()
+        };
+        let ev_slice = &block_slice[..next_ev_pos];
+
+        let ts = ts_re
+            .captures(ev_slice)
+            .and_then(|t| t.get(1))
+            .and_then(|t| t.as_str().parse::<u64>().ok())
+            .or_else(|| {
+                a_ts_re2
+                    .captures(ev_slice)
+                    .and_then(|t| t.get(1))
+                    .and_then(|t| t.as_str().parse::<u64>().ok())
+            })
+            .unwrap_or(0);
+
+        let url = format!("{}/calendar/view.php?view=day&time={}", base_url, ts);
+        if id != 0 {
+            events
+                .entry(id)
+                .and_modify(|e| {
+                    if course_id != 0 {
+                        e.course_id = Some(course_id);
+                    }
+                    if ts > 0 {
+                        e.timestamp = ts;
+                    }
+                    if !url.ends_with("time=0") {
+                        e.url = url.clone();
+                    }
+                })
+                .or_insert(CalendarEvent {
+                    id,
+                    course_id: if course_id != 0 { Some(course_id) } else { None },
+                    component,
+                    event_type,
+                    title,
+                    timestamp: ts,
+                    url,
+                });
+        }
+    }
+
+    let mut out: Vec<CalendarEvent> = events.into_values().collect();
+    out.sort_by_key(|e| e.timestamp);
+    out
 }
 
 /// Extract the modtype from a li.activity's classes ("modtype_resource" -> "resource").
@@ -6340,6 +6417,8 @@ mod tests {
     fn extract_week_num_parses_week_labels() {
         assert_eq!(extract_week_num("Week 1 - Module 1 - Part A | Elements of Machine Learning"), Some(1));
         assert_eq!(extract_week_num("Week 12 - Module 6 - B | Machine Learning Ethic and review"), Some(12));
+        assert_eq!(extract_week_num("Wk 3 - Readings"), Some(3));
+        assert_eq!(extract_week_num("第5周 课程资料"), Some(5));
         assert_eq!(extract_week_num("UNIT DASHBOARD"), None);
         assert_eq!(extract_week_num("Additional information and resources"), None);
     }
@@ -6519,5 +6598,41 @@ mod tests {
             quiz_child.is_some(),
             "at least one Quiz sub-assignment should inherit the 9% category weight"
         );
+    }
+
+    #[test]
+    fn test_parse_calendar_events_extracts_timestamps_correctly() {
+        // Month view where data-month comes BEFORE data-year (Moodle standard rendering)
+        let month_html = r#"
+            <div class="calendarwrapper" data-month="9" data-year="2026" data-view="month">
+                <table class="calendarmonth">
+                    <tbody>
+                        <tr>
+                            <td class="day" data-day="3" data-day-timestamp="1788441600">
+                                <div data-region="day-content">
+                                    <ul>
+                                        <li data-region="event-item" data-event-component="mod_quiz" data-event-eventtype="due">
+                                            <a data-action="view-event" data-event-id="9988" href="/mod/quiz/view.php?id=9988" title="In-semester test 1 week 6 is due"></a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        "#;
+        let up_html = r#"
+            <div data-type="event" data-course-id="5215" data-event-id="9988" data-event-component="mod_quiz" data-event-eventtype="due" data-event-title="In-semester test 1 week 6 is due">
+                <a href="/calendar/view.php?view=day&time=1788443700">View</a>
+            </div>
+        "#;
+        let events = parse_calendar_events_from_html(month_html, up_html, "https://learning.monash.edu");
+        assert_eq!(events.len(), 1);
+        let ev = &events[0];
+        assert_eq!(ev.id, 9988);
+        assert_eq!(ev.course_id, Some(5215));
+        assert_eq!(ev.timestamp, 1788443700); // exact timestamp from upcoming view overrides day-level
+        assert_eq!(ev.title, "In-semester test 1 week 6 is due");
     }
 }

@@ -147,6 +147,8 @@ export interface SavePathInput {
   url?: string;
   /** Section/week label (e.g. "Week 1 - Why Research Methods?"); used for per-section subfolders. */
   section?: string;
+  /** Week number extracted from the section label (Week 1 -> 1) */
+  weekNum?: number;
 }
 
 /**
@@ -168,19 +170,46 @@ export function computeSavePath(
   if (!opts.groupByCourse) return baseDir;
   const course = opts.courses.find((c) => c.id === (resource.courseId ?? 0));
   const courseDir = buildCourseDownloadDir(baseDir, resource.courseId ?? 0, course?.fullName, course?.shortName);
-  return buildSectionDownloadDir(courseDir, opts.groupBySection ? resource.section : undefined);
+  return buildSectionDownloadDir(
+    courseDir,
+    opts.groupBySection ? resource.section : undefined,
+    opts.groupBySection ? resource.weekNum : undefined
+  );
 }
 
 /**
  * Append the section/week as one more folder level: "<courseDir>/Week 1".
- * Skips empty / unparseable section labels so resources without a section
- * keep landing in the course root.
+ * - If weekNum is provided (>0), formats strictly as "Week N".
+ * - If weekNum is missing, attempts to extract "Week N" from the section title.
+ * - Otherwise falls back to the sanitized section title (e.g. "Orientation and Setup").
+ * - Skips empty / unparseable section labels so resources without a section
+ *   keep landing in the course root.
  */
-export function buildSectionDownloadDir(courseDir: string, section?: string): string {
-  if (!section) return courseDir;
-  const safe = sanitizeFolderName(section);
-  if (!safe || safe === "Course") return courseDir;
-  return courseDir ? `${courseDir}/${safe}` : safe;
+export function buildSectionDownloadDir(
+  courseDir: string,
+  section?: string,
+  weekNum?: number
+): string {
+  if (!section && (weekNum === undefined || weekNum === null || weekNum <= 0)) {
+    return courseDir;
+  }
+
+  let folderName: string;
+  if (weekNum && weekNum > 0) {
+    folderName = `Week ${weekNum}`;
+  } else if (section) {
+    const match = section.match(/(?:^|\b)(?:week|wk)\s*(\d{1,2})\b/i) || section.match(/第\s*(\d{1,2})\s*周/);
+    if (match) {
+      folderName = `Week ${match[1]}`;
+    } else {
+      folderName = sanitizeFolderName(section);
+    }
+  } else {
+    return courseDir;
+  }
+
+  if (!folderName || folderName === "Course") return courseDir;
+  return courseDir ? `${courseDir}/${folderName}` : folderName;
 }
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "other";

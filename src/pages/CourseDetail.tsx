@@ -377,7 +377,13 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   // "Download all in this course" reuses the shared batchDownload runner (same
   // concurrency pool, skipExisting dedup, and single summary toast as the Dashboard).
   const [courseBatchDownloading, setCourseBatchDownloading] = useState(false);
-  const handleDownloadResource = async (resource: { key: string; name: string; url?: string; section?: string }) => {
+  const handleDownloadResource = async (resource: {
+    key: string;
+    name: string;
+    url?: string;
+    section?: string;
+    weekNum?: number;
+  }) => {
     if (!resource.url || resourceDownloadingKey) return;
     const { upsertDownload } = useAppStore.getState();
     const settings = useAppStore.getState().settings;
@@ -397,7 +403,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
       const savePath = settings.groupDownloadsByCourse
         ? buildSectionDownloadDir(
             buildCourseDownloadDir(baseDir, courseId, course?.fullName, course?.shortName),
-            settings.groupDownloadsBySection ? resource.section : undefined
+            settings.groupDownloadsBySection ? resource.section : undefined,
+            settings.groupDownloadsBySection ? resource.weekNum : undefined
           )
         : baseDir;
       const { path: savedPath } = await downloadFile(resource.url, savePath);
@@ -875,6 +882,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                                             name: resource.name,
                                             url: resource.url,
                                             section: resource.section,
+                                            weekNum: resource.weekNum,
                                           })
                                         }
                                         aria-disabled={isThisDownloading}
