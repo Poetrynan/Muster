@@ -1,3 +1,25 @@
+# Muster v0.1.16
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.16_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.16/Muster_0.1.16_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.16_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.16/Muster_0.1.16_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.16_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.16/Muster_0.1.16_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.16_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.16/Muster_0.1.16_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Precise "Week N" subfolder organization.** Course materials downloaded via single download, course batch download, or dashboard cards are now neatly structured into clean `<downloadPath>/<CourseCode>/Week N/<File>` folders instead of full raw section labels.
+- **Robust week number extraction.** Recognizes `Week N`, `Wk N`, and `第N周` patterns, with graceful fallback to sanitized section folders for special topics (e.g. Orientation, Setup) and course root for uncategorized files.
+- **Fixed deadline shadowing in "Next 7 Days" timeline.** Real assignments with exact due dates and submission statuses now take precedence over calendar events, preventing zero-timestamp calendar entries from shadowing upcoming deadlines.
+- **Moodle calendar parser resilience.** Scraper now extracts `data-month` and `data-year` independently regardless of HTML attribute ordering in Moodle month views.
+
+---
+
 # Muster v0.1.15
 
 ## Download
