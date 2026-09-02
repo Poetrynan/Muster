@@ -561,7 +561,16 @@ export function Dashboard() {
                         ? t("dashboard.downloading")
                         : t("dashboard.download", { name: resource.name })
                     }
-                    onClick={() => handleDownload({ key: rowKey, name: resource.name, url: resource.url, courseId: resource.courseId })}
+                    onClick={() =>
+                      handleDownload({
+                        key: rowKey,
+                        name: resource.name,
+                        url: resource.url,
+                        courseId: resource.courseId,
+                        section: resource.section,
+                        weekNum: resource.weekNum,
+                      })
+                    }
                     className={downloadingId === rowKey ? "opacity-50 cursor-not-allowed" : ""}
                     title={
                       downloadingId === rowKey
@@ -705,7 +714,14 @@ export function Dashboard() {
   // Use `key` rather than resource.id as the spinner's unique identifier: the backend also parses
   // course/forum top-level links into Resources, whose ids are often 0 or duplicated, so clicking one
   // download button would leave every row sharing that id spinning.
-  const handleDownload = async (resource: { key: string; name: string; url?: string; courseId?: number }) => {
+  const handleDownload = async (resource: {
+    key: string;
+    name: string;
+    url?: string;
+    courseId?: number;
+    section?: string;
+    weekNum?: number;
+  }) => {
     const url = resource.url || "#";
     if (url === "#") {
       showToast(t("dashboard.downloadNoUrl"));
@@ -1029,16 +1045,27 @@ export function Dashboard() {
     return () => clearInterval(h);
   }, [isLoggedIn, setReminderBanner, t]);
 
-  // Unified deadline timeline: calendar events (close/due) + assignments (dueDateIso) merged, de-duplicated and sorted.
-  // Quizzes are covered by the mod_quiz close calendar events (the mod/quiz list is used by the course detail tab).
+  // Unified deadline timeline: assignments (dueDateIso/dueDate) + calendar events (close/due) merged, de-duplicated and sorted.
+  // Assignments are prioritized over day-level calendar events to retain exact due times and submission statuses.
   const deadlineItems = useMemo(() => {
     type Item = { key: string; courseId: number | null; kind: "quiz" | "assign"; title: string; ts: number };
     const items: Item[] = [];
+
+    // 1. Assignments take HIGHEST precedence: they contain exact due times from course assessment pages,
+    // submission status, and weight info.
+    (assignments || []).forEach((a) => {
+      const keyDate = a.dueDateIso || a.dueDate;
+      if (!keyDate) return;
+      const t = parseDueTimestamp(keyDate);
+      if (Number.isNaN(t) || t <= 0) return;
+      items.push({ key: `as:${a.id ?? a.name}:${keyDate}`, courseId: a.courseId, kind: "assign", title: a.name, ts: t });
+    });
+
+    // 2. Calendar events supplement assignments (e.g. quizzes or global events).
+    // Discard events with missing/zero timestamps (ts <= 0) so they don't corrupt the timeline.
     (calendarEvents || []).forEach((e) => {
       if (e.eventType === "open") return;
-      // Only deadlines of courses the user currently has. After a logout / fresh
-      // login the course list is empty and stale calendar events must not show;
-      // course-less global events (no courseId) only appear when courses exist.
+      if (!e.timestamp || e.timestamp <= 0) return;
       if (courses.length === 0) return;
       if (e.courseId != null && !courses.some((c) => c.id === e.courseId)) return;
       items.push({
@@ -1049,19 +1076,12 @@ export function Dashboard() {
         ts: e.timestamp * 1000,
       });
     });
-    (assignments || []).forEach((a) => {
-      // dueDateIso can be missing in caches written before v0.1.11 (the strict parser
-      // then failed on Moodle's "Due tomorrow" suffix); fall back to the raw due text
-      // so the unified timeline does not go stale until the next sync.
-      const keyDate = a.dueDateIso || a.dueDate;
-      if (!keyDate) return;
-      const t = parseDueTimestamp(keyDate);
-      if (Number.isNaN(t)) return;
-      items.push({ key: `as:${a.id ?? a.name}:${keyDate}`, courseId: a.courseId, kind: "assign", title: a.name, ts: t });
-    });
+
     const seen = new Set<string>();
     const norm = (s: string) =>
       s.toLowerCase().replace(/\s*(closes|opens|is due|due)\s*$/i, "").trim();
+
+    // De-duplicate: since assignments were inserted first, the rich assignment entry is preserved.
     const out = items.filter((it) => {
       const k = `${it.courseId ?? 0}|${norm(it.title)}`;
       if (seen.has(k)) return false;
@@ -1803,12 +1823,6 @@ export function Dashboard() {
               {dueSoonCount === 0 ? (
                 <div className="mb-6">
                   <p className="text-sm text-muted-foreground">{t("dashboard.upcomingEmpty")}</p>
-                  {/* TEMP diagnostic (v0.1.15): shows the data shape behind the empty state */}
-                  <p className="text-xs text-muted-foreground/70 mt-1 font-mono break-all">
-                    [diag] assignments={assignments.length}, withIso={assignments.filter((a) => !!a.dueDateIso).length},
-                    withDueDate={assignments.filter((a) => !!a.dueDate).length}, calEvents={(calendarEvents || []).length},
-                    calTs0={(calendarEvents || []).filter((e) => !e.timestamp).length}, deadlineItems={deadlineItems.length}
-                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6" role="list" aria-label={t("dashboard.dueIn7")}>
