@@ -81,6 +81,9 @@ interface AppState {
     announcements?: Announcement[];
     tabs?: CourseTabData[];
   }) => void;
+  hideCourse: (courseId: number) => void;
+  unhideCourse: (courseId: number) => void;
+  togglePinCourse: (courseId: number) => void;
   reset: () => void;
 }
 
@@ -102,6 +105,8 @@ const defaultSettings: AppSettings = {
   darkMode: "system",
   accentColor: "blue",
   courseSortBy: "term",
+  hiddenCourseIds: [],
+  pinnedCourseIds: [],
   downloadPath: "",
   openFolderAfterDownload: true,
   groupDownloadsByCourse: true,
@@ -275,6 +280,40 @@ export const useAppStore = create<AppState>()(
           ...state.syncStatus,
           isRunning: false,
           lastSync: new Date().toISOString(),
+        },
+      };
+    }),
+  hideCourse: (courseId) =>
+    set((state) => {
+      const hidden = state.settings.hiddenCourseIds || [];
+      if (hidden.includes(courseId)) return state;
+      return {
+        settings: {
+          ...state.settings,
+          hiddenCourseIds: [...hidden, courseId],
+        },
+      };
+    }),
+  unhideCourse: (courseId) =>
+    set((state) => {
+      const hidden = state.settings.hiddenCourseIds || [];
+      return {
+        settings: {
+          ...state.settings,
+          hiddenCourseIds: hidden.filter((id) => id !== courseId),
+        },
+      };
+    }),
+  togglePinCourse: (courseId) =>
+    set((state) => {
+      const pinned = state.settings.pinnedCourseIds || [];
+      const next = pinned.includes(courseId)
+        ? pinned.filter((id) => id !== courseId)
+        : [...pinned, courseId];
+      return {
+        settings: {
+          ...state.settings,
+          pinnedCourseIds: next,
         },
       };
     }),

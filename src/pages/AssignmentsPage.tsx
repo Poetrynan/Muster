@@ -47,7 +47,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const [submissionLoading, setSubmissionLoading] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submissionForId, setSubmissionForId] = useState<number | null>(null);
-  const { assignments, courses } = useAppStore();
+  const { assignments, courses, settings } = useAppStore();
+  const hiddenCourseIds = settings?.hiddenCourseIds || [];
   const { t } = useTranslation();
 
   // Task #46/#47 — top-level Unit selector: picking a course renders only that course's assignments, fixing the clutter of mixing all courses.
@@ -143,11 +144,13 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
 
   // ── Unit selector: aggregate the to-do count per course (effective pending/upcoming/overdue), excluding the portal course courseId=1
   const unitOptions = (() => {
-    const map = new Map<number, { label: string; pending: number }>();
+    const map = new Map<number, { label: string; pending: number; isHidden: boolean }>();
     for (const a of annotated) {
-      const entry = map.get(a.courseId) ?? { label: a.course, pending: 0 };
+      const isHidden = hiddenCourseIds.includes(a.courseId);
+      const entry = map.get(a.courseId) ?? { label: a.course, pending: 0, isHidden };
       const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
       if (
+        !isHidden &&
         (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
         !isTermEnded(courseFullMap.get(a.courseId))
       )
@@ -156,11 +159,15 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     }
     return [...map.entries()]
       .filter(([id]) => id !== 1)
-      .map(([id, v]) => ({ id, label: v.label, count: v.pending }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+      .map(([id, v]) => ({ id, label: v.label, count: v.pending, isHidden: v.isHidden }))
+      .sort((a, b) => {
+        if (a.isHidden !== b.isHidden) return a.isHidden ? 1 : -1;
+        return b.count - a.count || a.label.localeCompare(b.label);
+      });
   })();
 
   const allPendingCount = annotated.filter((a) => {
+    if (hiddenCourseIds.includes(a.courseId)) return false;
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
     return (
       (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
@@ -179,9 +186,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const DAY_MS = 1000 * 60 * 60 * 24;
   const bucketOf = (a: (typeof annotated)[number]): string => {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
-    // Anything from an ended term → archived bucket, whatever its state. This has to come before
-    // the submitted/graded checks or last semester's handed-in work never leaves the active list.
-    if (isTermEnded(courseFullMap.get(a.courseId))) return "archived";
+    // Anything from an ended term or ignored course → archived bucket, whatever its state.
+    if (hiddenCourseIds.includes(a.courseId) || isTermEnded(courseFullMap.get(a.courseId))) return "archived";
     if (eff === "submitted") return "submitted";
     if (eff === "graded") return "graded";
     const iso = a.dueDateIso || a.dueDate;
@@ -474,23 +480,27 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
 
         {/* Due soon — mt-auto pushes it to the bottom, shrink-0 keeps it from being squeezed */}
         <div className="p-6 mt-auto shrink-0">
-          {/* Uses a more saturated amber background + thick border + dark text so it does not blend into the sidebar's translucent glass background and turn grey.
-              relative keeps an independent stacking context so the shadow stays on top. */}
-          <Card className="relative bg-amber-200 dark:bg-amber-900/60 border-2 border-amber-500 dark:border-amber-600 shadow-xl">
+          <Card className="relative overflow-hidden bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/30 shadow-lg dark:shadow-[0_0_25px_rgba(245,158,11,0.08)] backdrop-blur-md">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
-                <AlertCircle className="w-4 h-4 text-amber-900 dark:text-amber-200" strokeWidth={2.5} />
-                <span className="text-sm font-bold text-amber-900 dark:text-amber-100">{t("assignments.dueSoon")}</span>
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" strokeWidth={2.5} />
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                  {t("assignments.dueSoon")}
+                </span>
               </div>
               {upcoming ? (
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                  {upcoming.name} ·{" "}
-                  <Badge variant="danger" className="font-bold">
-                    {t("assignments.dueIn", { days: upcomingDays ?? 0 })}
-                  </Badge>
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-foreground line-clamp-2">
+                    {upcoming.name}
+                  </p>
+                  <div>
+                    <Badge variant="danger" className="font-bold text-xs shadow-sm">
+                      {t("assignments.dueIn", { days: upcomingDays ?? 0 })}
+                    </Badge>
+                  </div>
+                </div>
               ) : (
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                <p className="text-sm text-muted-foreground">
                   {totalCount === 0 ? t("assignments.noData") : t("assignments.dueSoon")}
                 </p>
               )}

@@ -25,8 +25,15 @@ import {
   CloudDownload,
   Loader2,
   Sparkles,
+  MoreVertical,
+  EyeOff,
+  Eye,
+  Pin,
+  PinOff,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useState, lazy, Suspense, useCallback, useMemo, useRef } from "react";
+import { parseSemester, inferActiveSemesterKey, getSemesterTabs } from "../lib/courseHelpers";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -258,9 +265,45 @@ export function Dashboard() {
     setCalendarEvents,
     gradeOverview,
     setGradeOverview,
+    hideCourse,
+    unhideCourse,
+    togglePinCourse,
   } = useAppStore();
 
   const { t } = useTranslation();
+
+  const hiddenCourseIds = useMemo(() => settings.hiddenCourseIds || [], [settings.hiddenCourseIds]);
+  const pinnedCourseIds = useMemo(() => settings.pinnedCourseIds || [], [settings.pinnedCourseIds]);
+
+  const [selectedSemesterTab, setSelectedSemesterTab] = useState<string>("current");
+  const [activeActionMenuCourseId, setActiveActionMenuCourseId] = useState<number | null>(null);
+
+  // Close card action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (activeActionMenuCourseId != null) {
+        const target = e.target as HTMLElement;
+        if (!target.closest(".course-action-menu")) {
+          setActiveActionMenuCourseId(null);
+        }
+      }
+    };
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [activeActionMenuCourseId]);
+
+  const openCourseInBrowser = async (courseId: number) => {
+    const url = `https://lms.monash.edu/course/view.php?id=${courseId}`;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_in_app_webview", { url, title: "Monash Moodle" });
+    } catch {
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(url);
+      } catch { /* silent */ }
+    }
+  };
 
   // P1: extract the real error message — Tauri's invoke rejects with a plain string rather than an Error instance,
   // so we must handle string / { message } / Error, otherwise the actual Rust error gets swallowed by the i18n fallback text.
@@ -309,18 +352,25 @@ export function Dashboard() {
   };
 
   // Portal/hub courses are excluded from stats and resource aggregation
-  const realCourses = courses.filter((c: any) => !c.isPortal);
+  const realCourses = useMemo(() => courses.filter((c: any) => !c.isPortal), [courses]);
+  const activeRealCourses = useMemo(
+    () => realCourses.filter((c: any) => !hiddenCourseIds.includes(c.id)),
+    [realCourses, hiddenCourseIds]
+  );
+  const semesterTabs = useMemo(() => getSemesterTabs(realCourses, hiddenCourseIds), [realCourses, hiddenCourseIds]);
+  const currentSemesterKey = useMemo(() => inferActiveSemesterKey(activeRealCourses), [activeRealCourses]);
 
   // Assignment stat counts — aligned with the AssignmentsPage left sidebar so
   // the dashboard numbers never disagree with the assignments list:
   //   - Untracked items (hasSubmissionStatus === false, the "41 无提交状态" group)
   //     are excluded from the pending denominator
-  //   - Ended-term courses are excluded so last-semester leftovers don't inflate
+  //   - Ended-term courses and ignored courses are excluded so last-semester leftovers don't inflate
   //     the dashboard pending count
   const pendingAssignmentsCount = assignments.filter((a: any) => {
     if (!a) return false;
     if (a.status === "submitted" || a.status === "graded") return false;
     if (a.hasSubmissionStatus === false) return false;
+    if (hiddenCourseIds.includes(a.courseId)) return false;
     const course = courses.find((c: any) => c?.id === a.courseId);
     if (isTermEnded(course?.fullName || course?.shortName)) return false;
     return true;
@@ -698,6 +748,7 @@ export function Dashboard() {
       setLoadError(errMsg(err, "dashboard.syncFailed"));
     } finally {
       setSyncStatus({ isRunning: false });
+      setSyncProgress(null);
     }
   }, [syncStatus.isRunning, setSyncStatus, updateAllSyncedData, t]);
 
@@ -851,12 +902,14 @@ export function Dashboard() {
         // Handle the fetchCourses result
         if (fetched.status === "fulfilled" && fetched.value) {
           setStoreCourses(fetched.value);
+          setIsLoadingCourses(false);
         }
 
         // Handle the syncAll result (includes courses/resources/assignments/announcements)
         // In dev mode shouldAutoSync=false, so synced.value is null and we simply skip
         if (synced.status === "fulfilled" && synced.value) {
           updateAllSyncedData(synced.value);
+          setIsLoadingCourses(false);
           // Stamp the cooldown timestamp ONLY after a successful sync. A failed auto-sync
           // must not suppress the next launch's auto-sync (see note above).
           useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
@@ -885,6 +938,7 @@ export function Dashboard() {
       } finally {
         if (isMounted) {
           setIsLoadingCourses(false);
+          setSyncProgress(null);
           // Only lower the flag this run raised. When the periodic auto-sync already had a
           // sync in flight, clearing here made the sync banner vanish within a second of
           // login while the scrape was still running — a fresh user saw an empty dashboard
@@ -1083,13 +1137,14 @@ export function Dashboard() {
 
     // De-duplicate: since assignments were inserted first, the rich assignment entry is preserved.
     const out = items.filter((it) => {
+      if (it.courseId != null && hiddenCourseIds.includes(it.courseId)) return false;
       const k = `${it.courseId ?? 0}|${norm(it.title)}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
     });
     return out.sort((a, b) => a.ts - b.ts);
-  }, [calendarEvents, assignments, courses]);
+  }, [calendarEvents, assignments, courses, hiddenCourseIds]);
 
   const dueSoonCount = deadlineItems.filter((d) => d.ts >= Date.now() && d.ts <= Date.now() + 7 * 86_400_000).length;
   const gradedCount = (gradeOverview || []).filter((g) => g.grade !== "-").length;
@@ -1141,49 +1196,59 @@ export function Dashboard() {
   };
 
   // Map real courses to the card shape used by the grid.
-  // Deliberately no progress field: Moodle exposes no real study progress, the previously hardcoded 50% was fake data,
-  // and showing an identical progress bar on every course misled users, so it was removed entirely.
+  // Supports semester filtering, pin-to-top, and ignoring/hiding.
   const displayCourses = useMemo(() => {
     const list = (courses || []).map((c) => {
-      // One raw string in, three deduplicated slots out. Prefer fullName because it is the
-      // richer of the two (shortName is only ever a prefix of it), and fall back to a stable
-      // placeholder so the card never renders blank.
       const raw = c.fullName || c.shortName || `Course ${c.id}`;
       const parts = describeCourse(raw);
+      const sem = parseSemester(raw);
       return {
         id: c.id,
-        // Only trust shortName when it actually differs from fullName. When they are equal
-        // (the pre-sync path) using it would print the whole course name on the banner and
-        // then again as the title.
         code: parts.code ?? (c.shortName && c.shortName !== c.fullName ? tidyName(c.shortName) : null),
         name: parts.title,
         term: parts.term,
         isPortal: c.isPortal,
+        semesterInfo: sem,
+        isPinned: pinnedCourseIds.includes(c.id),
+        isHidden: hiddenCourseIds.includes(c.id),
       };
     });
-    const sortBy = settings.courseSortBy ?? "term";
-    if (sortBy === "name") {
-      return [...list].sort((a, b) => a.name.localeCompare(b.name));
-    }
-    // term order: S1 2025 -> S2 2025 -> S1 2026 ...; unparseable last.
-    // Reads the already-extracted `term` rather than re-parsing the title, which no
-    // longer carries the term now that the card shows it on its own line.
-    const termKey = (n: string | null): [number, number] => {
-      const m = n?.match(/\bS([12])\s*[\u002D\u2013\u2014]?\s*(\d{4})\b/i);
-      if (!m) return [9999, 0];
-      return [parseInt(m[2], 10), parseInt(m[1], 10)];
-    };
-    return [...list].sort((a, b) => {
-      const ka = termKey(a.term);
-      const kb = termKey(b.term);
-      return ka[0] - kb[0] || ka[1] - kb[1] || a.name.localeCompare(b.name);
-    });
-  }, [courses, settings.courseSortBy]);
 
-  // Stats are computed from real data.
+    // Filtering based on selectedSemesterTab
+    let filtered = list;
+    if (selectedSemesterTab === "hidden") {
+      filtered = list.filter((c) => c.isHidden);
+    } else if (selectedSemesterTab === "current") {
+      filtered = list.filter((c) => {
+        if (c.isHidden) return false;
+        if (currentSemesterKey === "all") return !c.isPortal;
+        return c.semesterInfo.key === currentSemesterKey || (c.semesterInfo.isCrossSemester && currentSemesterKey.startsWith(String(c.semesterInfo.year)));
+      });
+      // Fallback: If current semester has 0 active courses, show all active courses
+      if (filtered.length === 0) {
+        filtered = list.filter((c) => !c.isHidden);
+      }
+    } else if (selectedSemesterTab === "all") {
+      filtered = list.filter((c) => !c.isHidden);
+    } else {
+      filtered = list.filter((c) => !c.isHidden && c.semesterInfo.key === selectedSemesterTab);
+    }
+
+    const sortBy = settings.courseSortBy ?? "term";
+    return [...filtered].sort((a, b) => {
+      // Pinned courses always stay on top
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name);
+      }
+      return b.semesterInfo.sortWeight - a.semesterInfo.sortWeight || a.name.localeCompare(b.name);
+    });
+  }, [courses, settings.courseSortBy, selectedSemesterTab, currentSemesterKey, hiddenCourseIds, pinnedCourseIds]);
+
+  // Stats are computed from active non-hidden data.
   const quickStats = [
     { label: t("dashboard.statDueSoon"), value: dueSoonCount, icon: CalendarDays, color: "text-amber-500" },
-    { label: t("dashboard.statTotalCourses"), value: realCourses.length, icon: BookOpen, color: "text-primary" },
+    { label: t("dashboard.statTotalCourses"), value: activeRealCourses.length, icon: BookOpen, color: "text-primary" },
     { label: t("dashboard.statPending"), value: pendingAssignmentsCount, icon: Calendar, color: "text-accent" },
     { label: t("dashboard.statNewNotices"), value: (announcements || []).length, icon: Bell, color: "text-info" },
     { label: t("dashboard.statCompleted"), value: completedAssignmentsCount, icon: GraduationCap, color: "text-success" },
@@ -1259,7 +1324,13 @@ export function Dashboard() {
       );
     }
     if (displayCourses.length === 0) {
-      return <p className="text-muted-foreground">{t("dashboard.noCourses")}</p>;
+      return (
+        <div className="py-12 text-center">
+          <p className="text-muted-foreground text-sm">
+            {selectedSemesterTab === "hidden" ? t("courses.emptyHidden") : t("courses.emptySemester")}
+          </p>
+        </div>
+      );
     }
     return (
       <div
@@ -1276,7 +1347,9 @@ export function Dashboard() {
           >
             {/* h-full + flex-col make each card fill the grid row height, keeping equal heights regardless of course name length */}
             <Card
-              className="card-hover-scale cursor-pointer overflow-hidden touch-manipulation h-full flex flex-col"
+              className={`card-hover-scale cursor-pointer overflow-hidden touch-manipulation h-full flex flex-col relative transition-all duration-200 ${
+                course.isHidden ? "opacity-75 border-dashed border-amber-500/40 bg-card/60" : ""
+              }`}
               onClick={() => setSelectedCourseId(course.id)}
             >
               <div
@@ -1293,6 +1366,104 @@ export function Dashboard() {
                      from repeating the title that sits right underneath it. */
                   <BookOpen className="w-8 h-8 text-white/90" />
                 )}
+
+                {/* Top-right Actions & Badges */}
+                <div
+                  className="absolute top-2 right-2 flex items-center gap-1.5 z-10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {course.isPinned && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-md bg-black/40 text-amber-300 text-[10px] font-bold flex items-center gap-1 backdrop-blur-sm shadow-sm"
+                      title={t("courses.pinnedBadge")}
+                    >
+                      <Pin className="w-2.5 h-2.5 fill-current" />
+                    </span>
+                  )}
+
+                  <div className="relative course-action-menu">
+                    <button
+                      type="button"
+                      className="w-7 h-7 rounded-lg bg-black/30 hover:bg-black/50 text-white/90 flex items-center justify-center backdrop-blur-sm transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveActionMenuCourseId(activeActionMenuCourseId === course.id ? null : course.id);
+                      }}
+                      aria-label="Course actions"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {activeActionMenuCourseId === course.id && (
+                      <div
+                        className="absolute right-0 top-8 w-44 rounded-xl border bg-popover/95 backdrop-blur-md p-1.5 shadow-xl text-popover-foreground z-50 animate-in fade-in zoom-in-95 duration-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-secondary transition-colors text-left"
+                          onClick={() => {
+                            togglePinCourse(course.id);
+                            setActiveActionMenuCourseId(null);
+                          }}
+                        >
+                          {course.isPinned ? (
+                            <>
+                              <PinOff className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>{t("courses.actionUnpin")}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pin className="w-3.5 h-3.5 text-amber-500" />
+                              <span>{t("courses.actionPin")}</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-secondary transition-colors text-left"
+                          onClick={() => {
+                            if (course.isHidden) {
+                              unhideCourse(course.id);
+                              showToast(t("courses.toastRestored"));
+                            } else {
+                              hideCourse(course.id);
+                              showToast(t("courses.toastHidden"));
+                            }
+                            setActiveActionMenuCourseId(null);
+                          }}
+                        >
+                          {course.isHidden ? (
+                            <>
+                              <Eye className="w-3.5 h-3.5 text-success" />
+                              <span>{t("courses.actionUnhide")}</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5 text-destructive" />
+                              <span>{t("courses.actionHide")}</span>
+                            </>
+                          )}
+                        </button>
+
+                        <div className="h-px bg-border my-1" />
+
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-secondary transition-colors text-left"
+                          onClick={() => {
+                            openCourseInBrowser(course.id);
+                            setActiveActionMenuCourseId(null);
+                          }}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{t("courses.actionOpenInBrowser")}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <CardContent className="p-4 flex-1 flex flex-col">
                 {/* min-h reserves two lines of height so a card with a one-line title isn't shorter than a two-line one */}
@@ -1302,11 +1473,26 @@ export function Dashboard() {
                 <h4 className="font-semibold mb-1 text-foreground line-clamp-2 min-h-[2.75rem]">
                   {course.name}
                 </h4>
-                {course.term && (
-                  <div className="flex items-center mt-auto">
-                    <p className="text-sm text-muted-foreground">{course.term}</p>
-                  </div>
-                )}
+                <div className="flex items-center justify-between mt-auto pt-2">
+                  {course.term && (
+                    <p className="text-xs text-muted-foreground">{course.term}</p>
+                  )}
+                  {course.isHidden && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-6 text-[11px] px-2 ml-auto gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        unhideCourse(course.id);
+                        showToast(t("courses.toastRestored"));
+                      }}
+                    >
+                      <Eye className="w-3 h-3 text-success" />
+                      <span>{t("courses.actionUnhide")}</span>
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1690,7 +1876,7 @@ export function Dashboard() {
 
           {/* Real-time Syncing Progress Banner — shown for the startup auto-sync
               (first run and every later launch) AND for manual syncs. */}
-          {(syncStatus.isRunning || isLoadingCourses) && (
+          {syncStatus.isRunning && (
             <div className="mb-6 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/15 via-primary/5 to-info/15 backdrop-blur-md p-5 shadow-sm overflow-hidden">
               <div className="flex items-center gap-4">
                 {/* Progress ring with real % when the backend reports it, spinning arc otherwise */}
@@ -1966,18 +2152,71 @@ export function Dashboard() {
           {/* ============================================================ */}
           {activeTab === "courses" && (
             <>
-              <div className="mb-8 flex items-center justify-between">
+              <div className="mb-6 flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold mb-2 text-foreground">
+                  <h2 className="text-2xl font-bold mb-1 text-foreground">
                     {t("dashboard.coursesTitle")}
                   </h2>
-                  <p className="text-muted-foreground line-length">
+                  <p className="text-muted-foreground text-sm line-length">
                     {t("dashboard.coursesSubtitle")}
                   </p>
                 </div>
                 <span className="text-sm text-muted-foreground font-mono flex-shrink-0">
                   {t("dashboard.coursesCount", { count: displayCourses.length })}
                 </span>
+              </div>
+
+              {/* Semester Filter Segmented Pills */}
+              <div
+                className="flex items-center gap-2 mb-6 overflow-x-auto pb-1.5 scrollbar-none"
+                role="tablist"
+                aria-label={t("dashboard.coursesTitle")}
+              >
+                <Button
+                  variant={selectedSemesterTab === "current" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedSemesterTab("current")}
+                  className="gap-1.5 shrink-0 rounded-full font-medium"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{t("courses.filterCurrent")}</span>
+                </Button>
+
+                {semesterTabs.map((tab) => (
+                  <Button
+                    key={tab.key}
+                    variant={selectedSemesterTab === tab.key ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedSemesterTab(tab.key)}
+                    className="gap-1.5 shrink-0 rounded-full"
+                  >
+                    <span>{tab.label}</span>
+                    <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-muted/60 font-mono">
+                      {tab.count}
+                    </span>
+                  </Button>
+                ))}
+
+                <Button
+                  variant={selectedSemesterTab === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedSemesterTab("all")}
+                  className="shrink-0 rounded-full"
+                >
+                  <span>{t("courses.filterAll")}</span>
+                </Button>
+
+                {hiddenCourseIds.length > 0 && (
+                  <Button
+                    variant={selectedSemesterTab === "hidden" ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => setSelectedSemesterTab("hidden")}
+                    className="gap-1.5 shrink-0 rounded-full text-muted-foreground hover:text-foreground ml-auto border border-dashed border-border/80"
+                  >
+                    <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{t("courses.filterHidden", { count: hiddenCourseIds.length })}</span>
+                  </Button>
+                )}
               </div>
 
               {loadError && (
