@@ -1,3 +1,27 @@
+# Muster v0.1.17
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.17_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.17/Muster_0.1.17_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.17_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.17/Muster_0.1.17_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.17_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.17/Muster_0.1.17_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.17_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.17/Muster_0.1.17_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Course Management & Semester Classification (Issue #10).** Intelligent parsing for all Monash term patterns (`S1 YYYY`, `S2 YYYY`, cross-term `S1 YYYY - S2 YYYY`, and Summer/Winter). The Courses view now features a smart segmented pill filter (`⭐ Current Term`, historical semesters, `All`, and `Ignored`).
+- **Course Pinning & Ignoring.** Added a quick action menu (`···`) on course cards to pin priority units to the top of the grid or hide completed/withdrawn courses.
+- **Dedicated Ignored Courses Management.** Restorable at any time from the Courses tab `[ 🚫 Ignored (N) ]` or under Settings $\rightarrow$ Appearance with one-click full restore.
+- **Full-link Dashboard & Deadline Isolation.** Hidden courses are automatically excluded from the "Next 7 Days" timeline, pending assignment counters, and total course metrics to eliminate academic noise.
+- **Translucent Luminous Due Soon Card.** Fixed dark-mode muddy brown color mixing on the Assignments page sidebar, upgrading to a crisp modern luminous amber warning card.
+- **Fixed Persistent 100% Auto-Sync Banner.** Resolved state race where the sync progress banner remained visible after sync finished while background auxiliary endpoints were awaiting.
+
+---
+
 # Muster v0.1.16
 
 ## Download

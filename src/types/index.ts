@@ -157,6 +157,10 @@ export interface AppSettings {
   accentColor: AccentColor;
   /** Course card sorting: term=by term, name=by name */
   courseSortBy: "term" | "name";
+  /** Ignored / hidden course IDs (persisted locally, excluded from dashboard / deadlines) */
+  hiddenCourseIds?: number[];
+  /** Pinned course IDs (pinned to top of course grid) */
+  pinnedCourseIds?: number[];
   downloadPath: string;
   /** Reveal downloaded file in file manager after download completes */
   openFolderAfterDownload: boolean;

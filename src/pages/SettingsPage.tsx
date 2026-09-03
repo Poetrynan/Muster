@@ -87,7 +87,7 @@ function formatAiError(
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
-  const { user, settings, updateSettings, updateAllSyncedData, setSyncStatus, syncStatus } = useAppStore();
+  const { user, settings, updateSettings, updateAllSyncedData, setSyncStatus, syncStatus, courses, unhideCourse } = useAppStore();
   const { t } = useTranslation();
 
   // GitHub Release update check state
@@ -608,6 +608,56 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       </button>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Ignored Courses Management */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle>{t("settings.courses.hiddenManagement")}</CardTitle>
+                    <CardDescription>{t("settings.courses.hiddenDesc")}</CardDescription>
+                  </div>
+                  {(settings.hiddenCourseIds || []).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateSettings({ hiddenCourseIds: [] })}
+                      className="text-xs shrink-0"
+                    >
+                      {t("settings.courses.restoreAll")}
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {(settings.hiddenCourseIds || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">
+                      {t("settings.courses.noHidden")}
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(settings.hiddenCourseIds || []).map((id) => {
+                        const course = courses.find((c) => c.id === id);
+                        const courseName = course ? course.fullName || course.shortName : `Course #${id}`;
+                        return (
+                          <div
+                            key={id}
+                            className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/50 border border-border/50 text-sm"
+                          >
+                            <span className="font-medium truncate mr-3">{courseName}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs px-2 text-primary hover:text-primary"
+                              onClick={() => unhideCourse(id)}
+                            >
+                              {t("courses.actionUnhide")}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
