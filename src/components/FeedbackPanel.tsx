@@ -34,17 +34,27 @@ type FailureKind = "network" | "rate" | "server";
 
 export function FeedbackPanel() {
   const { t } = useTranslation();
-  const { settings } = useAppStore();
+  const { settings, user, courses } = useAppStore();
 
   const [kind, setKind] = useState<FeedbackKind>("bug");
   const [message, setMessage] = useState("");
-  const [contact, setContact] = useState("");
+  const [contact, setContact] = useState(user?.email || "");
   const [state, setState] = useState<SendState>("idle");
   const [failure, setFailure] = useState<FailureKind | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+
+  const trimmedEmail = contact.trim();
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+
+  // Sync user email when user profile becomes available
+  useEffect(() => {
+    if (!contact && user?.email) {
+      setContact(user.email);
+    }
+  }, [user?.email, contact]);
 
   // Last body we actually delivered. Kept in a ref because it must survive the
   // success screen and "write another" without triggering a re-render of its own.
@@ -109,7 +119,7 @@ export function FeedbackPanel() {
 
   const handleSubmit = async () => {
     const body = message.trim();
-    if (!body || state === "sending" || cooldown > 0) return;
+    if (!body || !isEmailValid || state === "sending" || cooldown > 0) return;
 
     if (body === lastSentRef.current) {
       setIsDuplicate(true);
@@ -125,10 +135,12 @@ export function FeedbackPanel() {
         body: JSON.stringify({
           type: kind,
           message: body,
-          contact: contact.trim() || "(not provided)",
+          contact: trimmedEmail,
           appVersion: meta.version,
           language: meta.language,
           platform: meta.platform,
+          courseCount: courses.length,
+          coursesList: courses.map((c) => c.shortName ? `${c.shortName} (${c.fullName})` : c.fullName).join("; ") || "none",
         }),
       });
       if (!res.ok) {
@@ -150,7 +162,7 @@ export function FeedbackPanel() {
   const handleWriteAnother = () => {
     setKind("bug");
     setMessage("");
-    setContact("");
+    setContact(user?.email || "");
     setState("idle");
     setFailure(null);
     setIsDuplicate(false);
@@ -218,16 +230,18 @@ export function FeedbackPanel() {
                   className="flex w-full resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 transition-all duration-200"
                 />
 
-                {/* Optional contact */}
+                {/* Required contact email */}
                 <div>
                   <Input
                     type="email"
+                    required
                     value={contact}
                     onChange={(e) => setContact(e.target.value)}
                     placeholder={t("feedback.contactPlaceholder")}
+                    className={contact && !isEmailValid ? "border-destructive focus-visible:ring-destructive/20" : ""}
                   />
-                  <p className="mt-1 px-1 text-[11px] text-muted-foreground">
-                    {t("feedback.contactHint")}
+                  <p className={`mt-1 px-1 text-[11px] ${contact && !isEmailValid ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                    {contact && !isEmailValid ? t("feedback.contactInvalid") : t("feedback.contactHint")}
                   </p>
                 </div>
 
@@ -240,6 +254,12 @@ export function FeedbackPanel() {
                   <ul className="space-y-1 text-[11px] text-muted-foreground">
                     <li>{t("feedback.attachedVersion", { version: meta.version })}</li>
                     <li>{t("feedback.attachedLanguage", { language: meta.language })}</li>
+                    <li>
+                      {t("feedback.attachedCourses", {
+                        count: String(courses.length),
+                        courses: courses.map((c) => c.shortName || c.fullName).slice(0, 5).join(", ") + (courses.length > 5 ? "..." : "") || "none",
+                      })}
+                    </li>
                     <li className="break-all">
                       {t("feedback.attachedPlatform", {
                         platform: systemInfo
@@ -271,7 +291,7 @@ export function FeedbackPanel() {
                   )}
                   <Button
                     onClick={handleSubmit}
-                    disabled={!message.trim() || state === "sending" || cooldown > 0}
+                    disabled={!message.trim() || !isEmailValid || state === "sending" || cooldown > 0}
                     className="gap-2"
                   >
                     {state === "sending" ? (
