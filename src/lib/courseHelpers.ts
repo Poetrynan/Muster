@@ -42,7 +42,9 @@ export function parseSemester(courseName: string): SemesterInfo {
       year: endYear,
       termNumber: 2,
       isCrossSemester: true,
-      sortWeight: endYear * 10 + 2,
+      // Slightly lower sort weight than standard S2 of that year (e.g. 20261.9 vs 20262)
+      // so the primary single-term 2026 S2 pill renders before the cross-semester pill.
+      sortWeight: endYear * 10 + 1.9,
     };
   }
 
@@ -88,10 +90,35 @@ export function parseSemester(courseName: string): SemesterInfo {
 }
 
 /**
+ * Check if a course is active in the given semester.
+ * Handles both exact semester matches and cross-semester units spanning this semester.
+ * E.g., if targetSemesterKey is "2026-S2":
+ * - A course with "2026-S2" returns true.
+ * - A course with "2026-S1-2026-S2" returns true (because it spans through S2 2026).
+ */
+export function isCourseInSemester(sem: SemesterInfo, targetSemesterKey: string): boolean {
+  if (targetSemesterKey === "all") return true;
+  if (sem.key === targetSemesterKey) return true;
+
+  if (sem.isCrossSemester) {
+    const parts = sem.key.split("-");
+    if (parts.length === 4) {
+      const startKey = `${parts[0]}-${parts[1]}`;
+      const endKey = `${parts[2]}-${parts[3]}`;
+      if (targetSemesterKey === startKey || targetSemesterKey === endKey) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Automatically infer the current active semester key based on:
  * 1. Monash University calendar timing (Feb-June: S1, July-Nov: S2, Dec-Jan: Summer).
- * 2. If the current calendar term matches courses the student actually has, use it.
- * 3. Otherwise fallback to the highest (newest) semester present in the student's courses.
+ * 2. Exact match against standard semesters the student is enrolled in (e.g. 2026-S2).
+ * 3. Fallback to cross-semester units or the newest semester present in the student's courses.
  */
 export function inferActiveSemesterKey(courses: Course[]): string {
   const now = new Date();
@@ -114,14 +141,27 @@ export function inferActiveSemesterKey(courses: Course[]): string {
   const naturalKey = `${currentYear}-${naturalTerm}`;
 
   const availableSemesters = courses.map((c) => parseSemester(c.fullName || c.shortName || ""));
-  
-  // Check if naturalKey exists in courses
-  const match = availableSemesters.find((s) => s.key === naturalKey || (s.isCrossSemester && s.year === currentYear));
-  if (match) {
-    return match.key;
+
+  // 1. Strict exact match on standard primary semester (e.g. 2026-S2) - HIGHEST priority!
+  const exactMatch = availableSemesters.find((s) => s.key === naturalKey && !s.isCrossSemester);
+  if (exactMatch) {
+    return exactMatch.key;
   }
 
-  // Fallback: pick the highest sortWeight among parsed semesters
+  // 2. Cross-semester match if no standard semester exists
+  const crossMatch = availableSemesters.find((s) => s.isCrossSemester && s.year === currentYear);
+  if (crossMatch) {
+    return crossMatch.key;
+  }
+
+  // 3. Fallback: newest standard semester
+  const validStandard = availableSemesters.filter((s) => s.sortWeight > 0 && !s.isCrossSemester);
+  if (validStandard.length > 0) {
+    validStandard.sort((a, b) => b.sortWeight - a.sortWeight);
+    return validStandard[0].key;
+  }
+
+  // 4. Fallback: newest overall semester
   const validSemesters = availableSemesters.filter((s) => s.sortWeight > 0);
   if (validSemesters.length > 0) {
     validSemesters.sort((a, b) => b.sortWeight - a.sortWeight);

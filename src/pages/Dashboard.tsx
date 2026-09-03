@@ -33,7 +33,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useEffect, useState, lazy, Suspense, useCallback, useMemo, useRef } from "react";
-import { parseSemester, inferActiveSemesterKey, getSemesterTabs } from "../lib/courseHelpers";
+import { parseSemester, inferActiveSemesterKey, getSemesterTabs, isCourseInSemester } from "../lib/courseHelpers";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -1222,7 +1222,7 @@ export function Dashboard() {
       filtered = list.filter((c) => {
         if (c.isHidden) return false;
         if (currentSemesterKey === "all") return !c.isPortal;
-        return c.semesterInfo.key === currentSemesterKey || (c.semesterInfo.isCrossSemester && currentSemesterKey.startsWith(String(c.semesterInfo.year)));
+        return isCourseInSemester(c.semesterInfo, currentSemesterKey);
       });
       // Fallback: If current semester has 0 active courses, show all active courses
       if (filtered.length === 0) {
