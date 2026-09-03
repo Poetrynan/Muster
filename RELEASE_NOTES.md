@@ -1,3 +1,24 @@
+# Muster v0.1.18
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.18_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.18/Muster_0.1.18_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.18_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.18/Muster_0.1.18_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.18_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.18/Muster_0.1.18_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.18_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.18/Muster_0.1.18_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Full Mid-Year & Cross-Year Thesis Support.** Supports all Monash cross-term patterns including mid-year intake theses spanning cross-year (`S2 YYYY - S1 (YYYY+1)`). Current active semester intelligently includes all regular semester courses and in-progress thesis units.
+- **Fixed Download Settings Layout.** Resolved broken flex row layout where "Organize downloads by course" and "Group downloads by week" were jammed into the same horizontal space. Options now render on distinct, cleanly aligned full-width rows.
+- **Mandatory Feedback Email & Course Diagnostic Snapshot.** Feedback submissions now strictly require a valid contact email (pre-filled with the student's logged-in email). Submissions also securely attach synced course summary metadata to allow immediate debugging of missed courses without guessing.
+
+---
+
 # Muster v0.1.17
 
 ## Download
