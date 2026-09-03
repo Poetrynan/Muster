@@ -2,21 +2,23 @@ import type { Course } from "../services/api";
 
 export interface SemesterInfo {
   key: string;              // e.g. "2026-S1", "2025-S2", "other"
-  label: string;            // e.g. "2026 S1", "2025 S2", "Other"
+  label: string;            // e.g. "2026 S1", "S2 2026 - S1 2027", "Other"
   year: number | null;
   termNumber: number;       // 1 = S1, 2 = S2, 3 = Summer, 4 = Winter, 0 = Other
   isCrossSemester: boolean;
   sortWeight: number;       // Higher is newer, e.g. 20261 for 2026 S1
+  spannedSemesters?: string[]; // e.g. ["2026-S2", "2027-S1"]
 }
 
 const TERM_RE = /\bS([12])\s*[\u002D\u2013\u2014_]?\s*(\d{4})\b|\b(\d{4})\s*[\u002D\u2013\u2014_]?\s*S([12])\b/i;
-const CROSS_TERM_RE = /\bS1\s*(\d{4})\s*[\u002D\u2013\u2014_]\s*S2\s*(\d{4})\b/i;
+const CROSS_TERM_RE = /\bS([12])\s*(\d{4})\s*[\u002D\u2013\u2014_]\s*S([12])\s*(\d{4})\b/i;
 const SUMMER_WINTER_RE = /\b(Summer|Winter)\s*[\u002D\u2013\u2014_]?\s*(\d{4})\b/i;
 
 /**
  * Extract structured semester information from a course name.
  * Handles "FIT5215 Deep learning - S2 2025", "FIT9132 - S1 2026",
- * "Thesis - S1 2026 - S2 2026", "Summer 2026", and portal / ongoing units.
+ * "Thesis - S1 2026 - S2 2026", "Thesis - S2 2026 - S1 2027",
+ * "Summer 2026", and portal / ongoing units.
  */
 export function parseSemester(courseName: string): SemesterInfo {
   if (!courseName) {
@@ -30,21 +32,24 @@ export function parseSemester(courseName: string): SemesterInfo {
     };
   }
 
-  // 1. Cross-semester pattern: S1 2026 - S2 2026
+  // 1. Cross-semester pattern: S1 2026 - S2 2026 or S2 2026 - S1 2027
   const crossMatch = courseName.match(CROSS_TERM_RE);
   if (crossMatch) {
-    const y1 = parseInt(crossMatch[1], 10);
-    const y2 = parseInt(crossMatch[2], 10);
+    const t1 = parseInt(crossMatch[1], 10);
+    const y1 = parseInt(crossMatch[2], 10);
+    const t2 = parseInt(crossMatch[3], 10);
+    const y2 = parseInt(crossMatch[4], 10);
     const endYear = Math.max(y1, y2);
     return {
-      key: `${y1}-S1-${y2}-S2`,
-      label: `S1 ${y1} - S2 ${y2}`,
+      key: `${y1}-S${t1}-${y2}-S${t2}`,
+      label: `S${t1} ${y1} - S${t2} ${y2}`,
       year: endYear,
-      termNumber: 2,
+      termNumber: t2,
       isCrossSemester: true,
-      // Slightly lower sort weight than standard S2 of that year (e.g. 20261.9 vs 20262)
-      // so the primary single-term 2026 S2 pill renders before the cross-semester pill.
-      sortWeight: endYear * 10 + 1.9,
+      spannedSemesters: [`${y1}-S${t1}`, `${y2}-S${t2}`],
+      // Sort weight slightly lower than standard S2/S1 of that ending term
+      // so primary single-term pills render before cross-term pills.
+      sortWeight: endYear * 10 + t2 - 0.1,
     };
   }
 
@@ -53,12 +58,14 @@ export function parseSemester(courseName: string): SemesterInfo {
   if (stdMatch) {
     const termNum = parseInt(stdMatch[1] || stdMatch[4], 10);
     const year = parseInt(stdMatch[2] || stdMatch[3], 10);
+    const key = `${year}-S${termNum}`;
     return {
-      key: `${year}-S${termNum}`,
+      key,
       label: `${year} S${termNum}`,
       year,
       termNumber: termNum,
       isCrossSemester: false,
+      spannedSemesters: [key],
       sortWeight: year * 10 + termNum,
     };
   }
@@ -75,6 +82,7 @@ export function parseSemester(courseName: string): SemesterInfo {
       year,
       termNumber: termNum,
       isCrossSemester: false,
+      spannedSemesters: [`${year}-${termType}`],
       sortWeight: year * 10 + (termType === "summer" ? 0.5 : 2.5),
     };
   }
@@ -95,22 +103,14 @@ export function parseSemester(courseName: string): SemesterInfo {
  * E.g., if targetSemesterKey is "2026-S2":
  * - A course with "2026-S2" returns true.
  * - A course with "2026-S1-2026-S2" returns true (because it spans through S2 2026).
+ * - A course with "2026-S2-2027-S1" returns true (because it spans through S2 2026).
  */
 export function isCourseInSemester(sem: SemesterInfo, targetSemesterKey: string): boolean {
   if (targetSemesterKey === "all") return true;
   if (sem.key === targetSemesterKey) return true;
-
-  if (sem.isCrossSemester) {
-    const parts = sem.key.split("-");
-    if (parts.length === 4) {
-      const startKey = `${parts[0]}-${parts[1]}`;
-      const endKey = `${parts[2]}-${parts[3]}`;
-      if (targetSemesterKey === startKey || targetSemesterKey === endKey) {
-        return true;
-      }
-    }
+  if (sem.spannedSemesters && sem.spannedSemesters.includes(targetSemesterKey)) {
+    return true;
   }
-
   return false;
 }
 
@@ -148,10 +148,10 @@ export function inferActiveSemesterKey(courses: Course[]): string {
     return exactMatch.key;
   }
 
-  // 2. Cross-semester match if no standard semester exists
-  const crossMatch = availableSemesters.find((s) => s.isCrossSemester && s.year === currentYear);
+  // 2. Cross-semester match spanning naturalKey if no standard semester exists
+  const crossMatch = availableSemesters.find((s) => s.isCrossSemester && s.spannedSemesters?.includes(naturalKey));
   if (crossMatch) {
-    return crossMatch.key;
+    return naturalKey;
   }
 
   // 3. Fallback: newest standard semester
