@@ -1,3 +1,29 @@
+# Muster v0.1.19
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.19_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.19/Muster_0.1.19_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.19_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.19/Muster_0.1.19_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.19_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.19/Muster_0.1.19_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.19_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.19/Muster_0.1.19_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Notification center course filter chips.** Quickly filter announcements by specific course with pill-style chips showing per-course counts. Only appears when notifications span multiple courses.
+- **Feedback panel image attachments.** Paste screenshots via Ctrl+V, drag-and-drop, or click-to-attach (up to 5 images). Images are automatically compressed to stay within submission limits. Click thumbnails for full-size preview with prev/next navigation.
+
+## Fixes
+
+- **Notification settings now work correctly.** Due-date reminders, new announcement alerts, and new resource alerts now trigger properly after sync completes instead of running against an empty store on mount.
+- **No more repeat notifications on login.** First sync after login establishes a baseline; only genuinely new content triggers alerts on subsequent syncs. You won't be re-alerted on content you already saw.
+- **Settings page cleanup.** Removed "Group downloads by course" and "Open folder after download" toggles. The sensible behavior (organize downloads into per-course/week subfolders, reveal in file manager after download) is now hardcoded — there was no realistic use case for the off state.
+
+---
+
 # Muster v0.1.18
 
 ## Download

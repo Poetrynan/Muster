@@ -202,6 +202,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState("home");
   const [calFilter, setCalFilter] = useState("all");
   const [notifTypeFilter, setNotifTypeFilter] = useState("all");
+  const [notifCourseFilter, setNotifCourseFilter] = useState<number | null>(null);
   const [notifHistoryOpen, setNotifHistoryOpen] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -697,7 +698,9 @@ export function Dashboard() {
       // Grade-release reminder: diff against pre-sync overview
       try {
         const stG = prevState.settings;
-        if (stG.notifyGrade) {
+        // Only fire on syncs AFTER the initial one: the first sync after login just
+        // populates the (reset-to-empty) store, so every assignment would look "new".
+        if (stG.notifyGrade && prevState.syncStatus.lastSync) {
           const prev = prevState.gradeOverview || [];
           const fresh = grades.filter(
             (g) => g.grade !== "-" && !prev.some((pp) => pp.unit === g.unit && pp.grade === g.grade)
@@ -718,31 +721,39 @@ export function Dashboard() {
         const reminded = getReminded();
         const newIds: string[] = [];
         const parts: string[] = [];
-        if (st.notifyNewAnnouncement) {
-          const fresh = diffAnnouncements(prevState.announcements, data.announcements);
-          const unreminded = fresh.filter((a) => !reminded.has(`ann:${a.id ?? a.title}`));
-          if (unreminded.length > 0) {
-            newIds.push(...unreminded.map((a) => `ann:${a.id ?? a.title}`));
-            parts.push(unreminded.slice(0, 3).map((a) => a.title).join("; "));
+        // Same guard: skip the first sync after login/store-reset. Without this, a fresh
+        // login (store was just reset to empty) diffs against [] and treats every item
+        // as "new", re-alerting on content the user already saw on a previous session.
+        if (prevState.syncStatus.lastSync) {
+          if (st.notifyNewAnnouncement) {
+            const fresh = diffAnnouncements(prevState.announcements, data.announcements);
+            const unreminded = fresh.filter((a) => !reminded.has(`ann:${a.id ?? a.title}`));
+            if (unreminded.length > 0) {
+              newIds.push(...unreminded.map((a) => `ann:${a.id ?? a.title}`));
+              parts.push(unreminded.slice(0, 3).map((a) => a.title).join("; "));
+            }
           }
-        }
-        if (st.notifyNewResource) {
-          const fresh = diffResources(prevState.allResources, data.resources);
-          const unreminded = fresh.filter((r) => !reminded.has(`res:${r.courseId ?? 0}:${r.name}`));
-          if (unreminded.length > 0) {
-            newIds.push(...unreminded.map((r) => `res:${r.courseId ?? 0}:${r.name}`));
-            parts.push(unreminded.slice(0, 3).map((r) => r.name).join("; "));
+          if (st.notifyNewResource) {
+            const fresh = diffResources(prevState.allResources, data.resources);
+            const unreminded = fresh.filter((r) => !reminded.has(`res:${r.courseId ?? 0}:${r.name}`));
+            if (unreminded.length > 0) {
+              newIds.push(...unreminded.map((r) => `res:${r.courseId ?? 0}:${r.name}`));
+              parts.push(unreminded.slice(0, 3).map((r) => r.name).join("; "));
+            }
           }
-        }
-        if (newIds.length > 0) {
-          markReminded(newIds);
-          const title = t("reminders.newContentTitle");
-          setReminderBanner({ id: `new:${Date.now()}`, title, body: parts.join(" / ") });
-          showSystemNotification(title, parts.join(" / "));
+          if (newIds.length > 0) {
+            markReminded(newIds);
+            const title = t("reminders.newContentTitle");
+            setReminderBanner({ id: `new:${Date.now()}`, title, body: parts.join(" / ") });
+            showSystemNotification(title, parts.join(" / "));
+          }
         }
       } catch (err) {
         console.warn("new content reminder failed:", err);
       }
+      // Due-date reminder: run after assignments are loaded so we never check an empty store.
+      // The hourly poll (above) handles the "app left open" case; this handles "just synced".
+      runDueCheck(t, setReminderBanner);
     } catch (err) {
       console.error("Failed to sync data:", err);
       setLoadError(errMsg(err, "dashboard.syncFailed"));
@@ -794,8 +805,8 @@ export function Dashboard() {
       const baseDir = settings.downloadPath || "";
       const savePath = computeSavePath(resource, {
         downloadPath: baseDir,
-        groupByCourse: settings.groupDownloadsByCourse,
-        groupBySection: settings.groupDownloadsBySection,
+        groupByCourse: true,
+        groupBySection: true,
         courses,
       });
       const { path: savedPath } = await downloadFile(url, savePath);
@@ -809,13 +820,11 @@ export function Dashboard() {
         path: savedPath,
         lastTick: Date.now(),
       });
-      if (settings.openFolderAfterDownload) {
-        try {
-          const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
-          await revealItemInDir(savedPath);
-        } catch (err) {
-          console.warn("revealItemInDir failed:", err);
-        }
+      try {
+        const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+        await revealItemInDir(savedPath);
+      } catch (err) {
+        console.warn("revealItemInDir failed:", err);
       }
       showToast(t("dashboard.downloaded", { path: savedPath }));
     } catch (err) {
@@ -1071,10 +1080,20 @@ export function Dashboard() {
     syncAllDataRef.current();
   }, [isLoggedIn]);
 
-  // Due-date reminders: check on mount + hourly poll (data refreshes after sync).
+  // Hourly due-date poll: runs independently of sync to catch due reminders even when
+  // the user doesn't manually sync. The initial check lives inside syncAllData (after
+  // assignments are loaded) so we don't run against an empty store on mount — see
+  // runDueCheck below for the rationale.
   useEffect(() => {
     if (!isLoggedIn) return;
-    const runDueCheck = () => {
+    const h = setInterval(() => runDueCheck(t, setReminderBanner), 60 * 60 * 1000);
+    return () => clearInterval(h);
+  }, [isLoggedIn, setReminderBanner, t]);
+
+  // Shared due-check body, called both from syncAllData (post-load) and the hourly poll.
+  // Extracted so the two call sites can't drift apart.
+  const runDueCheck = useCallback(
+    (tr: typeof t, setBanner: typeof setReminderBanner) => {
       try {
         const { settings: st, assignments: asg } = useAppStore.getState();
         if (!st.notifyDueReminder) return;
@@ -1083,21 +1102,19 @@ export function Dashboard() {
         const fresh = due.filter((d) => !reminded.has(d.id));
         if (fresh.length === 0) return;
         markReminded(fresh.map((d) => d.id));
-        const title = t("reminders.dueTitle", { count: fresh.length });
+        const title = tr("reminders.dueTitle", { count: fresh.length });
         const body = fresh
           .slice(0, 3)
           .map((d) => `${d.name} (${new Date(d.dueDateIso).toLocaleDateString()})`)
           .join("; ");
-        setReminderBanner({ id: `due:${Date.now()}`, title, body });
+        setBanner({ id: `due:${Date.now()}`, title, body });
         showSystemNotification(title, body);
       } catch (err) {
         console.warn("due reminder failed:", err);
       }
-    };
-    runDueCheck();
-    const h = setInterval(runDueCheck, 60 * 60 * 1000);
-    return () => clearInterval(h);
-  }, [isLoggedIn, setReminderBanner, t]);
+    },
+    []
+  );
 
   // Unified deadline timeline: assignments (dueDateIso/dueDate) + calendar events (close/due) merged, de-duplicated and sorted.
   // Assignments are prioritized over day-level calendar events to retain exact due times and submission statuses.
@@ -2498,13 +2515,34 @@ export function Dashboard() {
                 const availableTypes = ALL_TYPES.filter(
                   (ty) => ty === "all" || list.some((a) => typeOf(a) === ty)
                 );
+                // Course options for the course filter chips (only courses that have announcements)
+                const courseNotifCounts = new Map<number, number>();
+                for (const a of list) {
+                  const cid = a.courseId ?? 0;
+                  courseNotifCounts.set(cid, (courseNotifCounts.get(cid) ?? 0) + 1);
+                }
+                const courseNotifOptions = Array.from(courseNotifCounts.entries())
+                  .map(([cid, count]) => {
+                    const c = courses.find((cc) => cc.id === cid);
+                    const label = cid === 0 ? t("dashboard.generalNotices") : c?.shortName || c?.fullName || `Course ${cid}`;
+                    return { cid, count, label };
+                  })
+                  .sort((a, b) => {
+                    if (a.cid === 0) return 1;          // general notices last
+                    if (b.cid === 0) return -1;
+                    return a.label.localeCompare(b.label);
+                  });
                 const filtered =
                   notifTypeFilter === "all"
                     ? list
                     : list.filter((a) => typeOf(a) === notifTypeFilter);
+                const courseFiltered =
+                  notifCourseFilter == null
+                    ? filtered
+                    : filtered.filter((a) => (a.courseId ?? 0) === notifCourseFilter);
                 // Group by course: unread first within a group, newest first; groups ordered by their most recent announcement, newest first
                 const groups = new Map<number, any[]>();
-                for (const a of filtered) {
+                for (const a of courseFiltered) {
                   const k = a.courseId ?? 0;
                   if (!groups.has(k)) groups.set(k, []);
                   groups.get(k)!.push(a);
@@ -2550,6 +2588,38 @@ export function Dashboard() {
                         </button>
                       ))}
                     </div>
+                    {/* Course filter chips — only shown when there are announcements in >1 course */}
+                    {courseNotifOptions.length > 1 && (
+                      <div className="flex items-center gap-2 mb-5 flex-wrap" role="tablist" aria-label={t("dashboard.notificationsAria")}>
+                        <button
+                          key="all-courses"
+                          onClick={() => setNotifCourseFilter(null)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all shrink-0 ${
+                            notifCourseFilter == null
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {t("dashboard.allCourses")}
+                        </button>
+                        {courseNotifOptions.map((opt) => (
+                          <button
+                            key={opt.cid}
+                            onClick={() => setNotifCourseFilter(opt.cid)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all shrink-0 ${
+                              notifCourseFilter === opt.cid
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                            }`}
+                          >
+                            {opt.label}
+                            <span className={`ml-1 text-[10px] ${notifCourseFilter === opt.cid ? "text-primary-foreground/70" : "text-muted-foreground/60"}`}>
+                              {opt.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {ordered.length === 0 ? (
                       <p className="text-muted-foreground">{t("dashboard.noNotifications")}</p>
                     ) : (
