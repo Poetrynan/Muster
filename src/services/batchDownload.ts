@@ -58,8 +58,8 @@ export async function batchDownload(
       try {
         const dir = computeSavePath(r, {
           downloadPath: settings.downloadPath || "",
-          groupByCourse: settings.groupDownloadsByCourse,
-          groupBySection: settings.groupDownloadsBySection,
+          groupByCourse: true,
+          groupBySection: true,
           courses,
         });
         const dlResult = await downloadFile(key, dir, true);
