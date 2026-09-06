@@ -502,18 +502,18 @@ export function FeedbackPanel() {
                   </div>
                 )}
 
-                {/* Required contact email */}
+                {/* Required contact email — prefilled from the logged-in account and read-only */}
                 <div>
                   <Input
                     type="email"
                     required
+                    readOnly
                     value={contact}
-                    onChange={(e) => setContact(e.target.value)}
                     placeholder={t("feedback.contactPlaceholder")}
-                    className={contact && !isEmailValid ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                    className="cursor-not-allowed bg-muted/50 text-muted-foreground"
                   />
-                  <p className={`mt-1 px-1 text-[11px] ${contact && !isEmailValid ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                    {contact && !isEmailValid ? t("feedback.contactInvalid") : t("feedback.contactHint")}
+                  <p className="mt-1 px-1 text-[11px] text-muted-foreground">
+                    {t("feedback.contactHint")}
                   </p>
                 </div>
 
