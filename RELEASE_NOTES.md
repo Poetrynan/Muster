@@ -1,3 +1,22 @@
+# Muster v0.1.20
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.1.20_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.1.20/Muster_0.1.20_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.1.20_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.1.20/Muster_0.1.20_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.1.20_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.20/Muster_0.1.20_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.1.20_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.1.20/Muster_0.1.20_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## Fixes
+
+- **Feedback email field is now read-only.** The contact email is prefilled from your logged-in account and displayed as a grayed-out field — no longer editable.
+
+---
+
 # Muster v0.1.19
 
 ## Download
@@ -18,9 +37,13 @@ On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on f
 
 ## Fixes
 
+- **Settings page no longer scrolls the sidebar.** Fixed a layout bug where the settings sidebar (with tab highlights) moved when scrolling content. The page now uses a fixed-height layout with only the content area scrolling.
+- **Auto-sync no longer loops infinitely.** Fixed a React effect dependency cycle that caused continuous background syncing when "Sync on launch" was enabled.
+- **New users sync correctly on first login.** Fixed a race condition where the initial sync could be skipped or have its progress banner prematurely cleared.
 - **Notification settings now work correctly.** Due-date reminders, new announcement alerts, and new resource alerts now trigger properly after sync completes instead of running against an empty store on mount.
-- **No more repeat notifications on login.** First sync after login establishes a baseline; only genuinely new content triggers alerts on subsequent syncs. You won't be re-alerted on content you already saw.
-- **Settings page cleanup.** Removed "Group downloads by course" and "Open folder after download" toggles. The sensible behavior (organize downloads into per-course/week subfolders, reveal in file manager after download) is now hardcoded — there was no realistic use case for the off state.
+- **No more repeat notifications on login.** First sync after login establishes a baseline; only genuinely new content triggers alerts on subsequent syncs.
+- **Event listener leak fixed.** Resolved a race condition in dev mode (React StrictMode) where progress event listeners could duplicate.
+- **Settings page cleanup.** Removed "Group downloads by course" and "Open folder after download" toggles. The sensible behavior (organize downloads into per-course/week subfolders, reveal in file manager after download) is now hardcoded.
 
 ---
 
