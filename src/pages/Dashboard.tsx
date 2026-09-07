@@ -293,11 +293,11 @@ export function Dashboard() {
     return () => window.removeEventListener("click", handleClickOutside);
   }, [activeActionMenuCourseId]);
 
-  const openCourseInBrowser = async (courseId: number) => {
-    const url = `https://lms.monash.edu/course/view.php?id=${courseId}`;
+  const openCourseInBrowser = async (courseId: number, courseTitle?: string) => {
+    const url = `https://learning.monash.edu/course/view.php?id=${courseId}`;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("open_in_app_webview", { url, title: "Monash Moodle" });
+      await invoke("open_in_app_webview", { url, title: courseTitle || "Monash Moodle" });
     } catch {
       try {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
@@ -1470,7 +1470,7 @@ export function Dashboard() {
                           type="button"
                           className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-secondary transition-colors text-left"
                           onClick={() => {
-                            openCourseInBrowser(course.id);
+                            openCourseInBrowser(course.id, course.name || course.code || undefined);
                             setActiveActionMenuCourseId(null);
                           }}
                         >
