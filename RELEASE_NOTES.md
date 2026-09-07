@@ -13,6 +13,7 @@ On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on f
 
 ## Fixes
 
+- **Fixed course "Open in browser" link target.** Course card action menus previously targeted the legacy `lms.monash.edu` domain (which routed to unrelated South Africa enrolment pages or prompted for re-login). Corrected to the official `learning.monash.edu` domain, seamlessly preserving your active SSO session and navigating directly to your enrolled course page.
 - **Feedback email field is now read-only.** The contact email is prefilled from your logged-in account and displayed as a grayed-out field — no longer editable.
 
 ---
