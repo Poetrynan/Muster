@@ -566,6 +566,8 @@ export interface SyncOptions {
   cachedWeeks?: Record<number, number[]>;
   /** Assessment IDs that are already completed and graded with a settled final score. */
   completedAssignmentIds?: number[];
+  /** Target course IDs to actively scrape in incremental sync. */
+  targetCourseIds?: number[];
 }
 
 /**
