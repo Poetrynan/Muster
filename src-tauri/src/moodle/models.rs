@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -363,3 +364,37 @@ pub struct CourseTabData {
     #[serde(default)]
     pub contacts: Vec<CourseContact>,
 }
+
+fn default_true() -> bool {
+    true
+}
+
+/// Options passed into sync_all to govern incremental fetching and caching.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncOptions {
+    /// If true, force full re-fetch of all sections, assessments, and details.
+    #[serde(default)]
+    pub full_refresh: bool,
+    /// Whether to fetch fixed tabs (Unit Info, Schedule, Contacts). Defaults to true.
+    #[serde(default = "default_true")]
+    pub include_fixed_tabs: bool,
+    /// Weeks already cached in client store per course: courseId -> [1, 2, 3, 4]
+    #[serde(default)]
+    pub cached_weeks: HashMap<u64, Vec<u32>>,
+    /// Assessment IDs that are already completed and graded with a final score.
+    #[serde(default)]
+    pub completed_assignment_ids: Vec<u64>,
+}
+
+impl Default for SyncOptions {
+    fn default() -> Self {
+        Self {
+            full_refresh: false,
+            include_fixed_tabs: true,
+            cached_weeks: HashMap::new(),
+            completed_assignment_ids: Vec::new(),
+        }
+    }
+}
+

@@ -33,7 +33,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/ui/input";
 import { Dialog } from "../components/ui/dialog";
 import { FeedbackPanel } from "../components/FeedbackPanel";
-import { useAppStore } from "../stores/useAppStore";
+import { useAppStore, getSyncOptions } from "../stores/useAppStore";
 import { useTranslation } from "../i18n/useTranslation";
 import type { TranslationKey } from "../i18n/translations";
 import { saveAiConfig, syncAll, logout, testAiConnection } from "../services/api";
@@ -144,17 +144,19 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   // Manual sync from the Sync settings section — mirrors the Dashboard manual sync so users get
   // feedback (toast + button state + data applied to the store) instead of a silent fire-and-forget.
-  const handleSettingsSync = async () => {
+  const handleSettingsSync = async (fullRefresh = false) => {
     if (syncStatus.isRunning) return;
     try {
       setSyncStatus({ isRunning: true });
-      const data = await syncAll();
-      updateAllSyncedData(data);
+      const state = useAppStore.getState();
+      const options = getSyncOptions(state, fullRefresh);
+      const data = await syncAll(options);
+      updateAllSyncedData({ ...data, fullRefresh });
       // Stamp the cooldown timestamp only after a successful sync, so a failed one
       // never suppresses the next launch auto-sync.
       updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       setSyncStatus({ isRunning: false, lastSync: new Date().toISOString() });
-      showToast(t("dashboard.syncSuccess"));
+      showToast(fullRefresh ? t("settings.sync.fullSyncSuccess") : t("dashboard.syncSuccess"));
     } catch (err) {
       console.error("Settings sync failed:", err);
       setSyncStatus({ isRunning: false });
@@ -1077,14 +1079,18 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 </CardContent>
               </Card>
 
-              <div className="flex gap-3">
-                <Button onClick={handleSettingsSync} disabled={syncStatus.isRunning}>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => handleSettingsSync(false)} disabled={syncStatus.isRunning}>
                   {syncStatus.isRunning ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Download className="w-4 h-4 mr-2" />
                   )}
-                  {syncStatus.isRunning ? t("dashboard.syncing") : t("dashboard.sync")}
+                  {syncStatus.isRunning ? t("dashboard.syncing") : t("settings.sync.incrementalSync")}
+                </Button>
+                <Button variant="outline" onClick={() => handleSettingsSync(true)} disabled={syncStatus.isRunning}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  {t("settings.sync.forceFullSync")}
                 </Button>
                 <Button variant="outline" onClick={() => setDeleteOpen(true)}>
                   {t("common.delete")} {t("dashboard.resources")}

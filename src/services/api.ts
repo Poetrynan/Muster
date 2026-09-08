@@ -556,26 +556,44 @@ export async function fetchUnitDashboard(courseId: number): Promise<UnitDashboar
 
 /**
  * Full sync (called on every login / launch).
- *
- * Fetch strategy per the user's ruling:
- *  - dynamic content (resources / assessments / announcements / unit dashboard /
- *    recordings) is always fetched live from Moodle;
- *  - semester-fixed content (unit info / schedule / contacts) is only fetched when
- *    `includeFixedTabs` is true — the first run after install, or a manual full refresh.
- *    Regular logins pass false so the cached copies are kept and no requests are wasted.
  */
-export async function syncAll(includeFixedTabs = true): Promise<{
+export interface SyncOptions {
+  /** Force full re-fetch of all sections, assessments, and details without skipping. */
+  fullRefresh?: boolean;
+  /** Whether to fetch fixed tabs (Unit Info, Schedule, Contacts). Defaults to true on first sync, false on routine sync. */
+  includeFixedTabs?: boolean;
+  /** Weeks already cached in client store per course: { [courseId]: [1, 2, 3, 4] } */
+  cachedWeeks?: Record<number, number[]>;
+  /** Assessment IDs that are already completed and graded with a settled final score. */
+  completedAssignmentIds?: number[];
+}
+
+/**
+ * Fetch strategy:
+ *  - Supports incremental sync: past weeks and already-graded assessments can be skipped
+ *    to drop sync requests and latency dramatically.
+ *  - Supports full force refresh when user explicitly requests it.
+ */
+export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean = true): Promise<{
   courses: Course[];
   resources: Resource[];
   assignments: Assignment[];
   announcements: Announcement[];
   tabs: CourseTabData[];
 }> {
+  const options: SyncOptions =
+    typeof optionsOrIncludeFixedTabs === "boolean"
+      ? { includeFixedTabs: optionsOrIncludeFixedTabs }
+      : optionsOrIncludeFixedTabs;
+
   const invoke = getInvoke();
   if (invoke) {
     const result = invoke<[Course[], Resource[], Assignment[], Announcement[], CourseTabData[]]>(
       "sync_all",
-      { includeFixedTabs }
+      {
+        options,
+        includeFixedTabs: options.includeFixedTabs ?? true,
+      }
     );
     const [courses, resources, assignments, announcements, tabs] = await result;
     return { courses, resources, assignments, announcements, tabs };
