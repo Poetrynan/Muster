@@ -186,7 +186,8 @@ fn test_sync_options_incremental_contract() {
         "cachedWeeks": {
             "46882": [1, 2, 3, 4, 5]
         },
-        "completedAssignmentIds": [6020312, 6020313]
+        "completedAssignmentIds": [6020312, 6020313],
+        "targetCourseIds": [46882, 46961]
     }"#;
 
     let opts: SyncOptions = serde_json::from_str(raw_json).expect("failed to deserialize SyncOptions");
@@ -194,11 +195,13 @@ fn test_sync_options_incremental_contract() {
     assert!(!opts.include_fixed_tabs);
     assert_eq!(opts.cached_weeks.get(&46882), Some(&vec![1, 2, 3, 4, 5]));
     assert_eq!(opts.completed_assignment_ids, vec![6020312, 6020313]);
+    assert_eq!(opts.target_course_ids, Some(vec![46882, 46961]));
 
     let default_opts = SyncOptions::default();
     assert!(!default_opts.full_refresh);
     assert!(default_opts.include_fixed_tabs);
     assert!(default_opts.cached_weeks.is_empty());
     assert!(default_opts.completed_assignment_ids.is_empty());
+    assert_eq!(default_opts.target_course_ids, None);
 }
 

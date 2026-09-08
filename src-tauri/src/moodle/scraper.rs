@@ -2686,16 +2686,35 @@ impl MoodleScraper {
     > {
         let courses = self.fetch_courses().await?;
         // Portal/hub courses (IT Student Portal, MUM Academic Success, etc.) are not academic courses:
-        // skip fetching their resources/assignments/announcements (saves ~5 courses x 19 blocks of requests), and exclude them from the course list.
         let real_courses: Vec<Course> = courses.into_iter().filter(|c| !c.is_portal).collect();
-        let total_courses = real_courses.len();
+
+        // Active course filtering for incremental sync:
+        // If target_course_ids is provided, only scrape courses that are in target_course_ids
+        // (plus any newly discovered courses that aren't in cached_weeks yet).
+        // Historical courses already cached in client IndexedDB are bypassed, saving up to 80% network calls.
+        let courses_to_scrape: Vec<Course> = if !options.full_refresh {
+            if let Some(target_ids) = &options.target_course_ids {
+                let set: std::collections::HashSet<u64> = target_ids.iter().cloned().collect();
+                real_courses
+                    .iter()
+                    .filter(|c| set.contains(&c.id) || !options.cached_weeks.contains_key(&c.id))
+                    .cloned()
+                    .collect()
+            } else {
+                real_courses.clone()
+            }
+        } else {
+            real_courses.clone()
+        };
+
+        let total_courses = courses_to_scrape.len();
         if let Some(p) = &progress {
             p(0, total_courses, "courses");
         }
 
         let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
 
-        let handles: Vec<_> = real_courses
+        let handles: Vec<_> = courses_to_scrape
             .iter()
             .map(|course| {
                 let sem = semaphore.clone();
@@ -4275,14 +4294,65 @@ fn extract_week_num(section: &str) -> Option<u32> {
 }
 
 /// Extract the current focus week number from the course homepage HTML (Monash MST template).
-fn extract_current_focus_week_num(html: &str) -> Option<u32> {
+pub fn extract_current_focus_week_num(html: &str) -> Option<u32> {
     use scraper::{Html, Selector};
     let doc = Html::parse_document(html);
-    let nav_sel = Selector::parse(".mst-current-focus-nav-item").ok()?;
-    let el = doc.select(&nav_sel).next()?;
-    let h3_sel = Selector::parse("h3").ok()?;
-    let h3 = el.select(&h3_sel).next()?;
-    extract_week_num(&h3.text().collect::<String>())
+
+    // 1. Primary: look for the explicitly marked current item: .mst-current-focus-nav-item-current
+    if let Ok(curr_sel) = Selector::parse(".mst-current-focus-nav-item-current") {
+        if let Some(el) = doc.select(&curr_sel).next() {
+            // Check h5, h3, h4, span, div for "Week X"
+            for tag in ["h5", "h3", "h4", "span", "div"] {
+                if let Ok(sel) = Selector::parse(tag) {
+                    for node in el.select(&sel) {
+                        let txt = node.text().collect::<String>();
+                        if let Some(w) = extract_week_num(&txt) {
+                            return Some(w);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Secondary: search in #mst-current-focus-container or .mst-current-focus-details-inner
+    if let Ok(focus_sel) = Selector::parse(
+        "#mst-current-focus-container h3, #mst-current-focus-container h5, .mst-current-focus-details-inner h3, .mst-current-focus-details-inner h5",
+    ) {
+        for node in doc.select(&focus_sel) {
+            let txt = node.text().collect::<String>();
+            if let Some(w) = extract_week_num(&txt) {
+                return Some(w);
+            }
+        }
+    }
+
+    // 3. Tertiary: check any .mst-current-focus-nav-item that has "current" class or text
+    if let Ok(nav_sel) = Selector::parse(".mst-current-focus-nav-item") {
+        for el in doc.select(&nav_sel) {
+            let class_str = el.value().classes().collect::<Vec<_>>().join(" ");
+            let text_str = el.text().collect::<String>();
+            if class_str.to_lowercase().contains("current")
+                || text_str.to_lowercase().contains("current")
+            {
+                if let Some(w) = extract_week_num(&text_str) {
+                    return Some(w);
+                }
+            }
+        }
+    }
+
+    // 4. Quaternary: standard Moodle current section marker (li.section.current or li.course-section.current)
+    if let Ok(sec_sel) = Selector::parse("li.section.current, li.course-section.current, .sectionname") {
+        for el in doc.select(&sec_sel) {
+            let txt = el.text().collect::<String>();
+            if let Some(w) = extract_week_num(&txt) {
+                return Some(w);
+            }
+        }
+    }
+
+    None
 }
 
 /// Parse a Moodle human-readable due date ("Monday, 23 March 2026, 9:00 AM") into RFC3339 ISO.
@@ -6741,5 +6811,26 @@ mod tests {
         assert_eq!(ev.course_id, Some(5215));
         assert_eq!(ev.timestamp, 1788443700); // exact timestamp from upcoming view overrides day-level
         assert_eq!(ev.title, "In-semester test 1 week 6 is due");
+    }
+
+    #[test]
+    fn test_extract_current_focus_week_num() {
+        let html_h5 = r#"
+            <div class="mst-current-focus-nav-item mst-current-focus-nav-item-current mst-current-focus-nav-table-isweekselected">
+                <div class="mst-current-focus-nav-item-current-overlay"><h5>Current</h5></div>
+                <h5>Week 6</h5>
+                <span>Module 4</span>
+            </div>
+        "#;
+        assert_eq!(extract_current_focus_week_num(html_h5), Some(6));
+
+        let html_h3 = r#"
+            <div id="mst-current-focus-container">
+                <div class="mst-current-focus-details-inner">
+                    <h3>Week 3 - Linear Regression</h3>
+                </div>
+            </div>
+        "#;
+        assert_eq!(extract_current_focus_week_num(html_h3), Some(3));
     }
 }

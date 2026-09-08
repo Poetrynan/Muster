@@ -385,6 +385,10 @@ pub struct SyncOptions {
     /// Assessment IDs that are already completed and graded with a final score.
     #[serde(default)]
     pub completed_assignment_ids: Vec<u64>,
+    /// Target course IDs to actively scrape. If provided in incremental mode, only these courses
+    /// will be fetched (plus any newly discovered courses not in cached_weeks).
+    #[serde(default)]
+    pub target_course_ids: Option<Vec<u64>>,
 }
 
 impl Default for SyncOptions {
@@ -394,6 +398,7 @@ impl Default for SyncOptions {
             include_fixed_tabs: true,
             cached_weeks: HashMap::new(),
             completed_assignment_ids: Vec::new(),
+            target_course_ids: None,
         }
     }
 }

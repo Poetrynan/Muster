@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { idbStorage } from "../services/idbStorage";
 import type { AppSettings, SyncStatus, Summary } from "../types";
 import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData, SyncOptions } from "../services/api";
+import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from "../lib/courseHelpers";
 
 interface AppState {
   // User state
@@ -485,6 +486,10 @@ export function getSyncOptions(
     allResources: Resource[];
     assignments: Assignment[];
     unitInfos: Record<number, UnitInfo>;
+    settings?: {
+      hiddenCourseIds?: number[];
+      pinnedCourseIds?: number[];
+    };
   },
   fullRefresh = false
 ): SyncOptions {
@@ -495,6 +500,40 @@ export function getSyncOptions(
       cachedWeeks: {},
       completedAssignmentIds: [],
     };
+  }
+
+  const hiddenIds = state.settings?.hiddenCourseIds || [];
+  const pinnedIds = state.settings?.pinnedCourseIds || [];
+  const activeSemesterKey = inferActiveSemesterKey(state.courses);
+
+  // Identify target courses for incremental sync:
+  // 1. Current active semester courses (or cross-semester units spanning it)
+  // 2. Any pinned courses
+  // 3. Any course that does NOT have cached resources yet (brand new)
+  // Historical past-semester courses that already have full cached resources are bypassed.
+  const targetCourseIds: number[] = [];
+  for (const course of state.courses) {
+    if (hiddenIds.includes(course.id)) continue;
+
+    const res =
+      state.courseResources[course.id] ||
+      state.allResources.filter((r) => r.courseId === course.id);
+    const hasCachedData = res && res.length > 0;
+
+    if (!hasCachedData) {
+      targetCourseIds.push(course.id);
+      continue;
+    }
+
+    if (pinnedIds.includes(course.id)) {
+      targetCourseIds.push(course.id);
+      continue;
+    }
+
+    const sem = parseSemester(course.fullName || course.shortName || "");
+    if (activeSemesterKey === "all" || isCourseInSemester(sem, activeSemesterKey)) {
+      targetCourseIds.push(course.id);
+    }
   }
 
   const cachedWeeks: Record<number, number[]> = {};
@@ -531,5 +570,6 @@ export function getSyncOptions(
     includeFixedTabs: !hasAnyFixedTabs,
     cachedWeeks,
     completedAssignmentIds,
+    targetCourseIds: targetCourseIds.length > 0 ? targetCourseIds : undefined,
   };
 }
