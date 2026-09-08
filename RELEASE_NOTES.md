@@ -1,3 +1,32 @@
+# Muster v0.2.0
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.0_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.0/Muster_0.2.0_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.0_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.0/Muster_0.2.0_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.0_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.0/Muster_0.2.0_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.0_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.0/Muster_0.2.0_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## What's new
+
+- **Smart Incremental Sync & Permanent Cache Architecture (Major Architecture Evolution):**
+  - **Dynamic Rolling Window Syncing:** Rather than exhaustively re-scraping all 12+ weeks of semester course materials on every sync, Muster now calculates the current academic focus week (e.g. Week 6) and applies a rolling inspection buffer (`Week N-1` and onwards). Past fixed weeks (e.g. Weeks 1–5) are permanently cached in local IndexedDB storage, eliminating redundant network overhead.
+  - **Zero-Loss Map-Based Upsert:** Transitioned frontend state management from destructive "whole-array replacement" to a lossless, ID-keyed Map merge (`upsertCoursesWithPermanentCache`). Even during partial or scoped synchronization, past course resources, grades, and submissions are preserved indefinitely without flickering or dropping.
+  - **Selective Deep Assessment Enrichment:** Assignments and quizzes belonging to past, immutable weeks bypass detailed submission-status and feedback roundtrips, reducing Moodle HTTP requests by over 65% and vastly improving sync speed.
+  - **Full Manual Override:** Added a "Force Full Sync" option under Settings alongside the lightning-fast default incremental sync, giving users complete autonomy whenever they need a clean-slate rebuild.
+
+## Fixes
+
+- **Fixed Course "Open in browser" Link:** Resolved an issue where course card action menus routed to `lms.monash.edu` (which redirected to South Africa enrolment portals or triggered auth loops). Fixed to target official `learning.monash.edu` directly preserving SSO credentials.
+- **Enforced Read-Only Contact Email in Feedback:** Contact email is now strictly prefilled from the authenticated student profile and read-only, preventing incomplete or untraceable bug reports.
+- **Diagnostic Snapshot in Bug Reports:** Diagnostic course metadata (code, term, total resources, assignments count) is bundled with feedback submissions so that user issues like missing sections can be diagnosed instantly.
+
+---
+
 # Muster v0.1.20
 
 ## Download

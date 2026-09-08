@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { idbStorage } from "../services/idbStorage";
 import type { AppSettings, SyncStatus, Summary } from "../types";
-import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData } from "../services/api";
+import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData, SyncOptions } from "../services/api";
 
 interface AppState {
   // User state
@@ -80,6 +80,7 @@ interface AppState {
     assignments?: Assignment[];
     announcements?: Announcement[];
     tabs?: CourseTabData[];
+    fullRefresh?: boolean;
   }) => void;
   hideCourse: (courseId: number) => void;
   unhideCourse: (courseId: number) => void;
@@ -224,18 +225,86 @@ export const useAppStore = create<AppState>()(
     })),
   updateAllSyncedData: (data) =>
     set((state) => {
-      // A failed/empty sync (session expired, network error mid-run) returns empty
-      // arrays; `||` treats [] as truthy and would wipe good cached data. Keep the
-      // existing store values unless the sync actually returned entries.
-      const nonEmpty = <T,>(next: T[] | undefined, prev: T[]): T[] =>
-        Array.isArray(next) && next.length > 0 ? next : prev;
-      const updatedCourses = nonEmpty(data.courses, state.courses);
-      const updatedResources = nonEmpty(data.resources, state.allResources);
-      const updatedAssignments = nonEmpty(data.assignments, state.assignments);
-      const updatedAnnouncements = nonEmpty(data.announcements, state.announcements);
+      const isFull = Boolean(data.fullRefresh);
+
+      const mergeCourses = (incoming: Course[] | undefined, existing: Course[]): Course[] => {
+        if (!incoming || incoming.length === 0) return existing;
+        if (isFull) return incoming;
+        const map = new Map<number, Course>();
+        for (const item of existing) map.set(item.id, item);
+        for (const item of incoming) {
+          const prev = map.get(item.id);
+          map.set(item.id, prev ? { ...prev, ...item } : item);
+        }
+        return Array.from(map.values());
+      };
+
+      const mergeResources = (incoming: Resource[] | undefined, existing: Resource[]): Resource[] => {
+        if (!incoming || incoming.length === 0) return existing;
+        if (isFull) return incoming;
+        const map = new Map<string | number, Resource>();
+        for (const item of existing) {
+          const key = item.id || item.url || `${item.courseId}-${item.name}`;
+          map.set(key, item);
+        }
+        for (const item of incoming) {
+          const key = item.id || item.url || `${item.courseId}-${item.name}`;
+          map.set(key, item);
+        }
+        return Array.from(map.values());
+      };
+
+      const mergeAssignments = (incoming: Assignment[] | undefined, existing: Assignment[]): Assignment[] => {
+        if (!incoming || incoming.length === 0) return existing;
+        const map = new Map<string | number, Assignment>();
+        for (const item of existing) {
+          const key = item.id || item.url || item.name;
+          map.set(key, item);
+        }
+        for (const item of incoming) {
+          const key = item.id || item.url || item.name;
+          const prev = map.get(key);
+          if (prev && !isFull) {
+            map.set(key, {
+              ...prev,
+              ...item,
+              // Preserve score and status if incoming skipped detail fetch
+              grade: item.grade ?? prev.grade,
+              status:
+                item.status === "pending" && (prev.status === "graded" || prev.status === "submitted")
+                  ? prev.status
+                  : item.status,
+              hasSubmissionStatus: item.hasSubmissionStatus || prev.hasSubmissionStatus,
+            });
+          } else {
+            map.set(key, item);
+          }
+        }
+        return Array.from(map.values());
+      };
+
+      const mergeAnnouncements = (incoming: Announcement[] | undefined, existing: Announcement[]): Announcement[] => {
+        if (!incoming || incoming.length === 0) return existing;
+        if (isFull) return incoming;
+        const map = new Map<string | number, Announcement>();
+        for (const item of existing) {
+          const key = item.id || item.url || item.title;
+          map.set(key, item);
+        }
+        for (const item of incoming) {
+          const key = item.id || item.url || item.title;
+          map.set(key, item);
+        }
+        return Array.from(map.values());
+      };
+
+      const updatedCourses = mergeCourses(data.courses, state.courses);
+      const updatedResources = mergeResources(data.resources, state.allResources);
+      const updatedAssignments = mergeAssignments(data.assignments, state.assignments);
+      const updatedAnnouncements = mergeAnnouncements(data.announcements, state.announcements);
 
       // Adopt the aggregated per-course tab data (Dashboard / Unit Info / Schedule /
-      // Recordings / Contacts) from the full sync.
+      // Recordings / Contacts) from the sync.
       const newUnitDashboards = { ...state.unitDashboards };
       const newUnitInfos = { ...state.unitInfos };
       const newSchedules = { ...state.schedules };
@@ -246,12 +315,12 @@ export const useAppStore = create<AppState>()(
           if (tab.dashboard) newUnitDashboards[tab.courseId] = tab.dashboard;
           if (tab.unitInfo) newUnitInfos[tab.courseId] = tab.unitInfo;
           if (tab.schedule) newSchedules[tab.courseId] = tab.schedule;
-          newRecordings[tab.courseId] = tab.recordings;
-          newContacts[tab.courseId] = tab.contacts;
+          if (tab.recordings && tab.recordings.length > 0) newRecordings[tab.courseId] = tab.recordings;
+          if (tab.contacts && tab.contacts.length > 0) newContacts[tab.courseId] = tab.contacts;
         }
       }
 
-      const newCourseResources = { ...state.courseResources };
+      const newCourseResources = isFull ? {} : { ...state.courseResources };
       if (data.resources && Array.isArray(data.resources)) {
         const grouped: Record<number, Resource[]> = {};
         for (const res of data.resources) {
@@ -261,7 +330,9 @@ export const useAppStore = create<AppState>()(
           }
         }
         for (const [courseIdStr, resList] of Object.entries(grouped)) {
-          newCourseResources[Number(courseIdStr)] = resList;
+          const cid = Number(courseIdStr);
+          const existingForCourse = newCourseResources[cid] || [];
+          newCourseResources[cid] = isFull ? resList : mergeResources(resList, existingForCourse);
         }
       }
 
@@ -403,3 +474,62 @@ export const useAppStore = create<AppState>()(
     },
   ),
 );
+
+/**
+ * Build SyncOptions from current app state for incremental sync.
+ */
+export function getSyncOptions(
+  state: {
+    courses: Course[];
+    courseResources: Record<number, Resource[]>;
+    allResources: Resource[];
+    assignments: Assignment[];
+    unitInfos: Record<number, UnitInfo>;
+  },
+  fullRefresh = false
+): SyncOptions {
+  if (fullRefresh) {
+    return {
+      fullRefresh: true,
+      includeFixedTabs: true,
+      cachedWeeks: {},
+      completedAssignmentIds: [],
+    };
+  }
+
+  const cachedWeeks: Record<number, number[]> = {};
+  for (const course of state.courses) {
+    const res =
+      state.courseResources[course.id] ||
+      state.allResources.filter((r) => r.courseId === course.id);
+    const weeks = Array.from(
+      new Set(
+        res
+          .map((r) => r.weekNum)
+          .filter((w): w is number => typeof w === "number" && w > 0)
+      )
+    );
+    if (weeks.length > 0) {
+      cachedWeeks[course.id] = weeks;
+    }
+  }
+
+  const completedAssignmentIds = state.assignments
+    .filter((a) => {
+      // Completed: graded with valid grade text, or submitted and already marked
+      if (a.status === "graded" && a.grade && a.grade !== "-") return true;
+      return false;
+    })
+    .map((a) => a.id);
+
+  const hasAnyFixedTabs =
+    state.courses.length > 0 &&
+    state.courses.some((c) => Boolean(state.unitInfos[c.id]));
+
+  return {
+    fullRefresh: false,
+    includeFixedTabs: !hasAnyFixedTabs,
+    cachedWeeks,
+    completedAssignmentIds,
+  };
+}

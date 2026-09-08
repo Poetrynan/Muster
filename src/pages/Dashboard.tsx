@@ -41,7 +41,7 @@ import { EmptyBox } from "../components/ui/empty-box";
 import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustration";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
-import { useAppStore } from "../stores/useAppStore";
+import { useAppStore, getSyncOptions } from "../stores/useAppStore";
 import { checkForAppUpdates, getCurrentAppVersion, installUpdateInAppWithRetry, relaunchApp, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
@@ -676,15 +676,16 @@ export function Dashboard() {
     return () => unlisten?.();
   }, []);
 
-  const syncAllData = useCallback(async () => {
+  const syncAllData = useCallback(async (fullRefresh = false) => {
     if (syncStatus.isRunning) return;
     setSyncStatus({ isRunning: true });
     setSyncProgress(null);
     setLoadError(null);
     try {
       const prevState = useAppStore.getState();
-      const data = await syncAll();
-      updateAllSyncedData(data);
+      const options = getSyncOptions(prevState, fullRefresh);
+      const data = await syncAll(options);
+      updateAllSyncedData({ ...data, fullRefresh });
       // Stamp the cooldown timestamp only after a successful sync — writing it before
       // meant a failed manual sync would suppress the next launch auto-sync for an hour.
       useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
@@ -885,12 +886,7 @@ export function Dashboard() {
           Date.now() - lastAutoSyncTs < LAUNCH_SYNC_COOLDOWN_MS;
         const shouldAutoSync = !import.meta.env.DEV && !withinCooldown && !syncAlreadyRunning;
         startedSyncHere = shouldAutoSync;
-        // Semester-fixed tabs (unit info / schedule / contacts) are cached: after the first
-        // full sync they are skipped on regular launches (fetch strategy per user ruling).
-        const hasFixedTabCache =
-          Object.keys(st.unitInfos).length > 0 &&
-          Object.keys(st.schedules).length > 0 &&
-          Object.keys(st.contacts).length > 0;
+        // Incremental sync skips historical weeks and cached semester-fixed tabs automatically.
         if (shouldAutoSync) {
           // Mark the startup sync as running so the progress banner shows and manual
           // syncs are de-duplicated; skipped entirely when the cooldown applies.
@@ -903,7 +899,9 @@ export function Dashboard() {
         }
         const [fetched, synced] = await Promise.allSettled([
           shouldAutoSync && courses.length === 0 ? fetchCourses() : Promise.resolve(null),
-          shouldAutoSync ? syncAll(!hasFixedTabCache) : Promise.resolve(null),
+          shouldAutoSync
+            ? syncAll(getSyncOptions(useAppStore.getState(), false))
+            : Promise.resolve(null),
         ]);
 
         if (!isMounted) return;
@@ -917,7 +915,7 @@ export function Dashboard() {
         // Handle the syncAll result (includes courses/resources/assignments/announcements)
         // In dev mode shouldAutoSync=false, so synced.value is null and we simply skip
         if (synced.status === "fulfilled" && synced.value) {
-          updateAllSyncedData(synced.value);
+          updateAllSyncedData({ ...synced.value, fullRefresh: false });
           setIsLoadingCourses(false);
           // Stamp the cooldown timestamp ONLY after a successful sync. A failed auto-sync
           // must not suppress the next launch's auto-sync (see note above).

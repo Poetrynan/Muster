@@ -1,4 +1,5 @@
 use muster_lib::moodle::auth::{CookieData, SessionData, MoodleAuth};
+use muster_lib::moodle::models::SyncOptions;
 use muster_lib::moodle::scraper::MoodleScraper;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -176,3 +177,28 @@ async fn test_concurrent_lock_contention_and_no_deadlock() {
     assert!(res.is_ok(), "100 concurrent tasks must complete within 5s without deadlocking");
     println!("100 concurrent tasks completed in {:?}", start_time.elapsed());
 }
+
+#[test]
+fn test_sync_options_incremental_contract() {
+    let raw_json = r#"{
+        "fullRefresh": false,
+        "includeFixedTabs": false,
+        "cachedWeeks": {
+            "46882": [1, 2, 3, 4, 5]
+        },
+        "completedAssignmentIds": [6020312, 6020313]
+    }"#;
+
+    let opts: SyncOptions = serde_json::from_str(raw_json).expect("failed to deserialize SyncOptions");
+    assert!(!opts.full_refresh);
+    assert!(!opts.include_fixed_tabs);
+    assert_eq!(opts.cached_weeks.get(&46882), Some(&vec![1, 2, 3, 4, 5]));
+    assert_eq!(opts.completed_assignment_ids, vec![6020312, 6020313]);
+
+    let default_opts = SyncOptions::default();
+    assert!(!default_opts.full_refresh);
+    assert!(default_opts.include_fixed_tabs);
+    assert!(default_opts.cached_weeks.is_empty());
+    assert!(default_opts.completed_assignment_ids.is_empty());
+}
+

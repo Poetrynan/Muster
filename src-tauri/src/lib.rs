@@ -9,7 +9,7 @@ mod server;
 use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
 use moodle::scraper::MoodleScraper;
 use moodle::scraper::DownloadResult;
-use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, CourseTabData, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording};
+use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, CourseTabData, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions};
 use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
@@ -234,7 +234,8 @@ async fn fetch_course_recordings(
 async fn sync_all(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
-    #[allow(unused)] include_fixed_tabs: bool,
+    options: Option<SyncOptions>,
+    #[allow(unused)] include_fixed_tabs: Option<bool>,
 ) -> Result<
     (
         Vec<Course>,
@@ -254,7 +255,11 @@ async fn sync_all(
                 serde_json::json!({ "done": done, "total": total, "phase": phase }),
             );
         }));
-    scraper.fetch_all_data(progress, include_fixed_tabs).await
+    let mut opts = options.unwrap_or_default();
+    if let Some(ift) = include_fixed_tabs {
+        opts.include_fixed_tabs = ift;
+    }
+    scraper.fetch_all_data(progress, opts).await
 }
 
 /// Remove all files inside the configured download folder (user-initiated, from the clear-data modal).

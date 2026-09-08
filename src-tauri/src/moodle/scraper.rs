@@ -5,7 +5,7 @@ use crate::moodle::models::{
     Announcement, AssessmentType, Assignment, AssignmentStatus, CalendarEvent, Course, CourseContact,
     CourseTabData, GradeEntry, GradeOverviewRow, Member, Quiz, Recording, Schedule, ScheduleItem, SubmissionStatus, UnitDashboard,
     UnitInfo, UnitInfoSection, Resource, ResourceType, UnitWeek,
-    LearningObjective, LearningNavItem,
+    LearningObjective, LearningNavItem, SyncOptions,
 };
 
 #[derive(Debug, Clone)]
@@ -239,8 +239,18 @@ impl MoodleScraper {
         let _ = std::fs::write(&path, html);
     }
 
-    /// Fetch resources for a specific course
+    /// Fetch resources for a specific course (legacy / full fetch)
     pub async fn fetch_course_resources(&self, course_id: u64) -> Result<Vec<Resource>, String> {
+        self.fetch_course_resources_incremental(course_id, true, &[]).await
+    }
+
+    /// Fetch resources for a specific course with incremental skip support
+    pub async fn fetch_course_resources_incremental(
+        &self,
+        course_id: u64,
+        full_refresh: bool,
+        cached_weeks: &[u32],
+    ) -> Result<Vec<Resource>, String> {
         use futures_util::StreamExt;
 
         let client = self.auth.get_authenticated_client().await?;
@@ -254,13 +264,13 @@ impl MoodleScraper {
             self.course_names.lock().unwrap().insert(course_id, full);
         }
 
-
         // Monash MST template: the left nav on the course page turns each "week/block" into a real
         //   course/view.php?id=<cid>&section=<N>  server-side single-block view.
         // By default (without the section param) only the "current week" is rendered; the rest are collapsed in the static HTML.
         // So fetching every section link in the nav and merging covers all weeks, no Playwright needed.
         // Non-MST course pages have no such links, so this returns empty -> falls back to the single-page parse below.
         let sections = extract_mst_section_links(&base_html, course_id);
+        let current_focus_week = extract_current_focus_week_num(&base_html);
 
         let mut resources: Vec<Resource> = Vec::new();
 
@@ -271,11 +281,36 @@ impl MoodleScraper {
             let mut seen_resource_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
             let mut merged: Vec<Resource> = Vec::new();
 
+            // Active window: if current_focus_week is known (e.g. Week 6),
+            // past weeks strictly before last week (w < 6 - 1 = 5, so Weeks 1..4) that are
+            // already cached in the client store can be safely skipped.
+            let sections_to_fetch: Vec<(u64, String)> = if !full_refresh && !cached_weeks.is_empty() {
+                if let Some(curr_week) = current_focus_week {
+                    let active_threshold = curr_week.saturating_sub(1);
+                    sections
+                        .into_iter()
+                        .filter(|(_sec_num, label)| {
+                            if let Some(wn) = extract_week_num(label) {
+                                if wn < active_threshold && cached_weeks.contains(&wn) {
+                                    // Skip past completed week already present in client cache
+                                    return false;
+                                }
+                            }
+                            true
+                        })
+                        .collect()
+                } else {
+                    sections
+                }
+            } else {
+                sections
+            };
+
             // MST: fetch each section page concurrently and merge.
             // The base page is only used to discover the nav; its content is already covered by the section pages, so it isn't parsed again.
             // buffer_unordered(8) caps concurrency so 17 courses x ~19 weeks don't hit
             // the Monash server all at once (which could trigger rate limiting / SSO risk controls).
-            let fetches = sections.into_iter().map(|(section_num, label)| {
+            let fetches = sections_to_fetch.into_iter().map(|(section_num, label)| {
                 let client = client.clone();
                 let gate = self.request_gate.clone();
                 let url = format!(
@@ -337,6 +372,42 @@ impl MoodleScraper {
                                         };
                                         found = Some((title, url));
                                         break 'video_scan;
+                                    }
+                                }
+                            }
+                        }
+                        if found.is_none() {
+                            let doc = scraper::Html::parse_document(&base_html);
+                            if let (Ok(name_sel), Ok(a_sel)) = (
+                                scraper::Selector::parse(".activity-item[data-activityname]"),
+                                scraper::Selector::parse("a[href*='mod/lti/view.php']"),
+                            ) {
+                                for li in doc.select(&li_sel) {
+                                    let title = li
+                                        .select(&name_sel)
+                                        .next()
+                                        .and_then(|el| el.value().attr("data-activityname"))
+                                        .map(|t| t.to_string())
+                                        .unwrap_or_default();
+                                    let lower = title.to_lowercase();
+                                    if lower.contains("capture")
+                                        || lower.contains("record")
+                                        || lower.contains("panopto")
+                                        || lower.contains("lecture")
+                                    {
+                                        if let Some(href) = li
+                                            .select(&a_sel)
+                                            .next()
+                                            .and_then(|a| a.value().attr("href").map(|h| h.to_string()))
+                                        {
+                                            let url = if href.starts_with("http") {
+                                                href
+                                            } else {
+                                                format!("{}{}", self.base_url, href)
+                                            };
+                                            found = Some((title, url));
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -454,11 +525,18 @@ impl MoodleScraper {
         Ok(assignments)
     }
 
-    /// Fetch the course assessment overview (Assessments section, `&section=56`).
-    /// Covers regular assignments (modtype_assign) + quizzes (modtype_quiz) + weights + assessment categories,
-    /// which is more complete than `fetch_assignments` (which only scrapes the mod/assign/index.php table).
-    /// The frontend AssignmentsPage uses this to get the full assessment list.
+    /// Fetch the course assessment overview (Assessments section, `&section=56`) (legacy / full fetch).
     pub async fn fetch_course_assessments(&self, course_id: u64) -> Result<Vec<Assignment>, String> {
+        self.fetch_course_assessments_incremental(course_id, true, &[]).await
+    }
+
+    /// Fetch course assessments with incremental skip support for completed items
+    pub async fn fetch_course_assessments_incremental(
+        &self,
+        course_id: u64,
+        full_refresh: bool,
+        completed_assignment_ids: &[u64],
+    ) -> Result<Vec<Assignment>, String> {
         let client = self.auth.get_authenticated_client().await?;
         let url = format!("{}/course/view.php?id={}&section=56", self.base_url, course_id);
         let html = Self::fetch_course_view_text(&client, &self.request_gate, &url).await?;
@@ -466,7 +544,13 @@ impl MoodleScraper {
         let mut assignments = self.parse_assessments_from_html(&html, course_id)?;
         // The widget's STATUS column is rendered by JS and stays empty in static HTML, so enrich
         // real submission state from each item's detail page + the course gradebook.
-        self.enrich_assessment_statuses(&client, course_id, &mut assignments).await;
+        self.enrich_assessment_statuses(
+            &client,
+            course_id,
+            &mut assignments,
+            full_refresh,
+            completed_assignment_ids,
+        ).await;
         Ok(assignments)
     }
 
@@ -936,6 +1020,8 @@ impl MoodleScraper {
         client: &reqwest::Client,
         course_id: u64,
         assignments: &mut [Assignment],
+        full_refresh: bool,
+        completed_assignment_ids: &[u64],
     ) {
         use futures_util::StreamExt;
         if assignments.is_empty() {
@@ -946,7 +1032,13 @@ impl MoodleScraper {
         let urls: Vec<(usize, String)> = assignments
             .iter()
             .enumerate()
-            .filter_map(|(i, a)| a.url.clone().map(|u| (i, u)))
+            .filter_map(|(i, a)| {
+                // If not a full refresh, skip detail page fetch for items already marked completed/graded
+                if !full_refresh && completed_assignment_ids.contains(&a.id) {
+                    return None;
+                }
+                a.url.clone().map(|u| (i, u))
+            })
             .collect();
         if !urls.is_empty() {
             let fetches = urls.into_iter().map(|(i, u)| {
@@ -2581,7 +2673,7 @@ impl MoodleScraper {
     pub async fn fetch_all_data(
         &self,
         progress: Option<Arc<dyn Fn(usize, usize, &str) + Send + Sync>>,
-        include_fixed_tabs: bool,
+        options: SyncOptions,
     ) -> Result<
         (
             Vec<Course>,
@@ -2609,6 +2701,10 @@ impl MoodleScraper {
                 let sem = semaphore.clone();
                 let scraper = self.clone();
                 let course_id = course.id;
+                let full_refresh = options.full_refresh;
+                let include_fixed_tabs = options.include_fixed_tabs;
+                let cached_weeks = options.cached_weeks.get(&course_id).cloned().unwrap_or_default();
+                let completed_ids = options.completed_assignment_ids.clone();
                 tokio::spawn(async move {
                     let _permit = sem.acquire().await;
                     // P1: fetch the 3 kinds of per-course data in parallel, cutting sync time by roughly 60%.
@@ -2616,8 +2712,8 @@ impl MoodleScraper {
                     // as regular assignments, and enriches real submission state (detail pages + gradebook),
                     // so the Dashboard / AssignmentsPage stats are no longer quiz-blind.
                     let (resources, assignments, announcements, tab_data) = tokio::join!(
-                        scraper.fetch_course_resources(course_id),
-                        scraper.fetch_course_assessments(course_id),
+                        scraper.fetch_course_resources_incremental(course_id, full_refresh, &cached_weeks),
+                        scraper.fetch_course_assessments_incremental(course_id, full_refresh, &completed_ids),
                         scraper.fetch_announcements(course_id),
                         scraper.fetch_course_tab_data(course_id, include_fixed_tabs),
                     );
@@ -4176,6 +4272,17 @@ fn extract_week_num(section: &str) -> Option<u32> {
     cap.get(1)
         .or_else(|| cap.get(2))
         .and_then(|m| m.as_str().parse().ok())
+}
+
+/// Extract the current focus week number from the course homepage HTML (Monash MST template).
+fn extract_current_focus_week_num(html: &str) -> Option<u32> {
+    use scraper::{Html, Selector};
+    let doc = Html::parse_document(html);
+    let nav_sel = Selector::parse(".mst-current-focus-nav-item").ok()?;
+    let el = doc.select(&nav_sel).next()?;
+    let h3_sel = Selector::parse("h3").ok()?;
+    let h3 = el.select(&h3_sel).next()?;
+    extract_week_num(&h3.text().collect::<String>())
 }
 
 /// Parse a Moodle human-readable due date ("Monday, 23 March 2026, 9:00 AM") into RFC3339 ISO.
