@@ -81,13 +81,17 @@
 - **深层作业富化跳过**：已过去的固定周作业自动沿用缓存，不再向 Moodle 单独发起昂贵的提交状态与成绩查询，HTTP 往返请求降低 65%+。
 - **Map 级无损增量合并（Zero-Loss Map Upsert）**：前端彻底废除全量数组粗暴替换，基于课程 ID 与资源 URL 构建双层 Map 合并，确保增量切片同步下历史数据永久完好。
 - **双核同步交互设计**：启动与常规操作默认疾速增量同步，设置页保留高危鲜红的“强制全量同步”终极逃生门。
+- **v0.2.1 极速补丁（Hotfix）**：
+  - **当前活跃学期课程精准锁定（Target Course Scoping）**：彻底跳过本地已存有完整课件的 8~9 门历史结课课程，网络往返减少 160+ 次。
+  - **修复 MST 焦点周提取器**：精准适配 `.mst-current-focus-nav-item-current` 容器与 `<h5>Week X</h5>` 标签，成功激活 `Week N-1` 滚动窗口机制。
+  - **进度条真实收敛**：从 `(0/12)` 优化为 `(0/3) -> (1/3) -> (2/3) -> (3/3)`，耗时压减至 3~5 秒。
 
 ---
 
 ## 3. 当前测试与构建验证状态
 
-- **Rust 后端单元测试**：`70 passed; 0 failed; finished in 0.27s`
-- **Rust 集成与会话验证测试**：`6 passed; 0 failed; finished in 2.12s`
+- **Rust 后端单元测试**：`71 passed; 0 failed; finished in 0.26s`
+- **Rust 集成与会话验证测试**：`6 passed; 0 failed; finished in 1.87s`
 - **前端 TypeScript 类型检查**：`tsc` 0 error
-- **前端 Vite 生产级打包**：`✓ built in 12.33s`，2252 模块无缝编译
+- **前端 Vite 生产级打包**：`✓ built in 1m 2s`，2252 模块无缝编译
 - **跨平台构建矩阵**：Windows 64-bit / macOS aarch64 / macOS x64 验证就绪

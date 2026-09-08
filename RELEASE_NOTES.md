@@ -1,3 +1,26 @@
+# Muster v0.2.1
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.1_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.1/Muster_0.2.1_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.1_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.1/Muster_0.2.1_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.1_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.1/Muster_0.2.1_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.1_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.1/Muster_0.2.1_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## Hotfix
+
+- **Active Semester Course Scoping (Blazing Fast Sync):**
+  - **Bypassed Historical Past-Semester Courses:** In incremental sync mode, Muster now automatically scopes deep network requests to the student's current active semester units (and any uncached/pinned units). Completed courses from past years/semesters already stored in IndexedDB are completely bypassed, eliminating over 160 redundant HTTP requests per sync.
+  - **Live Progress Counter:** The progress indicator now displays the true active course queue (e.g., `1/4` instead of `1/12`), completing synchronization in 3–5 seconds.
+- **Fixed MST Focus Week Selector:**
+  - Robustly detects the active teaching week on Monash MST templates by inspecting `.mst-current-focus-nav-item-current` and its child `<h5>Week X</h5>` tags. This activates the `Week N-1` rolling window buffer so historical weeks within active courses are accurately skipped.
+
+---
+
 # Muster v0.2.0
 
 ## Download
