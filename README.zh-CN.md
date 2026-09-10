@@ -17,7 +17,7 @@
   <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/官网直达-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="官方网站"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.1-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.2-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -82,9 +82,9 @@ Muster 是一款面向学生的桌面应用，把散落在 Moodle 各处的课�
 > **支持平台**：Muster 支持 **Windows 10 / 11 (64位)** 与 **macOS 12+ (Apple Silicon M系列与 Intel 芯片)**。
 
 1. 在 [Releases](https://github.com/Poetrynan/Muster/releases) 页面或[官方网站](https://poetrynan.github.io/Muster/)下载适合你系统的安装包：
-   - **Windows**：`Muster_0.2.1_x64-setup.exe`（或 `.msi`）
-   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.2.1_aarch64.dmg`
-   - **macOS (Intel)**：`Muster_0.2.1_x64.dmg`
+   - **Windows**：`Muster_0.2.2_x64-setup.exe`（或 `.msi`）
+   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.2.2_aarch64.dmg`
+   - **macOS (Intel)**：`Muster_0.2.2_x64.dmg`
 2. 打开客户端，点击登录并使用你的 Monash 学生账号完成认证（Okta SSO）。
 3. 点击 **同步 Moodle 数据** —— 所有课程、作业、课件和通知将自动拉取到本地。
 

@@ -92,6 +92,15 @@
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+### 3.2 冷启动基线建立 vs. 日常增量生命周期 (Cold-start Baseline Setup vs. Daily Incremental Sync)
+
+系统通过自适应状态机在**“全量基线建立（首次）”**与**“智能增量守护（日常）”**间平滑流转：
+
+| 生命周期阶段 | 触发判断条件 | 抓取范围策略 (Scoping) | 周次与板块策略 (Sections & Tabs) | 预期耗时与体感 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Day 1：冷启动拓荒 (Baseline Setup)** | `state.courses.length === 0` (本地 IndexedDB 记录为 0) | `targetCourseIds = undefined`：全量抓取所有真实课程（如 12 门全学期课程） | `includeFixedTabs = true`：并发抓取大纲、日程、联系人；`cachedWeeks = {}`：全周次并发下载 | 25~35 秒，进度条清晰显示 `(0/12)...(12/12)`，彻底建立本地离线学业底座 |
+| **Day 2+：日常增量守护 (Daily Delta Sync)** | `state.courses.length > 0` | `targetCourseIds = [activeIds]`：精准锁定当前学期 3~4 门在读课，历史结课 0 网络请求 | `includeFixedTabs = false`：固态板块 0 请求；仅抓取当前焦点周 ±1 周，历史周命中跳过 | **3~5 秒**，进度条清爽收敛为 `(0/3) -> (3/3)`，静默秒级刷新 |
+
 ---
 
 ## 4. 详细模块设计与实现规范 (Module Specifications)
@@ -115,6 +124,9 @@ pub struct SyncOptions {
     /// 前端已知已完结（已截止且已有最终成绩）的作业/测验 ID
     #[serde(default)]
     pub completed_assignment_ids: Vec<u64>,
+    /// 增量目标抓取课程列表 (v0.2.1 新增：用于跳过历史学期结课课程)
+    #[serde(default)]
+    pub target_course_ids: Option<Vec<u64>>,
 }
 ```
 

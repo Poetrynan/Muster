@@ -1,3 +1,27 @@
+# Muster v0.2.2
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.2_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.2/Muster_0.2.2_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.2_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.2/Muster_0.2.2_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.2_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.2/Muster_0.2.2_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.2_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.2/Muster_0.2.2_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## Fixes & Improvements
+
+- **Accurate Calendar-Day Due Date Calculations (`getCalendarDayDiff`):**
+  - **Fixed False "Due Tomorrow" Badges:** Resolved a critical date calculation bug where assignments due later today were erroneously labeled as "Tomorrow" (or "1 day left"). The root cause—performing floating-point division on millisecond timestamps combined with `Math.ceil`—caused any active deadline with less than 24 hours remaining to round up to `1`.
+  - **Local Midnight Calendar Day Comparison:** Introduced a standardized `getCalendarDayDiff` helper in `src/lib/utils.ts` that aligns both the target deadline and base reference time to local midnight (`00:00:00.000`), accurately categorizing deadlines into `0` (Due Today), `1` (Tomorrow), `2..7` (Due in N days), and `< 0` (Overdue).
+  - **Assignments Page Due Date Buckets:** Fixed assignment category grouping in `AssignmentsPage.tsx` (`bucketOf`), ensuring assignments due today correctly land in the "Due Today" bucket instead of falling through to "Due This Week".
+  - **Consistent Badges & Sidebar Countdown:** Synchronized assignment card badges and the upcoming deadline countdown in the sidebar to display "Due Today" when an item is due today, and "Tomorrow" when due the next calendar day.
+  - **Dashboard Calendar Timeline Alignment:** Aligned the timeline grouping under the Calendar tab to respect calendar day boundaries rather than rolling 24-hour windows.
+
+---
+
 # Muster v0.2.1
 
 ## Download
