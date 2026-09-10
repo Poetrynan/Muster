@@ -64,9 +64,48 @@ export function parseDueTimestamp(date: string | Date): number {
   return due.getTime();
 }
 
-export function getDaysUntilDue(date: string | Date): number {
-  const diff = parseDueTimestamp(date) - Date.now();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+/**
+ * Compute the difference in calendar days between a target date and a base date (defaults to now).
+ *
+ * Both dates are converted to midnight (00:00:00.000) in the user's local timezone,
+ * ensuring calendar day boundaries are respected:
+ * - 0 = same calendar day ("today")
+ * - 1 = tomorrow
+ * - -1 = yesterday
+ * - positive = future days
+ * - negative = past days
+ * Returns null if target or base date is missing or cannot be parsed.
+ */
+export function getCalendarDayDiff(
+  target?: number | Date | string | null,
+  base: number | Date = Date.now()
+): number | null {
+  if (target == null) return null;
+  const targetMs = typeof target === "number" ? target : parseDueTimestamp(target);
+  if (Number.isNaN(targetMs) || targetMs <= 0) return null;
+
+  const baseMs = typeof base === "number" ? base : (base instanceof Date ? base.getTime() : parseDueTimestamp(base));
+  if (Number.isNaN(baseMs)) return null;
+
+  const targetDate = new Date(targetMs);
+  const baseDate = new Date(baseMs);
+
+  const targetMidnight = new Date(
+    targetDate.getFullYear(),
+    targetDate.getMonth(),
+    targetDate.getDate()
+  ).getTime();
+  const baseMidnight = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth(),
+    baseDate.getDate()
+  ).getTime();
+
+  return Math.round((targetMidnight - baseMidnight) / 86_400_000);
+}
+
+export function getDaysUntilDue(date?: string | Date | null): number | null {
+  return getCalendarDayDiff(date);
 }
 
 export function getFileExtension(filename: string): string {
@@ -92,8 +131,8 @@ export function getEffectiveAssignmentStatus(
   if (status === "submitted" || status === "graded") return status;
   if (!dueDate) return status;
 
-  const due = new Date(dueDate).getTime();
-  if (Number.isNaN(due)) return status;
+  const due = parseDueTimestamp(dueDate);
+  if (Number.isNaN(due) || due <= 0) return status;
 
   return due < Date.now() ? "overdue" : status;
 }

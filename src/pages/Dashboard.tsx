@@ -67,7 +67,7 @@ function classifyAnnouncement(
   return "general";
 }
 
-import { isTermEnded, computeSavePath, isDownloadableUrl , parseDueTimestamp } from "../lib/utils";
+import { isTermEnded, computeSavePath, isDownloadableUrl , parseDueTimestamp, getCalendarDayDiff } from "../lib/utils";
 import {
   findDueAssignments,
   diffAnnouncements,
@@ -1161,13 +1161,19 @@ export function Dashboard() {
     return out.sort((a, b) => a.ts - b.ts);
   }, [calendarEvents, assignments, courses, hiddenCourseIds]);
 
-  const dueSoonCount = deadlineItems.filter((d) => d.ts >= Date.now() && d.ts <= Date.now() + 7 * 86_400_000).length;
+  const dueSoonCount = deadlineItems.filter((d) => {
+    const diff = getCalendarDayDiff(d.ts);
+    return d.ts >= Date.now() && diff !== null && diff >= 0 && diff <= 7;
+  }).length;
   const gradedCount = (gradeOverview || []).filter((g) => g.grade !== "-").length;
 
   const renderDeadlineCard = (item: { key: string; courseId: number | null; kind: "quiz" | "assign"; title: string; ts: number }) => {
-    const diff = Math.ceil((item.ts - Date.now()) / 86_400_000);
+    const diff = getCalendarDayDiff(item.ts);
+    const isPast = item.ts < Date.now();
     const badge =
-      diff <= 0 ? (
+      diff === null || isPast || diff < 0 ? (
+        <Badge variant="danger">{t("assignments.status.overdue")}</Badge>
+      ) : diff === 0 ? (
         <Badge variant="danger">{t("dashboard.dueToday")}</Badge>
       ) : diff === 1 ? (
         <Badge variant="danger" className="font-bold">{t("dashboard.dueTomorrow")}</Badge>
@@ -2028,7 +2034,10 @@ export function Dashboard() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6" role="list" aria-label={t("dashboard.dueIn7")}>
                   {deadlineItems
-                    .filter((d) => d.ts >= Date.now() && d.ts <= Date.now() + 7 * 86_400_000)
+                    .filter((d) => {
+                      const diff = getCalendarDayDiff(d.ts);
+                      return d.ts >= Date.now() && diff !== null && diff >= 0 && diff <= 7;
+                    })
                     .slice(0, 6)
                     .map(renderDeadlineCard)}
                 </div>
@@ -2134,10 +2143,31 @@ export function Dashboard() {
                 (() => {
                   const now = Date.now();
                   const groups: { label: string; items: typeof deadlineItems }[] = [
-                    { label: t("dashboard.today"), items: deadlineItems.filter((d) => d.ts >= now && d.ts < now + 86_400_000) },
-                    { label: t("dashboard.next7"), items: deadlineItems.filter((d) => d.ts >= now + 86_400_000 && d.ts < now + 7 * 86_400_000) },
-                    { label: t("dashboard.thisMonth"), items: deadlineItems.filter((d) => d.ts >= now + 7 * 86_400_000 && d.ts < now + 30 * 86_400_000) },
-                    { label: t("dashboard.later"), items: deadlineItems.filter((d) => d.ts >= now + 30 * 86_400_000) },
+                    {
+                      label: t("dashboard.today"),
+                      items: deadlineItems.filter((d) => d.ts >= now && getCalendarDayDiff(d.ts) === 0),
+                    },
+                    {
+                      label: t("dashboard.next7"),
+                      items: deadlineItems.filter((d) => {
+                        const diff = getCalendarDayDiff(d.ts);
+                        return diff !== null && diff >= 1 && diff <= 7;
+                      }),
+                    },
+                    {
+                      label: t("dashboard.thisMonth"),
+                      items: deadlineItems.filter((d) => {
+                        const diff = getCalendarDayDiff(d.ts);
+                        return diff !== null && diff > 7 && diff <= 30;
+                      }),
+                    },
+                    {
+                      label: t("dashboard.later"),
+                      items: deadlineItems.filter((d) => {
+                        const diff = getCalendarDayDiff(d.ts);
+                        return diff !== null && diff > 30;
+                      }),
+                    },
                   ];
                   const visible = groups
                     .map((g) => ({

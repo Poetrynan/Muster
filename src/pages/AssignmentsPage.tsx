@@ -24,7 +24,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Progress } from "../components/ui/progress";
 import { Tabs } from "../components/ui/tabs";
 import { useAppStore } from "../stores/useAppStore";
-import { getEffectiveAssignmentStatus, isTermEnded , parseDueTimestamp } from "../lib/utils";
+import { getEffectiveAssignmentStatus, isTermEnded, parseDueTimestamp, getCalendarDayDiff, getDaysUntilDue } from "../lib/utils";
 
 // Determine whether a course term has ended (Monash: S1 ≈ late Feb - Jun, S2 ≈ late Jul - Nov).
 import { useTranslation } from "../i18n/useTranslation";
@@ -183,7 +183,6 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
 
   // ── Bucket by due date: assignments have no week field, so due_date_iso is the natural grouping axis.
   // submitted and graded get separate buckets so the two states are never visually mixed.
-  const DAY_MS = 1000 * 60 * 60 * 24;
   const bucketOf = (a: (typeof annotated)[number]): string => {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
     // Anything from an ended term or ignored course → archived bucket, whatever its state.
@@ -195,12 +194,13 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     const dueMs = parseDueTimestamp(iso);
     // An unparseable due string must NOT fall through to "later" — NaN fails every
     // comparison below, which silently dumped such items into the wrong bucket.
-    if (Number.isNaN(dueMs)) return "noDate";
-    const days = Math.ceil((dueMs - Date.now()) / DAY_MS);
-    if (days < 0) return "overdue";
-    if (days === 0) return "today";
-    if (days <= 7) return "thisWeek";
-    if (days <= 14) return "nextWeek";
+    if (Number.isNaN(dueMs) || dueMs <= 0) return "noDate";
+    const diff = getCalendarDayDiff(dueMs);
+    if (diff === null) return "noDate";
+    if (dueMs < Date.now() || diff < 0) return "overdue";
+    if (diff === 0) return "today";
+    if (diff <= 7) return "thisWeek";
+    if (diff <= 14) return "nextWeek";
     return "later";
   };
 
@@ -286,8 +286,16 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                       ? t("assignments.dueDate", { date: assignment.dueDate })
                       : t("assignments.dueDate", { date: t("course.dueUnset") })}
                   </span>
-                  {daysUntil !== null && daysUntil > 0 && (assignment.status === "pending" || assignment.status === "upcoming") &&
-                    (daysUntil <= 7 ? (
+                  {daysUntil !== null && daysUntil >= 0 && (assignment.status === "pending" || assignment.status === "upcoming") &&
+                    (daysUntil === 0 ? (
+                      <Badge variant="danger" className="font-bold">
+                        {t("dashboard.dueToday")}
+                      </Badge>
+                    ) : daysUntil === 1 ? (
+                      <Badge variant="danger" className="font-bold">
+                        {t("dashboard.dueTomorrow")}
+                      </Badge>
+                    ) : daysUntil <= 7 ? (
                       <Badge variant="danger" className="font-bold">
                         {t("assignments.dueIn", { days: daysUntil })}
                       </Badge>
@@ -371,10 +379,10 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const now = Date.now();
   const upcoming = annotated
     .filter((a) => (a.dueDateIso || a.dueDate) && (a.status === "pending" || a.status === "upcoming"))
-    .map((a) => ({ ...a, _due: new Date((a.dueDateIso || a.dueDate)!).getTime() }))
+    .map((a) => ({ ...a, _due: parseDueTimestamp((a.dueDateIso || a.dueDate)!) }))
     .filter((a) => a._due >= now)
     .sort((a, b) => a._due - b._due)[0];
-  const upcomingDays = upcoming ? Math.ceil((upcoming._due - now) / (1000 * 60 * 60 * 24)) : null;
+  const upcomingDays = upcoming ? getCalendarDayDiff(upcoming._due) : null;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -408,13 +416,6 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
       default:
         return <Badge>{status}</Badge>;
     }
-  };
-
-  const getDaysUntilDue = (dueDate: string | undefined) => {
-    if (!dueDate) return null;
-    const due = new Date(dueDate);
-    const diffTime = due.getTime() - now;
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   return (
@@ -495,7 +496,11 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                   </p>
                   <div>
                     <Badge variant="danger" className="font-bold text-xs shadow-sm">
-                      {t("assignments.dueIn", { days: upcomingDays ?? 0 })}
+                      {upcomingDays === 0
+                        ? t("dashboard.dueToday")
+                        : upcomingDays === 1
+                        ? t("dashboard.dueTomorrow")
+                        : t("assignments.dueIn", { days: upcomingDays ?? 0 })}
                     </Badge>
                   </div>
                 </div>

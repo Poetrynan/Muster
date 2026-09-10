@@ -15,6 +15,8 @@
 6. [服务闭环篇：反馈邮箱强制只读绑定与课程元数据诊断快照](#6-服务闭环篇反馈邮箱强制只读绑定与课程元数据诊断快照)
 7. [系统安全与集成篇：Moodle 域名全域收敛与南非校区注册页避坑](#7-系统安全与集成篇moodle-域名全域收敛与南非校区注册页避坑)
 8. [架构里程碑篇（v0.2.0）：智能增量同步、双层 Map Upsert 与终极逃生门](#8-架构里程碑篇v020智能增量同步双层-map-upsert-与终极逃生门)
+9. [架构与产品篇（v0.2.1）：冷启动与基线建立（Cold-start & Baseline Establishment）—— 为什么第一次必须全量？](#9-架构与产品篇v021冷启动与基线建立cold-start--baseline-establishment为什么第一次必须全量)
+10. [体验与算法篇（v0.2.2）：自然日历天与物理时间的认知鸿沟 —— 为什么今天截止会变成‘明天’？](#10-体验与算法篇v022自然日历天与物理时间的认知鸿沟--为什么今天截止会变成明天)
 
 ---
 
@@ -291,3 +293,119 @@ for (const inc of incomingCourses) {
 - **增量抓取的关键是减少网络 I/O，而不是在本地对比**。
 - **无损合并（Upsert）是增量体验的前提，而永久持久化（Permanent Storage）是无损合并的基石**。
 - **成熟系统永远保留逃生门（Force Full Sync）**，兼顾日常秒级流畅与极端情况的一键恢复。
+
+---
+
+## 9. 架构与产品篇（v0.2.1）：冷启动与基线建立（Cold-start & Baseline Establishment）—— 为什么第一次必须全量？
+
+### 【用户真实场景与疑问】
+> “既然我们做了智能增量同步，那为什么第一次打开软件的新用户，还是在全量抓取？什么叫‘冷启动与基线建立’？第一次为什么不能也偷懒只抓当期的 3 门课？”
+
+### 【通俗生动比喻】
+1. **搬新家大整理 vs 日常下班挂衣服**：
+   - **第一次启动（冷启动建库）**：就像你第一天搬进新租的空房子。行李箱全堆在客厅，衣柜和书架上一无所有。第一天你必须花半小时把全部衣服挂进衣橱、把所有专业课本摆上书架、把厨房调料放整齐。虽然第一天花的时间较长，但**只有把这个家彻底安顿好，整个房间才具备正常居住的基线**；
+   - **日常启动（增量同步）**：从第二天开始，你下班顺路买了一件新衬衫（当前学期当周的新课件），你只需要花 5 秒钟顺手挂在当季衣架上，**绝对不可能每天下班都把衣橱里所有冬装、夏装、过季旧衣服全拖到地板上重新洗、重新叠一遍！**
+2. **Git 版本控制系统的首日提交（Initial Commit）**：
+   - 任何代码仓库要使用 `git diff` 查看变动或者提交 1 行代码的增量补丁，前提必须是执行过一次 `git init` 并创建了包含全部初始代码的**根基底座（Initial Baseline Commit）**。没有底座，根本谈不上“增量”。
+
+### 【底层技术原理与核心代码】
+用户**完全不需要手动选择**“我是新用户”还是“日常增量”，系统通过本地持久化（IndexedDB）指纹状态机自动完成全生命周期模式切换：
+
+1. **前端空状态探测（Empty Cache Detection）**：
+   在 `src/stores/useAppStore.ts` 的 `getSyncOptions` 算法中：
+   ```typescript
+   // 第一次启动：state.courses 是空数组 []（本地 IndexedDB 记录为 0）
+   if (state.courses.length === 0) {
+     return {
+       fullRefresh: false,
+       targetCourseIds: undefined, // 传递 None 给 Rust，指示全量扫描
+       cachedWeeks: {},            // 缓存周次为空，指示逐周抓取
+       completedAssignmentIds: [],
+       includeFixedTabs: true,     // 必须抓取 Unit Info / Schedule / Contacts
+     };
+   }
+   ```
+2. **Rust 后端调度器自动激活“全量建库模式”**：
+   在 `src-tauri/src/moodle/scraper.rs` 中：
+   - **课程范围**：检测到 `options.target_course_ids == None`，调度器将抓取全部真实课程（如 12 门全部学期课程，进度条显示 `0/12 ... 12/12`）；
+   - **固定 Tab**：`include_fixed_tabs == true`，并发请求每门课程的教学大纲（Unit Info）、日程表（Schedule）、教师联络（Contacts）；
+   - **周次资源**：`cached_weeks` 为空，每门课的所有 Section 页面并发解析，建立完整课件索引。
+3. **数据写入 IndexedDB，无缝流转为“增量守护模式”**：
+   - 首次全量数据写入 IndexedDB 成为永久缓存；
+   - **第 2 次同步触发时**：
+     - `state.courses.length === 12`，`inferActiveSemesterKey` 锁定当前活跃学期（如 `2026-S2`）；
+     - `targetCourseIds` 收敛为当期仅有的 3~4 门课；
+     - 历史课程全部跳过，当期课程仅抓当前周 ±1 周，固态 Tab 0 网络请求；
+     - 进度条变为 `(0/3) -> (1/3) -> (2/3) -> (3/3)`，耗时由 30~50s 降至 **3~5s**！
+
+### 【PM 产品意识与决策沉淀】
+为什么不能在第 1 天也偷懒“只抓当期 3 门课”？
+- **首尝完整度与第一印象（First-Impression Integrity）**：
+  如果第 1 天偷懒只抓 3 门课，用户点击“历史学期”或“全部课程”时，看到的是一片空白死寂，第一感觉就是“这软件坏了/漏抓了我的课”，造成严重信任崩塌；
+- **长尾离线可用性（Local-First Offline Value）**：
+  通过初次全量基线建立，用户大学期间的所有课程大纲、期末成绩、历史课件在第 1 天全部安全落地本地。哪怕后续在断网、没梯子或学校 Moodle 服务器宕机时，Muster 依然能作为学生最坚实的**本地离线学业档案库**！
+- **零配置状态流转（Zero-Configuration Magic）**：
+  最好的体验是不打扰用户。用户无需关心什么是 Baseline、什么是 Delta，系统靠存储指纹无声无息地完成了从“拓荒建库”到“极速巡检”的蜕变。
+
+---
+
+## 10. 体验与算法篇（v0.2.2）：自然日历天与物理时间的认知鸿沟 —— 为什么今天截止会变成‘明天’？
+
+### 【用户真实场景与疑问】
+> “一个作业或者测试的截止日期明明是今天 9 月 10 日晚上 23:59，但我今天下午打开客户端查看时，上面赫然写着‘明天’到期！作业分类也被分到了‘本周到期’而不是‘今天到期’，这不是明显的误导和 BUG 吗？”
+
+### 【通俗生动比喻】
+> 计算机就像一个**机械计步秒表**，它只懂“还剩几个小时”；而人类的生活是以**太阳升起落下的自然日历日（Calendar Day）**来度量的。  
+> 如果今天是周四下午 2 点，晚上 11 点 59 分截止，距离截止还有 10 个小时。  
+> 计算机程序员随手写了一个 `(deadline - now) / 24小时`，算出来是 `0.41 天`。接着他为了防止“不足 1 天变成 0 天”，随手加了一个**向上取整（`Math.ceil`）**，结果 `Math.ceil(0.41)` 瞬间变成了 **`1`**！代码一看“等于 1”，毫不犹豫地贴上“明天”的标签。  
+> 结果是：**只要作业在今天之内还没截止（从早上 00:00 到晚上 23:59），它在软件里就永远被当成‘明天’！只有当它已经过了截止时间、彻底逾期时，剩余时间才变成 0 或负数**。这就好比你在考试前 1 小时看手表，手表竟然告诉你“明天才交卷”，极其惊险和荒谬！
+
+### 【底层技术原理与核心代码】
+1. **致命的数学缺陷代码**：
+   在原先的前端实现中：
+   ```typescript
+   // ❌ 错误做法：物理毫秒差除法 + Math.ceil
+   const diff = Math.ceil((item.ts - Date.now()) / 86_400_000);
+   const badge =
+     diff <= 0 ? (
+       <Badge variant="danger">{t("dashboard.dueToday")}</Badge> // 只有超时了才会 <= 0！
+     ) : diff === 1 ? (
+       <Badge variant="danger" className="font-bold">{t("dashboard.dueTomorrow")}</Badge> // 今天白天全被误判为明天！
+     ) : ...
+   ```
+2. **正确解法：统一本地时区的自然日凌晨锚定（`getCalendarDayDiff`）**：
+   我们在 `src/lib/utils.ts` 中构建了纯粹基于本地日历天的比较算法：
+   ```typescript
+   export function getCalendarDayDiff(
+     target?: number | Date | string | null,
+     base: number | Date = Date.now()
+   ): number | null {
+     if (target == null) return null;
+     const targetMs = typeof target === "number" ? target : parseDueTimestamp(target);
+     if (Number.isNaN(targetMs) || targetMs <= 0) return null;
+
+     const targetDate = new Date(targetMs);
+     const baseDate = new Date(base);
+
+     // 将两端时间全部重置为本地时区的 00:00:00.000 凌晨
+     const targetMidnight = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
+     const baseMidnight = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
+
+     // 通过 Math.round 彻底吸收夏令时（DST）23小时/25小时的轻微波动
+     return Math.round((targetMidnight - baseMidnight) / 86_400_000);
+   }
+   ```
+3. **状态分层矩阵**：
+   - `diff === 0 && now <= targetMs` ➔ **【今天截止（Due today）】**
+   - `diff === 0 && now > targetMs` 或 `diff < 0` ➔ **【已逾期（Overdue）】**
+   - `diff === 1` ➔ **【明天（Tomorrow）】**
+   - `2 <= diff <= 7` ➔ **【N 天后到期】**
+
+### 【PM 产品意识与决策沉淀】
+- **别让“机器时间（Physical Duration）”冒充“人类时间（Human Perception）”**：
+  在设计任何时间相关的产品功能时，必须严格区分：
+  1. **倒计时型业务（Duration-sensitive）**：如打车预计 12 分钟到达、验证码 60 秒失效，适合使用毫秒级差值；
+  2. **日程与待办型业务（Calendar-sensitive）**：如作业、会议、生日、还款日，用户的心理预期永远是以“当天 0 点到 24 点”作为一个不可分割的自然日单位。
+- **看似微小的 1 行代码偏差，会产生巨大的用户信任灾难**：
+  学生依赖 Muster 管理 GPA 与作业 Deadline。如果在截止当天看到“明天到期”而放松警惕错失提交，将造成不可挽回的学业损失。技术型 AI PM 必须具备**对时间边界（Timezone, Midnight, Calendar Day vs Milliseconds）的极度敏锐性**与全链路验收把控力。
+
