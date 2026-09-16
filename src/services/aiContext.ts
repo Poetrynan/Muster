@@ -83,6 +83,7 @@ export interface CourseAiContextInput {
   recordings?: Recording[];
   contacts?: CourseContact[];
   gradeEntries?: GradeEntry[];
+  /** Current teaching week from the course dashboard highlight (e.g. 8). */  currentWeek?: number | null;
 }
 
 /** Week numbers extractable from a recording title ("Week 5 Lecture" -> 5). */
@@ -101,6 +102,7 @@ export function buildCourseAiContext(input: CourseAiContextInput): string {
   sections.push([
     `Course: ${input.courseName}`,
     `Today's date: ${input.today}`,
+    `Current teaching week: ${input.currentWeek != null ? `Week ${input.currentWeek} (this is the CURRENT week - focus here, not on earlier weeks)` : "unknown"}`,
     `Answer language: ${input.language}`,
   ]);
 
@@ -278,6 +280,8 @@ export interface PlanContextInput {
   unitInfo?: UnitInfo | null;
   today: string;
   language: string;
+  /** Current teaching week from the course dashboard highlight. */
+  currentWeek?: number | null;
 }
 
 /** P1-F: per-course study plan context. Same local-cache discipline as the summary. */
@@ -286,6 +290,7 @@ export function buildPlanContext(input: PlanContextInput): string {
     [
       `Course: ${input.course.fullName}`,
       `Today's date: ${input.today}`,
+      `Current teaching week: ${input.currentWeek != null ? `Week ${input.currentWeek} (CURRENT - focus here)` : "unknown"}`,
       `Answer language: ${input.language}`,
     ],
   ];

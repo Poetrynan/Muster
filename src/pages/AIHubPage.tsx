@@ -53,6 +53,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   const unitInfos = useAppStore((s) => s.unitInfos);
   const schedules = useAppStore((s) => s.schedules);
   const recordings = useAppStore((s) => s.recordings);
+  const unitDashboards = useAppStore((s) => s.unitDashboards);
   const calendarEvents = useAppStore((s) => s.calendarEvents);
   const aiInsights = useAppStore((s) => s.aiInsights);
   const setCoursePlan = useAppStore((s) => s.setCoursePlan);
@@ -188,6 +189,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
         schedule: schedules[courseId] ?? null,
         recordings: recordings[courseId] ?? [],
         contacts: [],
+        currentWeek: unitDashboards[courseId]?.currentWeek?.num ?? null,
         gradeEntries,
       });
       const fullAiUrl = buildAiUrl(settings.aiBaseUrl || "", settings.aiFormat ?? splitAiUrl(settings.aiBaseUrl || "").format);
@@ -256,6 +258,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
         unitInfo: unitInfos[courseId] ?? null,
         today: new Date().toLocaleDateString("en-CA"),
         language: langInstruction(settings.language),
+        currentWeek: unitDashboards[courseId]?.currentWeek?.num ?? null,
       });
       const fullAiUrl = buildAiUrl(settings.aiBaseUrl || "", settings.aiFormat ?? splitAiUrl(settings.aiBaseUrl || "").format);
       let acc = "";
