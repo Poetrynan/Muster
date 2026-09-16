@@ -36,7 +36,7 @@ import { isDownloadableUrl } from "../lib/utils";
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { buildCourseAiContext } from "../services/aiContext";
-// Task 5 wiring: extractMusterJson / stripPartialAppendix (imported there)
+import { extractMusterJson, stripPartialAppendix } from "../lib/aiStructured";
 import {
   fetchCourseResources,
   fetchCourseGradebook,
@@ -111,6 +111,16 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   const streamRef = useRef("");
   // Per-course gradebook cache for the AI context (null = not fetched yet).
   const [gradeBook, setGradeBook] = useState<GradeEntry[] | null>(null);
+  // Session-scoped checklist state for the structured summary action cards (P0-B).
+  const [doneActions, setDoneActions] = useState<Set<string>>(new Set());
+  const toggleAction = (key: string) => {
+    setDoneActions((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [contacts, setContacts] = useState<CourseContact[]>(cachedContacts ?? []);
   const [contactsError, setContactsError] = useState<string | null>(null);
@@ -648,6 +658,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
         settings.aiApiKey,
         fullAiUrl,
         settings.aiModel,
+        "summary",
         {
           onChunk: (text, thinking) => {
             if (thinking) {
@@ -661,6 +672,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
           },
           onDone: () => {
             setThinkingActive(false);
+            const { json, clean } = extractMusterJson(streamRef.current);
             addSummary(courseId, {
               id: `${courseId}-${Date.now()}`,
               courseId,
@@ -669,7 +681,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
               generatedAt: new Date().toISOString(),
               provider: settings.aiCompatType,
               model: settings.aiModel,
-              content: streamRef.current,
+              content: clean,
+              structured: json ?? undefined,
             });
             setSummaryLoading(false);
           },
@@ -1590,8 +1603,53 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                             {t("course.ai.noAnswer")}
                           </p>
                         )}
+                        {/* Structured payload cards (P0-B): focus + priority badges + actions checklist. */}
+                        {!summaryLoading && savedSummary?.structured?.weeklyFocus && (
+                          <div className="mb-3 p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-sm">
+                            <span className="font-medium text-violet-600 dark:text-violet-400">{t("course.ai.weeklyFocus")}: </span>
+                            <span className="text-foreground">{savedSummary.structured.weeklyFocus}</span>
+                          </div>
+                        )}
+                        {!summaryLoading && savedSummary?.structured?.priorities && savedSummary.structured.priorities.length > 0 && (
+                          <div className="mb-3 flex flex-wrap gap-1.5">
+                            {savedSummary.structured.priorities.map((p, i) => (
+                              <span key={i}
+                                title={p.reason || ""}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                  p.level === "urgent"
+                                    ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                                    : p.level === "important"
+                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                    : "bg-secondary text-muted-foreground border-border"
+                                }`}>
+                                {p.item}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {!summaryLoading && savedSummary?.structured?.actions && savedSummary.structured.actions.length > 0 && (
+                          <div className="mb-3 p-3 rounded-xl bg-card border">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("course.ai.actions.title")}</p>
+                            <ul className="space-y-1.5">
+                              {savedSummary.structured.actions.map((a, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={doneActions.has(`${courseId}:${i}`)}
+                                    onChange={() => toggleAction(`${courseId}:${i}`)}
+                                    className="mt-0.5"
+                                  />
+                                  <span className={doneActions.has(`${courseId}:${i}`) ? "line-through text-muted-foreground" : ""}>
+                                    {a.title}
+                                    {a.dueAt ? <span className="text-muted-foreground"> · {a.dueAt}</span> : null}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                         <MarkdownRenderer
-                          content={summaryLoading ? streamContent : savedSummary?.content || ""}
+                          content={summaryLoading ? stripPartialAppendix(streamContent) : savedSummary?.content || ""}
                         />
                         {summaryLoading && (
                           <span className="ai-stream-cursor" aria-hidden="true">▍</span>

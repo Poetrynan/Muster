@@ -89,6 +89,23 @@ export interface Grade {
   feedback?: string;
 }
 
+import type { SummaryActions } from "../lib/aiStructured";
+
+/** P1-D: cross-course AI priority ranking (dashboard "today's priorities") */
+export interface AiPriorities {
+  items: { item: string; level: "urgent" | "important" | "normal"; reason?: string }[];
+  generatedAt: string;
+  /** hash of the deadline data the ranking was computed from */
+  dataHash?: string;
+}
+
+/** P1-F: per-course AI study plan (day buckets with checkable tasks) */
+export interface AiPlan {
+  days: { day: string; tasks: { text: string; weekRef?: string; done?: boolean }[] }[];
+  weeklyFocus?: string;
+  generatedAt: string;
+  dataHash?: string;
+}
 export interface Summary {
   id: string;
   courseId: number;
@@ -102,6 +119,10 @@ export interface Summary {
   summaryLanguage?: string;
   content: string;
   markdown?: string;
+  /** P0-B: structured payload parsed from the <!--MUSTER_JSON ...> appendix */
+  structured?: SummaryActions;
+  /** P0-C: hash of the course data this summary was generated from (freshness check) */
+  dataHash?: string;
 }
 
 // API response types
