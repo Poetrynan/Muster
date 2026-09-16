@@ -12,6 +12,7 @@
     "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin",
     "tauri:build:mac-intel": "tauri build --target x86_64-apple-darwin",
     "tauri:build:windows-x64": "tauri build --target x86_64-pc-windows-msvc",
+    "test": "vitest run",
     "coverage": "node scripts/measure_coverage.mjs",
     "sync:preview": "node scripts/sync-preview.mjs"
   },
@@ -39,6 +40,7 @@
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^5.0.1"
   }
 }
