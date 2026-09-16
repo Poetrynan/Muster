@@ -21,6 +21,8 @@ export interface SearchHit {
   title: string;
   snippet: string;
   score: number;
+  /** Which course the hit came from (needed for cross-course QA source badges). */
+  courseId: number;
 }
 
 /** Domain synonym groups (zh/en), modelled on the Ed Digest retrieval dictionary. */
@@ -116,6 +118,7 @@ export function searchCourseMaterials(query: string, materials: CourseMaterial[]
       sourceId: i + 1,
       kind: s.m.kind,
       title: s.m.title,
+      courseId: s.m.courseId,
       snippet: makeSnippet(`${s.m.body}`, tokens) || s.m.title,
       score: s.score,
     }));
