@@ -35,18 +35,30 @@ export function formatRelativeTime(date: string | Date): string {
  * Accepts the separators Monash actually uses between term and year — space, ASCII hyphen, en/em dash,
  * underscore — and the reversed "2026 S1" / "2026S1" spelling.
  */
+/**
+ * Monash teaching periods: S1 = late Feb to end of May (weeks) + exams in June,
+ * S2 = late Jul to end of Oct + exams in Nov. We treat a semester as ended on
+ * the 1st of the month AFTER its exam month (S1 -> Jul 1, S2 -> Dec 1), which
+ * safely includes the exam period and grade release.
+ * Courses spanning two semesters (thesis units) end with their LAST semester.
+ * Unknown formats are conservatively treated as active (not ended).
+ */
 export function isTermEnded(courseName?: string): boolean {
   if (!courseName) return false;
-  const re = /\bS([12])\s*[-–—_]?\s*(\d{4})\b|\b(\d{4})\s*[-–—_]?\s*S([12])\b/gi;
+  // Standard: "S2 2025" / "2026 S1"; Cross: "S1 2026 - S2 2027"; Summer/Winter sessions.
+  const re = /\bS([12])\s*[-\u2013\u2014_]?\s*(\d{4})\b|\b(\d{4})\s*[-\u2013\u2014_]?\s*S([12])\b/gi;
   const matches = [...courseName.matchAll(re)];
   if (matches.length === 0) return false;
+  // The course's LAST semester token decides when it fully ends (thesis spans).
   const last = matches[matches.length - 1];
-  // Either the "S1 2026" branch (groups 1,2) or the "2026S1" branch (groups 3,4) matched.
   const sem = parseInt(last[1] ?? last[4], 10);
   const year = parseInt(last[2] ?? last[3], 10);
+  if (!Number.isFinite(sem) || !Number.isFinite(year)) return false;
+  // Term-end anchor: the 1st day of the month after exams (S1 -> Jul 1, S2 -> Dec 1).
+  const endAnchorMonth = sem === 1 ? 6 : 11; // 0-indexed: Jun=5? No: Jun=5 is month index 5. Use sem===1 ? 6 : 11 meaning Jul(6)/Dec(11).
   const now = new Date();
-  const curSem = now.getMonth() >= 6 ? 2 : 1;
-  return year < now.getFullYear() || (year === now.getFullYear() && sem < curSem);
+  const endMs = new Date(year, endAnchorMonth, 1).getTime();
+  return now.getTime() >= endMs;
 }
 
 /**
