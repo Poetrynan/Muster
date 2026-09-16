@@ -1,3 +1,24 @@
+# Muster v0.2.3
+
+## AI Assistant — a real cockpit, not a chat box
+
+- **Unified AI Hub:** All AI features moved into a first-class sidebar entry. Four capabilities on one screen: cross-course priorities, per-course summaries, in-course Q&A, and study plans — with a course-scope switcher (current semester only). The old in-course AI tab and dashboard card are gone.
+- **Structured output:** Summaries now render as actionable cards — checkable to-do list, priority badges, weekly focus — instead of a wall of text. A hidden JSON appendix drives the cards; parsing failures degrade gracefully to plain Markdown.
+- **Cited Q&A:** Ask about announcements, unit guides, and assignment specs. Answers carry numbered source citations with a confidence badge. Week queries work across languages ("第六周" matches "Week 6"). Current teaching week is injected from the course dashboard, so the AI stops recommending Week 2 in Week 8.
+- **Freshness engine:** Every summary/plan is stamped with a data hash. When course content changes, the card flips to a "stale" banner and regenerates automatically (or on demand) — no more acting on last week's summary.
+- **Study plans persist:** Day-by-day plan checklists survive restarts.
+- **Humanized errors:** API failures are translated into plain-language, actionable messages (bad key, wrong base URL, rate limit, provider dropped mid-answer) with raw details tucked into a collapsible "Technical details" section.
+
+## Fixes
+
+- **Stream reliability:** Root-caused "error decoding response body" — the AI client's 60s whole-request timeout killed reasoning models mid-thought. Replaced with connect (15s) + idle-read (120s) timeouts; no total cap on generation.
+- **Semester accuracy:** Assignments from past semesters no longer show as "Overdue". Term-end detection now uses the Monash academic calendar, plus a staleness fallback for truncated Moodle course names.
+- **Term-aware scope:** AI Hub and Q&A only serve current-semester courses; portal pages are excluded.
+- **Markdown tables:** AI-generated GFM tables now render as real tables (headers, zebra rows, alignment, inline formatting).
+- **Sidebar dot:** The AI entry dot now only signals stale generated content — it never nags about features you haven't used yet.
+
+---
+
 # Muster v0.2.2
 
 ## Download
