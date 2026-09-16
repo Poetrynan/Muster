@@ -39,6 +39,8 @@ import { buildCourseAiContext } from "../services/aiContext";
 import { extractMusterJson, stripPartialAppendix } from "../lib/aiStructured";
 import { computeCourseDataHash } from "../lib/summaryFreshness";
 import { searchCourseMaterials, buildQaContext, type CourseMaterial, type SearchHit } from "../lib/courseSearch";
+import { buildPlanContext } from "../services/aiContext";
+import { computeDeadlineHash } from "../lib/summaryFreshness";
 import {
   fetchCourseResources,
   fetchCourseGradebook,
@@ -753,6 +755,80 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   const [askSources, setAskSources] = useState<SearchHit[]>([]);
   const [askConfidence, setAskConfidence] = useState<"high" | "medium" | "low" | null>(null);
   const [askThinkingExpanded, setAskThinkingExpanded] = useState(false);
+
+  // P1-F study plan state
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const planStreamRef = useRef("");
+  const savedPlan = useAppStore((s) => s.aiInsights.plans[courseId]);
+  const setCoursePlan = useAppStore((s) => s.setCoursePlan);
+  const planDataHash = useMemo(
+    () => computeDeadlineHash(courseAssignments, []),
+    [courseAssignments]
+  );
+  const planStale = !!savedPlan?.dataHash && savedPlan.dataHash !== planDataHash;
+
+  const handleGeneratePlan = async () => {
+    if (planLoading) return;
+    setPlanLoading(true);
+    setPlanError(null);
+    planStreamRef.current = "";
+    const langInstruction =
+      settings.language === "zh"
+        ? "Please answer in Simplified Chinese."
+        : settings.language === "ja"
+        ? "Please answer in Japanese."
+        : settings.language === "ko"
+        ? "Please answer in Korean."
+        : "Please answer in English.";
+    try {
+      const ctx = buildPlanContext({
+        course: course ?? { id: courseId, shortName: "", fullName: `Course ${courseId}`, category: "", visible: true },
+        assignments: courseAssignments,
+        recordings: (recordings ?? cachedRecordings) ?? [],
+        schedule: schedule ?? cachedSchedule ?? null,
+        unitInfo: unitInfo ?? cachedUnitInfo ?? null,
+        today: new Date().toLocaleDateString("en-CA"),
+        language: langInstruction,
+      });
+      const fullAiUrl = buildAiUrl(settings.aiBaseUrl || "", settings.aiFormat ?? splitAiUrl(settings.aiBaseUrl || "").format);
+      let acc = "";
+      await generateSummaryStream(ctx, settings.aiApiKey, fullAiUrl, settings.aiModel, "plan", {
+        onChunk: (text) => {
+          acc += text;
+        },
+        onDone: () => {
+          const { json } = extractMusterJson(acc);
+          if (json?.days?.length) {
+            setCoursePlan(courseId, {
+              days: json.days.map((d) => ({ ...d, tasks: d.tasks.map((t2) => ({ ...t2, done: false })) })),
+              weeklyFocus: json.weeklyFocus,
+              generatedAt: new Date().toISOString(),
+              dataHash: planDataHash,
+            });
+          } else {
+            setPlanError(t("course.ai.error.generic"));
+          }
+          setPlanLoading(false);
+        },
+        onError: (err) => {
+          setPlanError(err);
+          setPlanLoading(false);
+        },
+      });
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : t("course.ai.error.generic"));
+      setPlanLoading(false);
+    }
+  };
+
+  const togglePlanTask = (dayIdx: number, taskIdx: number) => {
+    if (!savedPlan) return;
+    const days = savedPlan.days.map((d, di) =>
+      di !== dayIdx ? d : { ...d, tasks: d.tasks.map((t2, ti) => (ti !== taskIdx ? t2 : { ...t2, done: !t2.done })) }
+    );
+    setCoursePlan(courseId, { ...savedPlan, days });
+  };
   const askStreamRef = useRef("");
 
   const handleAsk = async () => {
@@ -1857,6 +1933,79 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                               </div>
                             </div>
                           )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* P1-F: AI study plan (mode="plan"). Hidden without an API key. */}
+                {settings.aiApiKey && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-base flex items-center gap-2.5">
+                          <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-blue-500/15 to-violet-500/20 text-violet-600 dark:text-violet-400">
+                            <Sparkles className="w-4 h-4" />
+                          </span>
+                          {t("course.ai.plan.title")}
+                        </CardTitle>
+                        <Button
+                          onClick={handleGeneratePlan}
+                          disabled={planLoading || !settings.aiApiKey}
+                          className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-600/90 hover:to-violet-600/90 text-white"
+                        >
+                          {planLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                          <span className="ml-2">{t("course.ai.plan.generate")}</span>
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {planError && <div className="text-sm text-red-500 mb-3">{planError}</div>}
+                      {planStale && (
+                        <div className="mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>{t("course.ai.stale.title")}</span>
+                        </div>
+                      )}
+                      {!savedPlan && !planLoading && !planError && (
+                        <p className="text-sm text-muted-foreground">{t("course.ai.plan.note")}</p>
+                      )}
+                      {planLoading && (
+                        <div className="space-y-2" aria-busy="true">
+                          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}
+                        </div>
+                      )}
+                      {savedPlan && (
+                        <div className="space-y-3">
+                          {savedPlan.weeklyFocus && (
+                            <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-sm">
+                              <span className="font-medium text-violet-600 dark:text-violet-400">{t("course.ai.weeklyFocus")}: </span>
+                              <span className="text-foreground">{savedPlan.weeklyFocus}</span>
+                            </div>
+                          )}
+                          {savedPlan.days.map((day, di) => (
+                            <div key={di} className="p-3 rounded-xl bg-card border">
+                              <p className="text-sm font-medium mb-2">{day.day}</p>
+                              <ul className="space-y-1.5">
+                                {day.tasks.map((task, ti) => (
+                                  <li key={ti} className="flex items-start gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!task.done}
+                                      onChange={() => togglePlanTask(di, ti)}
+                                      className="mt-0.5"
+                                    />
+                                    <span className={task.done ? "line-through text-muted-foreground" : ""}>
+                                      {task.text}
+                                      {task.weekRef ? <span className="text-muted-foreground"> · {task.weekRef}</span> : null}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                          <p className="text-xs text-muted-foreground">{t("course.ai.plan.note")}</p>
                         </div>
                       )}
                     </CardContent>
