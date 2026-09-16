@@ -42,6 +42,7 @@ import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustratio
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { useAppStore, getSyncOptions } from "../stores/useAppStore";
+import { computeCourseDataHash } from "../lib/summaryFreshness";
 import { checkForAppUpdates, getCurrentAppVersion, installUpdateInAppWithRetry, relaunchApp, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
@@ -276,17 +277,11 @@ export function Dashboard() {
   const { t } = useTranslation();
 
   // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
-  const [aiDot, setAiDot] = useState(false);
+  const onOpenSettings = useCallback(() => setActiveTab("settings"), []);
   useEffect(() => {
-    const onDot = (e: Event) => setAiDot(Boolean((e as CustomEvent).detail));
-    const onOpenSettings = () => setActiveTab("settings");
-    window.addEventListener("muster:ai-dot", onDot);
     window.addEventListener("muster:open-settings", onOpenSettings);
-    return () => {
-      window.removeEventListener("muster:ai-dot", onDot);
-      window.removeEventListener("muster:open-settings", onOpenSettings);
-    };
-  }, []);
+    return () => window.removeEventListener("muster:open-settings", onOpenSettings);
+  }, [onOpenSettings]);
 
   const hiddenCourseIds = useMemo(() => settings.hiddenCourseIds || [], [settings.hiddenCourseIds]);
   const pinnedCourseIds = useMemo(() => settings.pinnedCourseIds || [], [settings.pinnedCourseIds]);
@@ -369,6 +364,29 @@ export function Dashboard() {
 
   // Portal/hub courses are excluded from stats and resource aggregation
   const realCourses = useMemo(() => courses.filter((c: any) => !c.isPortal), [courses]);
+
+  // AI entry dot: ONLY when already-generated AI content is stale (data changed since
+  // generation). "Never generated" must NOT nag the user - discovery is the AI
+  // page's own job, not the sidebar's.
+  const aiSummaries = useAppStore((st) => st.summaries);
+  const aiInsightsPriorities = useAppStore((st) => st.aiInsights.priorities);
+  const courseResourcesMap = useAppStore((st) => st.courseResources);
+  const aiDot = useMemo(() => {
+    if (!settings.aiApiKey) return false;
+    const unitInfos = useAppStore.getState().unitInfos;
+    for (const course of realCourses) {
+      const s = aiSummaries[course.id];
+      if (!s?.dataHash) continue; // no summary or legacy summary: never nag
+      const hash = computeCourseDataHash({
+        resources: (courseResourcesMap[course.id]?.length ? courseResourcesMap[course.id] : rawResources.filter((r) => r.courseId === course.id)) as never,
+        assignments: rawAssignments.filter((a) => a.courseId === course.id) as never,
+        announcements: rawAnnouncements.filter((a) => a.courseId === course.id) as never,
+        unitInfoTitles: unitInfos[course.id]?.sections?.map((sec) => sec.title),
+      });
+      if (hash !== s.dataHash) return true;
+    }
+    return false;
+  }, [aiSummaries, aiInsightsPriorities, settings.aiApiKey, realCourses, courseResourcesMap, rawResources, rawAssignments, rawAnnouncements]);
   const activeRealCourses = useMemo(
     () => realCourses.filter((c: any) => !hiddenCourseIds.includes(c.id)),
     [realCourses, hiddenCourseIds]
