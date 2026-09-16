@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { idbStorage } from "../services/idbStorage";
-import type { AppSettings, SyncStatus, Summary } from "../types";
+import type { AppSettings, SyncStatus, Summary, AiPriorities, AiPlan } from "../types";
 import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData, SyncOptions } from "../services/api";
 import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from "../lib/courseHelpers";
 
@@ -89,6 +89,18 @@ interface AppState {
   reset: () => void;
 }
 
+type AiInsightsDefault = {
+  priorities: AiPriorities | null;
+  plans: Record<number, AiPlan>;
+  prioritiesRunning: boolean;
+};
+
+const defaultAiInsights: AiInsightsDefault = {
+  priorities: null,
+  plans: {},
+  prioritiesRunning: false,
+};
+
 const defaultSettings: AppSettings = {
   aiCompatType: "openai",
   aiFormat: "openai",
@@ -158,6 +170,7 @@ export const useAppStore = create<AppState>()(
   downloads: [],
   reminderBanner: null,
   settings: defaultSettings,
+  aiInsights: defaultAiInsights,
 
   // Actions
   setUser: (user) => set({ user }),
