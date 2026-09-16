@@ -135,6 +135,7 @@ function describeCourse(raw: string): { code: string | null; title: string; term
   };
 }
 import appIcon from "../assets/app-icon.png";
+import { AIHubPage } from "./AIHubPage";
 import { useTranslation } from "../i18n/useTranslation";
 import type { TranslationKey } from "../i18n/translations";
 
@@ -197,6 +198,7 @@ const sidebarItems: { icon: any; labelKey: TranslationKey; id: string }[] = [
   { icon: FileText, labelKey: "nav.resources", id: "resources" },
   { icon: CalendarDays, labelKey: "nav.calendar", id: "calendar" },
   { icon: Bell, labelKey: "nav.notifications", id: "notifications" },
+  { icon: Sparkles, labelKey: "nav.ai", id: "ai" },
   { icon: Settings, labelKey: "nav.settings", id: "settings" },
 ];
 
@@ -278,6 +280,19 @@ export function Dashboard() {
   } = useAppStore();
 
   const { t } = useTranslation();
+
+  // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
+  const [aiDot, setAiDot] = useState(false);
+  useEffect(() => {
+    const onDot = (e: Event) => setAiDot(Boolean((e as CustomEvent).detail));
+    const onOpenSettings = () => setActiveTab("settings");
+    window.addEventListener("muster:ai-dot", onDot);
+    window.addEventListener("muster:open-settings", onOpenSettings);
+    return () => {
+      window.removeEventListener("muster:ai-dot", onDot);
+      window.removeEventListener("muster:open-settings", onOpenSettings);
+    };
+  }, []);
 
   const hiddenCourseIds = useMemo(() => settings.hiddenCourseIds || [], [settings.hiddenCourseIds]);
   const pinnedCourseIds = useMemo(() => settings.pinnedCourseIds || [], [settings.pinnedCourseIds]);
@@ -1617,6 +1632,15 @@ export function Dashboard() {
     );
   }
 
+  // AI hub view
+  if (activeTab === "ai") {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <AIHubPage />
+      </Suspense>
+    );
+  }
+
   // Settings view
   if (activeTab === "settings") {
     return (
@@ -1684,6 +1708,11 @@ export function Dashboard() {
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span className="font-medium flex-1 text-left">{t(item.labelKey)}</span>
+                {/* AI hub dot: data is stale or AI never used */}
+                {item.id === "ai" && aiDot && !activeTab.startsWith("ai") && (
+                  <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" aria-hidden="true" />
+                )}
+
                 {/* Dynamic Badge for notifications */}
                 {badgeCount !== undefined && badgeCount > 0 && (
                   <span 
