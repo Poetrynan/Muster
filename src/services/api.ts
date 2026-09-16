@@ -761,6 +761,7 @@ export async function generateSummaryStream(
   apiKey: string,
   apiUrl: string,
   model: string,
+  mode: string,
   callbacks: {
     onChunk: (text: string, thinking?: boolean) => void;
     onDone: () => void;
@@ -797,7 +798,7 @@ export async function generateSummaryStream(
       callbacks.onError("Tauri bridge unavailable");
       return;
     }
-    await inv("generate_summary_stream", { content, apiKey, apiUrl, model, streamId });
+    await inv("generate_summary_stream", { content, apiKey, apiUrl, model, mode, streamId });
   } catch (err) {
     unlisten?.();
     callbacks.onError(err instanceof Error ? err.message : String(err));

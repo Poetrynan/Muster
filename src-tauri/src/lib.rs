@@ -430,6 +430,7 @@ async fn generate_summary_stream(
     api_key: Option<String>,
     api_url: Option<String>,
     model: Option<String>,
+    mode: Option<String>,
     stream_id: String,
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
@@ -453,7 +454,7 @@ async fn generate_summary_stream(
     drop(ai_guard);
 
     scraper
-        .generate_summary_stream(&content, &key, &url, &md, Some(&app_handle), &stream_id)
+        .generate_summary_stream(&content, &key, &url, &md, mode.as_deref().unwrap_or("summary"), Some(&app_handle), &stream_id)
         .await
 }
 
@@ -464,6 +465,7 @@ async fn generate_summary(
     api_key: Option<String>,
     api_url: Option<String>,
     model: Option<String>,
+    mode: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let scraper_guard = state.scraper.lock().await;
@@ -486,7 +488,9 @@ async fn generate_summary(
         .or_else(|| ai_guard.as_ref().map(|c| c.model.clone()))
         .unwrap_or_else(|| "gpt-4o-mini".to_string());
 
-    scraper.generate_summary(&content, &key, &url, &md).await
+    scraper
+        .generate_summary(&content, &key, &url, &md, mode.as_deref().unwrap_or("summary"))
+        .await
 }
 
 /// Start SSO login flow with the system browser.
