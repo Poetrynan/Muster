@@ -1569,7 +1569,7 @@ export function Dashboard() {
   if (activeTab === "ai") {
     return (
       <Suspense fallback={<PageLoading />}>
-        <AIHubPage />
+        <AIHubPage onBack={() => setActiveTab("home")} />
       </Suspense>
     );
   }
