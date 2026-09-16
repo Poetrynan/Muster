@@ -52,6 +52,16 @@ interface AppState {
   // Settings
   settings: AppSettings;
 
+  // AI insights (P1-D priorities + P1-F plans), persisted with the course cache
+  aiInsights: {
+    priorities: AiPriorities | null;
+    plans: Record<number, AiPlan>;
+    prioritiesRunning: boolean;
+  };
+  setPriorities: (p: AiPriorities | null) => void;
+  setPrioritiesRunning: (running: boolean) => void;
+  setCoursePlan: (courseId: number, plan: AiPlan | null) => void;
+
   // Actions
   setUser: (user: User | null) => void;
   setLoggedIn: (loggedIn: boolean) => void;
@@ -401,6 +411,21 @@ export const useAppStore = create<AppState>()(
           pinnedCourseIds: next,
         },
       };
+    }),
+  setPriorities: (p) =>
+    set((state) => ({
+      aiInsights: { ...state.aiInsights, priorities: p, prioritiesRunning: false },
+    })),
+  setPrioritiesRunning: (running) =>
+    set((state) => ({
+      aiInsights: { ...state.aiInsights, prioritiesRunning: running },
+    })),
+  setCoursePlan: (courseId, plan) =>
+    set((state) => {
+      const plans = { ...state.aiInsights.plans };
+      if (plan) plans[courseId] = plan;
+      else delete plans[courseId];
+      return { aiInsights: { ...state.aiInsights, plans } };
     }),
   reset: () =>
     set({
