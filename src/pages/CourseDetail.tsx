@@ -38,6 +38,7 @@ import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { buildCourseAiContext } from "../services/aiContext";
 import { extractMusterJson, stripPartialAppendix } from "../lib/aiStructured";
 import { computeCourseDataHash } from "../lib/summaryFreshness";
+import { searchCourseMaterials, buildQaContext, type CourseMaterial, type SearchHit } from "../lib/courseSearch";
 import {
   fetchCourseResources,
   fetchCourseGradebook,
@@ -717,6 +718,96 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
     [displayedResources, courseAssignments, courseAnnouncements, unitInfo, cachedUnitInfo]
   );
   const summaryStale = !!savedSummary?.dataHash && savedSummary.dataHash !== currentCourseDataHash;
+
+  // P1-E: searchable material index built from the same local cache (zero network).
+  const courseMaterials: CourseMaterial[] = useMemo(() => {
+    const mats: CourseMaterial[] = [];
+    for (const r of displayedResources) {
+      mats.push({ sourceId: 0, kind: "resource", courseId, title: r.name, body: r.section ?? "", weekNum: r.weekNum });
+    }
+    for (const a of courseAssignments) {
+      mats.push({ sourceId: 0, kind: "assignment", courseId, title: a.name, body: a.dueDateIso ? `Due ${a.dueDateIso}. Weight ${a.weight ?? "?"}%. Status ${a.status}.` : `Status ${a.status}.` });
+    }
+    for (const a of courseAnnouncements) {
+      mats.push({ sourceId: 0, kind: "announcement", courseId, title: a.title, body: `${a.author} (${a.date}): ${a.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}` });
+    }
+    for (const s of (schedule ?? cachedSchedule)?.items ?? []) {
+      mats.push({ sourceId: 0, kind: "schedule", courseId, title: s.title, body: s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() });
+    }
+    for (const s of (unitInfo ?? cachedUnitInfo)?.sections ?? []) {
+      mats.push({ sourceId: 0, kind: "unitinfo", courseId, title: s.title, body: s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() });
+    }
+    for (const r of (recordings ?? cachedRecordings) ?? []) {
+      mats.push({ sourceId: 0, kind: "recording", courseId, title: r.title, body: "" });
+    }
+    return mats;
+  }, [courseId, displayedResources, courseAssignments, courseAnnouncements, schedule, cachedSchedule, unitInfo, cachedUnitInfo, recordings, cachedRecordings]);
+
+  // Q&A state (single-turn display: latest question + streaming answer)
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const [askAnswer, setAskAnswer] = useState("");
+  const [askThinking, setAskThinking] = useState("");
+  const [askThinkingActive, setAskThinkingActive] = useState(false);
+  const [askSources, setAskSources] = useState<SearchHit[]>([]);
+  const [askConfidence, setAskConfidence] = useState<"high" | "medium" | "low" | null>(null);
+  const [askThinkingExpanded, setAskThinkingExpanded] = useState(false);
+  const askStreamRef = useRef("");
+
+  const handleAsk = async () => {
+    const q = askQuestion.trim();
+    if (!q || askLoading) return;
+    setAskLoading(true);
+    setAskError(null);
+    setAskAnswer("");
+    setAskThinking("");
+    setAskThinkingActive(false);
+    setAskSources([]);
+    setAskConfidence(null);
+    askStreamRef.current = "";
+    const langInstruction =
+      settings.language === "zh"
+        ? "Please answer in Simplified Chinese."
+        : settings.language === "ja"
+        ? "Please answer in Japanese."
+        : settings.language === "ko"
+        ? "Please answer in Korean."
+        : "Please answer in English.";
+    try {
+      const hits = searchCourseMaterials(q, courseMaterials);
+      const ctx = buildQaContext(hits, q, new Date().toLocaleDateString("en-CA"), langInstruction);
+      const fullAiUrl = buildAiUrl(settings.aiBaseUrl || "", settings.aiFormat ?? splitAiUrl(settings.aiBaseUrl || "").format);
+      await generateSummaryStream(ctx, settings.aiApiKey, fullAiUrl, settings.aiModel, "qa", {
+        onChunk: (text, thinking) => {
+          if (thinking) {
+            setAskThinkingActive(true);
+            setAskThinking((prev) => prev + text);
+            return;
+          }
+          setAskThinkingActive(false);
+          askStreamRef.current += text;
+          setAskAnswer(askStreamRef.current);
+        },
+        onDone: () => {
+          setAskThinkingActive(false);
+          const { json, clean } = extractMusterJson(askStreamRef.current);
+          setAskAnswer(clean);
+          setAskSources(hits.slice(0, json?.sources?.length ?? 0));
+          setAskConfidence(json?.confidence ?? null);
+          setAskLoading(false);
+        },
+        onError: (err) => {
+          setAskThinkingActive(false);
+          setAskError(err);
+          setAskLoading(false);
+        },
+      });
+    } catch (err) {
+      setAskError(err instanceof Error ? err.message : t("course.ai.error.generic"));
+      setAskLoading(false);
+    }
+  };
 
   // Auto summary: when autoSummaryOnOpen is on and no cached summary exists, generate on entering the course.
   useEffect(() => {
@@ -1680,6 +1771,97 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* P1-E: in-course Q&A (mode="qa"). Hidden without an API key. */}
+                {settings.aiApiKey && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-blue-500/15 to-violet-500/20 text-violet-600 dark:text-violet-400">
+                          <Sparkles className="w-4 h-4" />
+                        </span>
+                        {t("course.ai.ask.title")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={askQuestion}
+                          onChange={(e) => setAskQuestion(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.nativeEvent.isComposing) handleAsk();
+                          }}
+                          placeholder={t("course.ai.ask.placeholder")}
+                          className="flex-1 h-10 px-3 rounded-xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                          aria-label={t("course.ai.ask.title")}
+                        />
+                        <Button
+                          onClick={handleAsk}
+                          disabled={askLoading || !askQuestion.trim()}
+                          className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-600/90 hover:to-violet-600/90 text-white"
+                        >
+                          {askLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                      {askError && <div className="text-sm text-red-500 mt-3">{askError}</div>}
+                      {!askAnswer && !askLoading && !askError && (
+                        <p className="text-sm text-muted-foreground mt-3">{t("course.ai.ask.empty")}</p>
+                      )}
+                      {(askLoading || askAnswer) && (
+                        <div className="mt-4 p-5 rounded-2xl bg-card border shadow-sm">
+                          {askThinking && (
+                            <div className="mb-3 rounded-xl border bg-muted/40 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setAskThinkingExpanded((v) => !v)}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+                              >
+                                {askThinkingActive ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                ) : (
+                                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-violet-500" />
+                                )}
+                                <span className="font-medium">{t("course.ai.thought")}</span>
+                                <ChevronsDown className={`w-3.5 h-3.5 ml-auto transition-transform duration-200 ${askThinkingExpanded ? "rotate-180" : ""}`} />
+                              </button>
+                              {askThinkingExpanded && (
+                                <div className="px-3 pb-3 pt-2 border-t border-border/50 max-h-52 overflow-auto text-xs leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
+                                  {askThinking}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <MarkdownRenderer content={askLoading ? stripPartialAppendix(askAnswer) : askAnswer} />
+                          {askLoading && <span className="ai-stream-cursor" aria-hidden="true">▍</span>}
+                          {!askLoading && askSources.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-border/50">
+                              <p className="text-xs font-medium text-muted-foreground mb-1.5">{t("course.ai.sources")}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {askSources.map((s) => (
+                                  <span key={s.sourceId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-secondary text-muted-foreground border">
+                                    [{s.sourceId}] {s.title.slice(0, 50)}
+                                  </span>
+                                ))}
+                                {askConfidence && (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                    askConfidence === "high"
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                      : askConfidence === "medium"
+                                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                      : "bg-secondary text-muted-foreground border-border"
+                                  }`}>
+                                    {t(`course.ai.confidence.${askConfidence}`)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
           </motion.div>
