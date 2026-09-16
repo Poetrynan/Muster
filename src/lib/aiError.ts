@@ -32,6 +32,9 @@ export function humanizeAiError(raw: unknown, t: TFn): HumanizedError {
   if (status === 429 || /rate limit|too many requests|quota/.test(lower)) {
     return { headline: t("aiHub.err.rateLimit"), detail: text };
   }
+  if (/error decoding response body|stream read failed|body.*decode|incomplete/.test(lower)) {
+    return { headline: t("aiHub.err.stream"), detail: text };
+  }
   if (/timeout|timed out|network|failed to fetch|connection|dns|proxy/.test(lower)) {
     return { headline: t("aiHub.err.network"), detail: text };
   }
