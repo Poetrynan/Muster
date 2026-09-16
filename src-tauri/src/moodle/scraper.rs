@@ -106,8 +106,14 @@ fn hex_val(b: u8) -> Option<u8> {
 
 impl MoodleScraper {
     pub fn new(auth: Arc<MoodleAuth>) -> Self {
+        // NOTE: no whole-request `.timeout()` here. For SSE streaming the response
+        // body stays open for the entire generation; a client-level deadline kills
+        // it mid-stream (reasoning models think for minutes) and reqwest surfaces
+        // that as "error decoding response body". Only connect + read-idle limits
+        // belong on this client; per-request sites set their own timeouts.
         let ai_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(15))
+            .read_timeout(std::time::Duration::from_secs(120))
             .build()
             .unwrap_or_default();
         Self {

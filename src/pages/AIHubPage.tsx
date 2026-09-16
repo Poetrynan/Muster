@@ -13,6 +13,7 @@ import { searchCourseMaterials, buildQaContext, type CourseMaterial, type Search
 import { humanizeAiError } from "../lib/aiError";
 import { fetchCourseGradebook, generateSummaryStream } from "../services/api";
 import type { GradeEntry } from "../services/api";
+import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from "../lib/courseHelpers";
 import { useTranslation } from "../i18n/useTranslation";
 import type { TranslationKey } from "../i18n/translations";
 
@@ -30,6 +31,21 @@ function langInstruction(language?: string): string {
 
 export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: number | null; onBack: () => void }) {
   const courses = useAppStore((s) => s.courses);
+  // AI hub only serves the CURRENT semester: past courses' resources are gone from
+  // Moodle and their deadlines are noise. Portal/hub pages (no semester in the name)
+  // are not study units and never get AI features.
+  const currentSemesterKey = useMemo(() => inferActiveSemesterKey(courses), [courses]);
+  const aiEligibleCourses = useMemo(
+    () =>
+      courses.filter((courseItem) => {
+        if (courseItem.isPortal) return false;
+        const sem = parseSemester(courseItem.fullName || courseItem.shortName || "");
+        if (sem.key === "other") return false;
+        return isCourseInSemester(sem, currentSemesterKey);
+      }),
+    [courses, currentSemesterKey]
+  );
+  const aiCourseIds = useMemo(() => new Set(aiEligibleCourses.map((courseItem) => courseItem.id)), [aiEligibleCourses]);
   const assignments = useAppStore((s) => s.assignments);
   const announcements = useAppStore((s) => s.announcements);
   const allResources = useAppStore((s) => s.allResources);
@@ -55,6 +71,12 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   useEffect(() => {
     localStorage.setItem("muster.aiHubScope", scope);
   }, [scope]);
+  // If the remembered scope points to a past/portal course, fall back to all.
+  useEffect(() => {
+    if (scope !== SCOPE_ALL && scope !== "all" && !aiCourseIds.has(Number(scope))) {
+      setScope(SCOPE_ALL);
+    }
+  }, [scope, aiCourseIds]);
 
   const courseId = scope === SCOPE_ALL ? null : Number(scope);
   const course = courseId != null ? courses.find((c) => c.id === courseId) : undefined;
@@ -62,7 +84,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   // ---- cross-course materials assembly (all cached data, zero network) ----
   const allMaterials: CourseMaterial[] = useMemo(() => {
     const mats: CourseMaterial[] = [];
-    for (const c of courses) {
+    for (const c of aiEligibleCourses) {
       const cid = c.id;
       const code = c.shortName || c.fullName;
       const push = (kind: CourseMaterial["kind"], title: string, body: string, weekNum?: number) =>
@@ -80,7 +102,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
       for (const r of recordings[cid] ?? []) push("recording", r.title, "");
     }
     return mats;
-  }, [courses, courseResourcesMap, allResources, assignments, announcements, schedules, unitInfos, recordings]);
+  }, [aiEligibleCourses, courseResourcesMap, allResources, assignments, announcements, schedules, unitInfos, recordings]);
 
   // Single-course materials slice (reuses the same shape as CourseDetail did).
   const courseMaterials: CourseMaterial[] = useMemo(() => {
@@ -405,12 +427,12 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   useEffect(() => {
     const prioritiesDot = !aiInsights.priorities || prioritiesStale;
     let summaryDot = false;
-    for (const c of courses) {
+    for (const c of aiEligibleCourses) {
       const s = summaries[c.id];
       if (!s) { summaryDot = true; break; }
     }
     window.dispatchEvent(new CustomEvent("muster:ai-dot", { detail: prioritiesDot || summaryDot }));
-  }, [aiInsights.priorities, prioritiesStale, courses, summaries]);
+  }, [aiInsights.priorities, prioritiesStale, aiEligibleCourses, summaries]);
 
   // ---------- no key: onboarding card ----------
   if (!hasKey) {
@@ -482,7 +504,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
         >
           {t("aiHub.scopeAll")}
         </button>
-        {courses.map((c) => (
+        {aiEligibleCourses.map((c) => (
           <button
             key={c.id}
             type="button"
