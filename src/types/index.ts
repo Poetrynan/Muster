@@ -160,12 +160,6 @@ export interface AppSettings {
   summaryLanguage: "zh-CN" | "en";
   /** Auto-generate an AI summary when opening course details */
   autoSummaryOnOpen: boolean;
-  /** AI feature: course material summary toggle */
-  aiFeatureSummary: boolean;
-  /** AI feature: smart assignment reminder toggle */
-  aiFeatureAssign: boolean;
-  /** AI feature: study advice toggle */
-  aiFeatureAdvice: boolean;
   syncEnabled: boolean;
   /** Sync once when the app launches (independent of interval) */
   syncOnLaunch: boolean;
