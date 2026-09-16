@@ -207,3 +207,32 @@ export function getSemesterTabs(courses: Course[], hiddenCourseIds: number[] = [
 
   return terms;
 }
+
+
+/**
+ * Decide whether a course belongs to the CURRENT semester for to-do/AI purposes.
+ * Layered checks:
+ *  1. Parseable name -> exact/spanning membership via isCourseInSemester (authoritative).
+ *  2. Unparseable name (portal, or the TRUNCATED Moodle dropdown text like
+ *     "FIT4005-FIT5125 IT research and innovation meth...") -> fall back to evidence:
+ *     if the course's most recent assignment due date is older than 120 days, treat
+ *     the course as stale (its real name would carry a past semester token; the
+ *     truncated one just can't show it). Conservative default stays active.
+ */
+export function isCourseActiveForSemester(
+  courseName: string | undefined,
+  currentSemesterKey: string,
+  latestDueMs?: number
+): boolean {
+  const sem = parseSemester(courseName || "");
+  if (sem.key !== "other") {
+    return isCourseInSemester(sem, currentSemesterKey);
+  }
+  // Name carries no semester info. Portal pages (id=1) never do; truncated names
+  // lose the "- S2 2025" tail. Use the newest due date as a staleness signal.
+  if (latestDueMs != null && Number.isFinite(latestDueMs)) {
+    const STALE_MS = 120 * 24 * 60 * 60 * 1000; // ~4 months: one full term + exams
+    return Date.now() - latestDueMs < STALE_MS;
+  }
+  return true;
+}

@@ -54,6 +54,44 @@ function expandTokens(query: string): string[] {
     .filter((t) => t && !STOP_WORDS.has(t));
 
   const expanded = new Set(tokens);
+
+  // Cross-language week mapping: "第六周"/"第6周" <-> "week 6"/"week6".
+  // Students naturally ask in either language; materials (and unit guides) are
+  // titled in English at Monash, so the English variant must be in the token set.
+  for (const match of q.matchAll(/第\s*([0-9０-９]+|一|二|三|四|五|六|七|八|九|十|十一|十二)\s*周/g)) {
+    const raw = match[1];
+    const cnDigits = "一二三四五六七八九十";
+    let num: number;
+    if (/^[0-9]+$/.test(raw)) num = parseInt(raw, 10);
+    else if (/^[０-９]+$/.test(raw)) num = parseInt(raw.replace(/[０-９]/g, (dch) => String.fromCharCode(dch.charCodeAt(0) - 0xfee0)), 10);
+    else if (raw === "十") num = 10;
+    else if (raw === "十一") num = 11;
+    else if (raw === "十二") num = 12;
+    else {
+      const tenIdx = raw.indexOf("十");
+      if (tenIdx === -1) num = cnDigits.indexOf(raw) + 1;
+      else {
+        const tens = cnDigits.indexOf(raw[0]) + 1;
+        const ones = raw.length > 2 ? cnDigits.indexOf(raw[2]) + 1 : 0;
+        num = tens * 10 + ones;
+      }
+    }
+    if (Number.isFinite(num) && num >= 1 && num <= 52) {
+      expanded.add(`week${num}`);
+      expanded.add(`week ${num}`);
+      expanded.add(`第${num}周`);
+    }
+  }
+  // Reverse direction: English "week 6" in the query also matches "Week 6" titles (case handled below)
+  for (const match of q.matchAll(/week\s*(\d{1,2})/g)) {
+    const num = parseInt(match[1], 10);
+    if (Number.isFinite(num) && num >= 1 && num <= 52) {
+      expanded.add(`week${num}`);
+      expanded.add(`week ${num}`);
+      expanded.add(`第${num}周`);
+    }
+  }
+
   for (const concept of DOMAIN_CONCEPTS) {
     if (concept.variants.some((v) => q.includes(v))) {
       concept.variants.forEach((v) => expanded.add(v));
