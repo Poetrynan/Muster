@@ -10,9 +10,11 @@ import { buildCourseAiContext, buildPlanContext, buildPrioritiesContext } from "
 import { extractMusterJson, stripPartialAppendix, type AiPriority } from "../lib/aiStructured";
 import { computeCourseDataHash, computeDeadlineHash } from "../lib/summaryFreshness";
 import { searchCourseMaterials, buildQaContext, type CourseMaterial, type SearchHit } from "../lib/courseSearch";
+import { humanizeAiError } from "../lib/aiError";
 import { fetchCourseGradebook, generateSummaryStream } from "../services/api";
 import type { GradeEntry } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
+import type { TranslationKey } from "../i18n/translations";
 
 const SCOPE_ALL = "all";
 
@@ -565,7 +567,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
                 askQuestion={askQuestion} setAskQuestion={setAskQuestion} handleAsk={handleAsk}
                 askLoading={askLoading} placeholder={t("aiHub.ask.allPlaceholder")} label={t("aiHub.ask.allTitle")}
               />
-              {askError && <div className="text-sm text-red-500 mt-3">{askError}</div>}
+              {askError && <div className="mt-3"><ErrorBox raw={askError} t={t} /></div>}
               {!askAnswer && !askLoading && !askError && <p className="text-sm text-muted-foreground mt-3">{t("course.ai.ask.empty")}</p>}
               {(askLoading || askAnswer) && (
                 <AnswerBlock
@@ -592,7 +594,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {summaryError && <div className="text-sm text-red-500 mb-3">{summaryError}</div>}
+              {summaryError && <ErrorBox raw={summaryError} t={t} />}
               <Button
                 onClick={handleGenerateSummary}
                 disabled={summaryLoading}
@@ -702,7 +704,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
               </div>
             </CardHeader>
             <CardContent>
-              {planError && <div className="text-sm text-red-500 mb-3">{planError}</div>}
+              {planError && <ErrorBox raw={planError} t={t} />}
               {planStale && (
                 <div className="mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -866,6 +868,37 @@ function AnswerBlock({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+function ErrorBox({ raw, t }: { raw: string | null; t: (key: TranslationKey) => string }) {
+  const [open, setOpen] = useState(false);
+  if (!raw) return null;
+  const { headline, detail } = humanizeAiError(raw, t);
+  return (
+    <div className="mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+        <div className="min-w-0">
+          <p className="text-red-600 dark:text-red-400 font-medium">{headline}</p>
+          {detail && (
+            <>
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="mt-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                {open ? t("aiHub.err.hideDetail") : t("aiHub.err.showDetail")}
+              </button>
+              {open && (
+                <pre className="mt-2 p-2 rounded-lg bg-card border text-xs whitespace-pre-wrap break-all max-h-40 overflow-auto text-muted-foreground">{detail}</pre>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
