@@ -1,5 +1,16 @@
 # Muster v0.2.3
 
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.3_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.3/Muster_0.2.3_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.3_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.3/Muster_0.2.3_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.3_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.3/Muster_0.2.3_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.3_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.3/Muster_0.2.3_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
 ## AI Assistant — a real cockpit, not a chat box
 
 - **Unified AI Hub:** All AI features moved into a first-class sidebar entry. Four capabilities on one screen: cross-course priorities, per-course summaries, in-course Q&A, and study plans — with a course-scope switcher (current semester only). The old in-course AI tab and dashboard card are gone.
