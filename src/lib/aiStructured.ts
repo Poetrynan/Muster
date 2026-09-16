@@ -68,7 +68,7 @@ function normalizePayload(raw: unknown): SummaryActions | null {
 
   const actions: AiAction[] = Array.isArray(obj.actions)
     ? (obj.actions
-        .map((a) => {
+        .map((a): AiAction | null => {
           const o = (a ?? {}) as Record<string, unknown>;
           const title = str(o.title, 200);
           if (!title) return null;
@@ -79,53 +79,53 @@ function normalizePayload(raw: unknown): SummaryActions | null {
             courseCode: str(o.courseCode, 40),
           };
         })
-        .filter((a): a is AiAction => a !== null)
+        .flatMap((a) => (a === null ? [] : [a]))
         .slice(0, 20))
     : [];
 
   const priorities: AiPriority[] = Array.isArray(obj.priorities)
     ? (obj.priorities
-        .map((p) => {
+        .map((p): AiPriority | null => {
           const o = (p ?? {}) as Record<string, unknown>;
           const item = str(o.item, 200);
           if (!item) return null;
           return { item, level: normalizeLevel(o.level), reason: str(o.reason, 200) };
         })
-        .filter((p): p is AiPriority => p !== null)
+        .flatMap((p) => (p === null ? [] : [p]))
         .slice(0, 20))
     : [];
 
   const days: AiPlanDay[] = Array.isArray(obj.days)
     ? (obj.days
-        .map((d) => {
+        .map((d): AiPlanDay | null => {
           const o = (d ?? {}) as Record<string, unknown>;
           const day = str(o.day, 80);
           if (!day) return null;
           const tasks = Array.isArray(o.tasks)
             ? (o.tasks
-                .map((t) => {
+                .map((t): { text: string; weekRef?: string } | null => {
                   const to = (t ?? {}) as Record<string, unknown>;
                   const text = str(to.text, 300);
                   if (!text) return null;
                   return { text, weekRef: str(to.weekRef, 80) };
                 })
-                .filter((t): t is { text: string; weekRef?: string } => t !== null)
+                .flatMap((t) => (t === null ? [] : [t]))
                 .slice(0, 8))
             : [];
           return { day, tasks };
         })
-        .filter((d): d is AiPlanDay => d !== null)
+        .flatMap((d) => (d === null ? [] : [d]))
         .slice(0, 14))
     : [];
 
   const sources: AiSource[] = Array.isArray(obj.sources)
     ? (obj.sources
-        .map((s) => {
+        .map((s): AiSource | null => {
           const o = (s ?? {}) as Record<string, unknown>;
           const title = str(o.title, 200);
           return title ? { title } : null;
         })
-        .filter((s): s is AiSource => s !== null)
+        .flatMap((s) => (s === null ? [] : [s]))
         .slice(0, 10))
     : [];
 

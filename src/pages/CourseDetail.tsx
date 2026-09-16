@@ -35,8 +35,11 @@ import { batchDownload } from "../services/batchDownload";
 import { isDownloadableUrl } from "../lib/utils";
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
+import { buildCourseAiContext } from "../services/aiContext";
+// Task 5 wiring: extractMusterJson / stripPartialAppendix (imported there)
 import {
   fetchCourseResources,
+  fetchCourseGradebook,
   fetchCourseContacts,
   generateSummaryStream,
   fetchCourseAssessments,
@@ -48,6 +51,7 @@ import {
 } from "../services/api";
 import type {
   CourseContact,
+  GradeEntry,
   Resource,
   Assignment,
   UnitInfo,
@@ -105,6 +109,8 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [thinkingActive, setThinkingActive] = useState(false);
   const streamRef = useRef("");
+  // Per-course gradebook cache for the AI context (null = not fetched yet).
+  const [gradeBook, setGradeBook] = useState<GradeEntry[] | null>(null);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [contacts, setContacts] = useState<CourseContact[]>(cachedContacts ?? []);
   const [contactsError, setContactsError] = useState<string | null>(null);
@@ -611,35 +617,27 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
           ? "Please answer in Korean."
           : "Please answer in English.";
 
-      // Tell the model today's date so it can compute countdowns and priorities.
-      const todayLabel = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-      const content = [
-        `Course: ${course?.fullName || courseId}`,
-        `Today's date: ${todayLabel}`,
-        "",
-        "This week's resources:",
-        ...displayedResources.slice(0, 20).map((r) => `- ${r.name}`),
-        "",
-        "Assignments:",
-        ...courseAssignments.map((a) => `- ${a.name}${a.dueDate ? ` (Due: ${a.dueDate})` : ""}`),
-        "",
-        ...(assessments.some((a) => a.weight != null)
-          ? [
-              "Assessment weights:",
-              ...assessments
-                .filter((a) => a.weight != null)
-                .map((a) => `- ${a.name} (Weight: ${a.weight}%)`),
-            ]
-          : []),
-        "",
-        "Announcements:",
-        ...courseAnnouncements.slice(0, 10).map((a) => {
-          const body = (a.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-          return `- ${a.title} — ${a.author}${body ? `: ${body.slice(0, 300)}` : ""}`;
-        }),
-        "",
-        langInstruction,
-      ].join("\n");
+      // Full-cache context: unit info / assessments / deadlines / grades / schedule /
+      // resources / recordings / announcements, assembled from the local store (zero
+      // new Moodle requests). Gradebook is fetched once per course and cached.
+      let gradeEntries: GradeEntry[] = gradeBook ?? [];
+      if (gradeBook === null) {
+        gradeEntries = await fetchCourseGradebook(courseId).catch(() => []);
+        setGradeBook(gradeEntries);
+      }
+      const content = buildCourseAiContext({
+        courseName: course?.fullName || `Course ${courseId}`,
+        today: new Date().toLocaleDateString("en-CA"),
+        language: langInstruction,
+        resources: displayedResources,
+        assignments: courseAssignments,
+        announcements: courseAnnouncements,
+        unitInfo: unitInfo ?? cachedUnitInfo ?? null,
+        schedule: schedule ?? cachedSchedule ?? null,
+        recordings: recordings ?? cachedRecordings ?? [],
+        contacts: contacts ?? cachedContacts ?? [],
+        gradeEntries,
+      });
 
       const fullAiUrl = buildAiUrl(
         settings.aiBaseUrl || "",

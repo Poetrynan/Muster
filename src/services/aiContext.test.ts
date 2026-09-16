@@ -104,7 +104,7 @@ describe("buildCourseAiContext", () => {
   });
 
   it("stays under the 12000 char budget with oversized inputs", () => {
-    const many = (n: number, fn: (i: number) => string) => Array.from({ length: n }, (_, i) => fn(i));
+    const many = <T,>(n: number, fn: (i: number) => T): T[] => Array.from({ length: n }, (_, i) => fn(i));
     const ctx = buildCourseAiContext({
       ...baseInput(),
       unitInfo: {
