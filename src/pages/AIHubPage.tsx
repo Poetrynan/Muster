@@ -425,18 +425,6 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
     setAskConfidence(null);
   }, [scope]);
 
-  // ---- sidebar dot: something stale or never generated ----
-  // (exported via window event so Dashboard's sidebar can render the dot without prop drilling)
-  useEffect(() => {
-    const prioritiesDot = !aiInsights.priorities || prioritiesStale;
-    let summaryDot = false;
-    for (const c of aiEligibleCourses) {
-      const s = summaries[c.id];
-      if (!s) { summaryDot = true; break; }
-    }
-    window.dispatchEvent(new CustomEvent("muster:ai-dot", { detail: prioritiesDot || summaryDot }));
-  }, [aiInsights.priorities, prioritiesStale, aiEligibleCourses, summaries]);
-
   // ---------- no key: onboarding card ----------
   if (!hasKey) {
     return (
