@@ -383,12 +383,12 @@
   html.dark .warn { border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.07); }
   html.dark .warn strong { color: #fbbf24; }
 
-  /* ---------- Scroll reveal: replaces infinite animations ---------- */
-  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
-  .reveal.in { opacity: 1; transform: none; }
+  /* ---------- Scroll reveal: only hides after JS successfully arms IO ---------- */
+  html.js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  html.js-ready .reveal.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    .reveal { opacity: 1; transform: none; transition: none; }
+    html.js-ready .reveal { opacity: 1; transform: none; transition: none; }
     * { animation: none !important; }
   }
 </style>
@@ -858,7 +858,8 @@
     window.addEventListener("scroll", onScroll, { passive: true });
   })();
 
-  // Scroll reveal
+  // Scroll reveal — arm only after IO is ready so a later script error
+  // cannot leave the page permanently blank (opacity: 0 forever).
   (function () {
     var els = document.querySelectorAll(".reveal");
     if (!("IntersectionObserver" in window)) {
@@ -871,6 +872,7 @@
       });
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
     els.forEach(function (el) { io.observe(el); });
+    document.documentElement.classList.add("js-ready");
   })();
 
   // Language: dictionary + switching
