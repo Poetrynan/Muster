@@ -15,7 +15,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { Badge } from "../components/ui/badge";
@@ -24,7 +24,8 @@ import { Card, CardContent } from "../components/ui/card";
 import { Progress } from "../components/ui/progress";
 import { Tabs } from "../components/ui/tabs";
 import { useAppStore } from "../stores/useAppStore";
-import { getEffectiveAssignmentStatus, isTermEnded, parseDueTimestamp, getCalendarDayDiff, getDaysUntilDue } from "../lib/utils";
+import { inferActiveSemesterKey, isCourseActiveForSemester } from "../lib/courseHelpers";
+import { getEffectiveAssignmentStatus, parseDueTimestamp, getCalendarDayDiff, getDaysUntilDue } from "../lib/utils";
 
 // Determine whether a course term has ended (Monash: S1 ≈ late Feb - Jun, S2 ≈ late Jul - Nov).
 import { useTranslation } from "../i18n/useTranslation";
@@ -109,6 +110,27 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
 
   const courseMap = new Map(courses.map((c) => [c.id, c.shortName || c.fullName]));
   const courseFullMap = new Map(courses.map((c) => [c.id, c.fullName || c.shortName || ""]));
+  // Semester-aware activity: assignments from past semesters must never land in
+  // "overdue" — their courses are finished even when the persisted name is the
+  // truncated Moodle dropdown text (no semester token left to parse).
+  const currentSemesterKey = useMemo(() => inferActiveSemesterKey(courses), [courses]);
+  const latestDueByCourse = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const a of assignments) {
+      const iso = a.dueDateIso || a.dueDate;
+      if (!iso) continue;
+      const ts = parseDueTimestamp(iso);
+      if (Number.isNaN(ts) || ts <= 0) continue;
+      const prev = m.get(a.courseId);
+      if (prev === undefined || ts > prev) m.set(a.courseId, ts);
+    }
+    return m;
+  }, [assignments]);
+  const isCourseActive = useCallback(
+    (courseId: number) =>
+      isCourseActiveForSemester(courseFullMap.get(courseId), currentSemesterKey, latestDueByCourse.get(courseId)),
+    [courseFullMap, currentSemesterKey, latestDueByCourse]
+  );
   const annotated = assignments.map((a) => ({
     ...a,
     course: courseMap.get(a.courseId) || t("course.courseNumber", { id: a.courseId }),
@@ -120,7 +142,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     if (currentTab === "pending")
       return (
         (assignment.status === "pending" || assignment.status === "upcoming") &&
-        !isTermEnded(courseFullMap.get(assignment.courseId))
+        !isCourseActive(assignment.courseId)
       );
     if (currentTab === "submitted") return assignment.status === "submitted";
     if (currentTab === "graded") return assignment.status === "graded";
@@ -152,7 +174,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
       if (
         !isHidden &&
         (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
-        !isTermEnded(courseFullMap.get(a.courseId))
+        !isCourseActive(a.courseId)
       )
         entry.pending += 1;
       map.set(a.courseId, entry);
@@ -171,7 +193,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
     return (
       (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
-      !isTermEnded(courseFullMap.get(a.courseId))
+      !isCourseActive(a.courseId)
     );
   }).length;
 
@@ -186,7 +208,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const bucketOf = (a: (typeof annotated)[number]): string => {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
     // Anything from an ended term or ignored course → archived bucket, whatever its state.
-    if (hiddenCourseIds.includes(a.courseId) || isTermEnded(courseFullMap.get(a.courseId))) return "archived";
+    if (hiddenCourseIds.includes(a.courseId) || !isCourseActive(a.courseId)) return "archived";
     if (eff === "submitted") return "submitted";
     if (eff === "graded") return "graded";
     const iso = a.dueDateIso || a.dueDate;
@@ -325,7 +347,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                   if (
                     effBadge !== "submitted" &&
                     effBadge !== "graded" &&
-                    isTermEnded(courseFullMap.get(assignment.courseId))
+                    !isCourseActive(assignment.courseId)
                   ) {
                     return <Badge variant="secondary">{t("assignments.termEnded")}</Badge>;
                   }
@@ -371,7 +393,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
   const pendingCount = tracked.filter((a) => {
     const eff = getEffectiveAssignmentStatus(a.status, a.dueDateIso || a.dueDate);
     return (eff === "pending" || eff === "upcoming" || eff === "overdue") &&
-      !isTermEnded(courseFullMap.get(a.courseId));
+      !isCourseActive(a.courseId);
   }).length;
   const doneCount = tracked.filter((a) => a.status === "submitted" || a.status === "graded").length;
   const completionPct = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);

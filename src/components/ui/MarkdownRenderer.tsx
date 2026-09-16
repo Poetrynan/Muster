@@ -230,6 +230,62 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
       }
     }
 
+    // 4.5 GFM table: header row | a | b | + separator | --- | --- |
+    if (!inCodeBlock && trimmed.startsWith("|") && i + 1 < lines.length) {
+      const nextTrimmed = (lines[i + 1] || "").trim();
+      if (/^\|[\s:|-]+$/.test(nextTrimmed) && nextTrimmed.includes("-")) {
+        flushList(i);
+        const parseRow = (row: string): string[] =>
+          row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+        const headers = parseRow(trimmed);
+        const aligns = parseRow(nextTrimmed).map((cell) =>
+          cell.startsWith(":") && cell.endsWith(":") ? "center" : cell.endsWith(":") ? "right" : "left"
+        );
+        const bodyRows: string[][] = [];
+        let j = i + 2;
+        while (j < lines.length && (lines[j] || "").trim().startsWith("|")) {
+          bodyRows.push(parseRow((lines[j] || "").trim()));
+          j++;
+        }
+        blocks.push(
+          <div key={`tbl-${i}`} className="my-3 overflow-x-auto rounded-xl border border-border/60">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted/60">
+                  {headers.map((hcell, hi) => (
+                    <th
+                      key={hi}
+                      className="px-3 py-2 text-left font-semibold text-foreground border-b border-border/60"
+                      style={{ textAlign: aligns[hi] as "left" | "center" | "right" | undefined }}
+                    >
+                      {renderInline(hcell)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 1 ? "bg-muted/20" : ""}>
+                    {row.map((cell, ci) => (
+                      <td
+                        key={ci}
+                        className="px-3 py-1.5 text-foreground/90 border-b border-border/30"
+                        style={{ textAlign: aligns[ci] as "left" | "center" | "right" | undefined }}
+                      >
+                        {renderInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        i = j - 1; // outer for-loop increments; continue from first non-table line
+        continue;
+      }
+    }
+
     // 5. Blockquote >
     if (trimmed.startsWith(">")) {
       flushList(i);
