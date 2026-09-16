@@ -37,6 +37,7 @@ import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { buildCourseAiContext } from "../services/aiContext";
 import { extractMusterJson, stripPartialAppendix } from "../lib/aiStructured";
+import { computeCourseDataHash } from "../lib/summaryFreshness";
 import {
   fetchCourseResources,
   fetchCourseGradebook,
@@ -683,6 +684,7 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
               model: settings.aiModel,
               content: clean,
               structured: json ?? undefined,
+              dataHash: currentCourseDataHash,
             });
             setSummaryLoading(false);
           },
@@ -703,11 +705,24 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
 
   const savedSummary = useAppStore((state) => state.summaries[courseId]);
 
+  // P0-C freshness: hash the course data the summary would have been built from.
+  const currentCourseDataHash = useMemo(
+    () =>
+      computeCourseDataHash({
+        resources: displayedResources,
+        assignments: courseAssignments,
+        announcements: courseAnnouncements,
+        unitInfoTitles: (unitInfo ?? cachedUnitInfo)?.sections?.map((s) => s.title),
+      }),
+    [displayedResources, courseAssignments, courseAnnouncements, unitInfo, cachedUnitInfo]
+  );
+  const summaryStale = !!savedSummary?.dataHash && savedSummary.dataHash !== currentCourseDataHash;
+
   // Auto summary: when autoSummaryOnOpen is on and no cached summary exists, generate on entering the course.
   useEffect(() => {
     if (!settings.autoSummaryOnOpen) return;
     if (!settings.aiApiKey || !settings.aiBaseUrl) return;
-    if (savedSummary) return;
+    if (savedSummary && savedSummary.dataHash === currentCourseDataHash) return;
     handleGenerateSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, settings.autoSummaryOnOpen, settings.aiApiKey, settings.aiBaseUrl, savedSummary]);
@@ -1565,6 +1580,12 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                         </>
                       )}
                     </Button>
+                    {summaryStale && (
+                      <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{t("course.ai.stale.title")}</span>
+                      </div>
+                    )}
                     {(summaryLoading || savedSummary) && (
                       <div className="mt-4 p-5 rounded-2xl bg-card border shadow-sm">
                         {summaryLoading && !streamContent && !thinkingText && (
