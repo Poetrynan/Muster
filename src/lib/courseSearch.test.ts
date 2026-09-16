@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { searchCourseMaterials, buildQaContext, DOMAIN_CONCEPTS } from "./courseSearch";
+import { searchCourseMaterials, buildQaContext, DOMAIN_CONCEPTS, type CourseMaterial } from "./courseSearch";
 
-const materials = [
+const materials: CourseMaterial[] = [
   { sourceId: 0, kind: "resource" as const, courseId: 1, title: "Lecture 6 - Linear regression", body: "Gradient descent basics", weekNum: 6 },
   { sourceId: 0, kind: "resource" as const, courseId: 1, title: "Lab 6 worksheet", body: " practicum on regression models in R", weekNum: 6 },
   { sourceId: 0, kind: "assignment" as const, courseId: 1, title: "Assignment 1", body: "Due 2026-09-20. Covers weeks 1-5 including regression." },
