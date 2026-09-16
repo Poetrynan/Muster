@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { AlertCircle, ChevronRight, Loader2, RefreshCw, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronRight, Loader2, RefreshCw, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -26,7 +26,7 @@ function langInstruction(language?: string): string {
     : "Please answer in English.";
 }
 
-export function AIHubPage({ initialCourseId }: { initialCourseId?: number | null }) {
+export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: number | null; onBack: () => void }) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
   const announcements = useAppStore((s) => s.announcements);
@@ -414,6 +414,10 @@ export function AIHubPage({ initialCourseId }: { initialCourseId?: number | null
   if (!hasKey) {
     return (
       <div className="p-8 max-w-3xl mx-auto">
+        <Button variant="ghost" onClick={onBack} className="gap-2 mb-4">
+          <ArrowLeft className="w-4 h-4" />
+          {t("common.back")}
+        </Button>
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8 text-center">
           <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-blue-500/15 to-violet-500/20 text-violet-600 dark:text-violet-400">
             <Sparkles className="w-7 h-7" />
@@ -447,6 +451,10 @@ export function AIHubPage({ initialCourseId }: { initialCourseId?: number | null
   // ---------- main hub ----------
   return (
     <div className="p-8 max-w-5xl mx-auto">
+      <Button variant="ghost" onClick={onBack} className="gap-2 mb-4">
+        <ArrowLeft className="w-4 h-4" />
+        {t("common.back")}
+      </Button>
       <div className="flex items-center justify-between gap-3 mb-1">
         <h1 className="text-2xl font-bold flex items-center gap-2.5">
           <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500/15 to-violet-500/20 text-violet-600 dark:text-violet-400">
