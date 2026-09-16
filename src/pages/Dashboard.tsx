@@ -21,6 +21,7 @@ import {
   FolderOpen,
   CalendarDays,
   ClipboardList,
+  RefreshCw,
   X,
   CloudDownload,
   Loader2,
@@ -47,7 +48,11 @@ import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
-import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
+import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress, generateSummaryStream } from "../services/api";
+import { buildPrioritiesContext } from "../services/aiContext";
+import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
+import { computeDeadlineHash } from "../lib/summaryFreshness";
+import { extractMusterJson, type AiPriority } from "../lib/aiStructured";
 import { batchDownload } from "../services/batchDownload";
 // Reopening the app within this window after the last auto sync renders from local
 // data instead of re-scraping everything (user request: "1 小时内关闭再打开不重新抓取").
@@ -269,6 +274,7 @@ export function Dashboard() {
     hideCourse,
     unhideCourse,
     togglePinCourse,
+    aiInsights,
   } = useAppStore();
 
   const { t } = useTranslation();
@@ -755,6 +761,8 @@ export function Dashboard() {
       // Due-date reminder: run after assignments are loaded so we never check an empty store.
       // The hourly poll (above) handles the "app left open" case; this handles "just synced".
       runDueCheck(t, setReminderBanner);
+      // P1-D: refresh AI priorities in the background after a successful sync (hash-gated).
+      void maybeRefreshPriorities(true);
     } catch (err) {
       console.error("Failed to sync data:", err);
       setLoadError(errMsg(err, "dashboard.syncFailed"));
@@ -1114,8 +1122,70 @@ export function Dashboard() {
     []
   );
 
+
+  // P1-D: refresh the AI "today's priorities" ranking. Auto mode runs once after a
+  // successful sync (data-hash gated); manual mode is the card's refresh button.
+  // No API key => the card hides entirely, nothing here runs.
+  const prioritiesInFlight = useRef(false);
+  const maybeRefreshPriorities = useCallback(
+    async (auto: boolean) => {
+      const st = useAppStore.getState();
+      const { aiApiKey, aiBaseUrl, aiModel, aiFormat } = st.settings;
+      if (!aiApiKey || !aiBaseUrl) return;
+      if (prioritiesInFlight.current || st.aiInsights.prioritiesRunning) return;
+      const dataHash = computeDeadlineHash(st.assignments, st.calendarEvents);
+      if (auto && st.aiInsights.priorities && st.aiInsights.priorities.dataHash === dataHash) return;
+      prioritiesInFlight.current = true;
+      st.setPrioritiesRunning(true);
+      try {
+        const ctx = buildPrioritiesContext({
+          courses: st.courses,
+          assignments: st.assignments,
+          calendarEvents: st.calendarEvents,
+          gradeOverview: st.gradeOverview,
+          today: new Date().toLocaleDateString("en-CA"),
+          language: st.settings.language || "en",
+        });
+        const fullAiUrl = buildAiUrl(aiBaseUrl, aiFormat ?? splitAiUrl(aiBaseUrl).format);
+        let acc = "";
+        await generateSummaryStream(ctx, aiApiKey, fullAiUrl, aiModel, "priorities", {
+          onChunk: (text) => {
+            acc += text;
+          },
+          onDone: () => {
+            const { json } = extractMusterJson(acc);
+            const items = (json?.priorities ?? []) as AiPriority[];
+            st.setPriorities({
+              items,
+              generatedAt: new Date().toISOString(),
+              dataHash,
+            });
+          },
+          onError: (e) => {
+            console.warn("priorities refresh failed:", e);
+            st.setPrioritiesRunning(false);
+          },
+        });
+      } catch (e) {
+        console.warn("priorities refresh failed:", e);
+      } finally {
+        prioritiesInFlight.current = false;
+        if (useAppStore.getState().aiInsights.prioritiesRunning) {
+          useAppStore.getState().setPrioritiesRunning(false);
+        }
+      }
+    },
+    []
+  );
+
   // Unified deadline timeline: assignments (dueDateIso/dueDate) + calendar events (close/due) merged, de-duplicated and sorted.
   // Assignments are prioritized over day-level calendar events to retain exact due times and submission statuses.
+  // P1-D: hash of the cross-course deadline surface, for AI priorities staleness.
+  const currentDeadlineHash = useMemo(
+    () => computeDeadlineHash(assignments, calendarEvents),
+    [assignments, calendarEvents]
+  );
+
   const deadlineItems = useMemo(() => {
     type Item = { key: string; courseId: number | null; kind: "quiz" | "assign"; title: string; ts: number };
     const items: Item[] = [];
@@ -1972,6 +2042,17 @@ export function Dashboard() {
                 </p>
               </div>
 
+              {/* P1-D: AI "today's priorities" card. Hidden entirely without an API key. */}
+              {settings.aiApiKey && settings.aiBaseUrl && (
+                <AIPrioritiesCard
+                  items={aiInsights.priorities?.items ?? []}
+                  generatedAt={aiInsights.priorities?.generatedAt}
+                  running={aiInsights.prioritiesRunning}
+                  stale={!!aiInsights.priorities && aiInsights.priorities.dataHash !== currentDeadlineHash}
+                  onRefresh={() => maybeRefreshPriorities(false)}
+                />
+              )}
+
               {/* Stat cards - with proper hierarchy */}
               <div
                 className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8"
@@ -2755,5 +2836,84 @@ export function Dashboard() {
         </div>
       </main>
     </div>
+  );
+}
+
+
+// P1-D card: cross-course AI-ranked priorities. Pure presentation; data flows in via props.
+function AIPrioritiesCard({
+  items,
+  generatedAt,
+  running,
+  stale,
+  onRefresh,
+}: {
+  items: AiPriority[];
+  generatedAt?: string;
+  running: boolean;
+  stale: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, 3);
+  const levelBadge = (level: string) =>
+    level === "urgent"
+      ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+      : level === "important"
+      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+      : "bg-secondary text-muted-foreground border-border";
+  return (
+    <Card className="mb-6 border-violet-500/25 bg-gradient-to-r from-violet-500/10 via-transparent to-blue-500/10">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-500" aria-hidden="true" />
+            {t("dashboard.aiPriorities.title")}
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={onRefresh} disabled={running} aria-label={t("dashboard.aiPriorities.refresh")}>
+            <RefreshCw className={`w-4 h-4 ${running ? "animate-spin" : ""}`} aria-hidden="true" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {stale && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">{t("dashboard.aiPriorities.stale")}</p>
+        )}
+        {running && items.length === 0 ? (
+          <div className="space-y-2" aria-busy="true">
+            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}
+          </div>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("dashboard.aiPriorities.empty")}</p>
+        ) : (
+          <>
+            <ul className="space-y-2">
+              {visible.map((pr, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${levelBadge(pr.level)}`}>
+                    {t(`dashboard.aiPriorities.level.${pr.level}`)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate">{pr.item}</p>
+                    {pr.reason && <p className="text-xs text-muted-foreground">{pr.reason}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {items.length > 3 && (
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setExpanded((v) => !v)}>
+                {expanded ? t("common.showLess") : t("dashboard.aiPriorities.showAll", { count: items.length })}
+              </Button>
+            )}
+            {generatedAt && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {t("dashboard.aiPriorities.generatedAt", { time: new Date(generatedAt).toLocaleTimeString() })}
+              </p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
