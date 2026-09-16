@@ -1,96 +1,300 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="700" viewBox="0 0 980 700" role="img" aria-label="Muster AI course summary streaming live with Markdown rendering">
-  <rect x="0" y="0" width="980" height="700" rx="14" fill="#FFFFFF"/>
-  <path d="M14 0h952a14 14 0 0 1 14 14v16H0V14A14 14 0 0 1 14 0z" fill="#F7F8FA"/>
-  <line x1="0" y1="30" x2="980" y2="30" stroke="#E5E7EB"/>
-  <g stroke="#5A5F66" stroke-width="1.05" fill="none" stroke-linecap="square"><path d="M876 15h8"/><rect x="916" y="11" width="8" height="8" rx="1"/><path d="M956 11l8 8M964 11l-8 8"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="752" viewBox="0 0 1200 752" role="img" aria-label="Muster AI Cockpit featuring weekly action cards, cited slide Q&amp;A, and real-time streaming output">
+  <defs>
+    <linearGradient id="avaG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="sparkleG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Window Frame -->
+  <rect x="0" y="0" width="1200" height="752" rx="14" fill="#F8FAFC"/>
+  <path d="M14 0h1172a14 14 0 0 1 14 14v16H0V14A14 14 0 0 1 14 0z" fill="#F7F8FA"/>
+  <line x1="0" y1="30" x2="1200" y2="30" stroke="#E5E7EB"/>
+  <g stroke="#5A5F66" stroke-width="1.05" fill="none" stroke-linecap="square">
+    <path d="M1096 15h8"/><rect x="1136" y="11" width="8" height="8" rx="1"/><path d="M1176 11l8 8M1184 11l-8 8"/>
+  </g>
   <text x="14" y="19" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="600" fill="#8A9099">Muster</text>
 
+  <!-- Sidebar Background -->
+  <rect x="0" y="30" width="253" height="722" fill="#FFFFFF"/>
+  <line x1="253" y1="30" x2="253" y2="752" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Logo -->
+  <rect x="20" y="48" width="38" height="38" rx="9" fill="#000000"/>
+  <path d="M30 72V58l9 10 9-10v14" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="71" y="72" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#000000">Muster</text>
+  <text x="71" y="89" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="9.5" fill="#666666">For The Better Monash</text>
+  <text x="71" y="102" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="9.5" fill="#999999">works with Moodle&#8482;</text>
+
+  <!-- Sidebar Nav -->
+  <g transform="translate(28,148) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
+  </g>
+  <text x="58" y="162" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Home</text>
+
+  <g transform="translate(28,192) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+  </g>
+  <text x="58" y="206" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Courses</text>
+
+  <g transform="translate(28,236) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>
+  </g>
+  <text x="58" y="250" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Assignments</text>
+
+  <g transform="translate(28,280) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>
+  </g>
+  <text x="58" y="294" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Resources</text>
+
+  <g transform="translate(28,324) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>
+  </g>
+  <text x="58" y="338" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Calendar</text>
+
+  <g transform="translate(28,368) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>
+  </g>
+  <text x="58" y="382" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Notifications</text>
+  <rect x="206" y="368" width="24" height="19" rx="9.5" fill="#D97706"/>
+  <text x="218" y="381.5" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF">7</text>
+
+  <!-- AI Assistant Active Nav Item -->
+  <rect x="13" y="404" width="227" height="42" rx="11" fill="#3B82F6"/>
+  <g transform="translate(28,416) scale(0.75)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/>
+  </g>
+  <text x="58" y="430" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#FFFFFF">AI Assistant</text>
+
+  <g transform="translate(28,458) scale(0.75)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.2.61.74 1.03 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </g>
+  <text x="58" y="472" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="500" fill="#666666">Settings</text>
+
+  <!-- Sidebar User Profile -->
+  <line x1="0" y1="628" x2="253" y2="628" stroke="#E5E7EB" stroke-width="1"/>
+  <rect x="13" y="640" width="227" height="52" rx="11" fill="#F5F7FA"/>
+  <circle cx="41" cy="666" r="17" fill="url(#avaG)"/>
+  <g transform="translate(32,657) scale(0.75)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+  </g>
+  <text x="66" y="662" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="600" fill="#000000">Sarah Chen</text>
+  <text x="66" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="9.5" fill="#666666">schen0042@student.monash.edu</text>
+  <g transform="translate(214,658) scale(0.7)" fill="none" stroke="#666666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+  </g>
+
+  <!-- Top Bar -->
+  <line x1="253" y1="94" x2="1200" y2="94" stroke="#E5E7EB" stroke-width="1"/>
+  <rect x="277" y="50" width="420" height="34" rx="11" fill="#F1F5F9"/>
+  <g transform="translate(293,60) scale(0.62)" fill="none" stroke="#8A9099" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/>
+  </g>
+  <text x="316" y="71" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#9AA0A6">Search courses, assignments, resources...</text>
+
+  <rect x="1000" y="50" width="34" height="34" rx="10" fill="#F1F5F9"/>
+  <g transform="translate(1010,60) scale(0.62)" fill="none" stroke="#3B82F6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
+  </g>
+  <circle cx="1032" cy="52" r="8" fill="#3B82F6"/>
+  <text x="1032" y="55.5" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="9" font-weight="700" fill="#FFFFFF">2</text>
+  <rect x="1044" y="50" width="66" height="34" rx="11" fill="#F1F5F9"/>
+  <g transform="translate(1054,60) scale(0.6)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+  </g>
+  <text x="1076" y="71" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-weight="600" fill="#333333">EN</text>
+  <rect x="1120" y="50" width="34" height="34" rx="10" fill="#F1F5F9"/>
+  <g transform="translate(1130,60) scale(0.62)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.3 17.7l-1.4 1.4"/><path d="M19.1 4.9l-1.4 1.4"/>
+  </g>
+
+  <!-- AI Hub Main View -->
   <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
-    <g transform="translate(20,48) scale(0.68)" fill="none" stroke="#666666" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></g>
-    <text x="44" y="61" font-size="15" font-weight="700" fill="#000000">FIT5225</text>
-    <text x="106" y="61" font-size="13" fill="#666666">Cloud computing and security &#183; S1 2026</text>
-
-    <rect x="20" y="84" width="700" height="34" rx="11" fill="#F1F5F9"/>
-    <g font-size="11.5" font-weight="500" fill="#666666">
-      <text x="52" y="105" text-anchor="middle">Overview</text>
-      <text x="129" y="105" text-anchor="middle">Materials</text>
-      <text x="216" y="105" text-anchor="middle">Assignments</text>
-      <text x="323" y="105" text-anchor="middle">Announcements</text>
-      <text x="418" y="105" text-anchor="middle">Contacts</text>
-      <text x="493" y="105" text-anchor="middle">Unit Info</text>
-      <text x="577" y="105" text-anchor="middle">Recordings</text>
+    <!-- Hub Header -->
+    <rect x="277" y="112" width="38" height="38" rx="11" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1"/>
+    <g transform="translate(286,121) scale(0.85)" fill="none" stroke="#4F46E5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/>
     </g>
-    <rect x="632" y="88" width="84" height="26" rx="8" fill="#FFFFFF"/>
-    <text x="674" y="105" text-anchor="middle" font-size="11.5" font-weight="600" fill="#111111">AI Summary</text>
+    <text x="327" y="130" font-size="18" font-weight="700" fill="#0F172A">AI Assistant</text>
+    <text x="327" y="146" font-size="12" fill="#64748B">Built on local cache &#183; zero extra Moodle requests</text>
 
-    <rect x="20" y="132" width="940" height="548" rx="18" fill="#FFFFFF" stroke="#E9EBEF"/>
-    <g transform="translate(40,152) scale(0.75)" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
-    <text x="66" y="167" font-size="14.5" font-weight="600" fill="#000000">OpenAI Compatible Summary</text>
+    <!-- Freshness & Cache Tag -->
+    <rect x="926" y="116" width="226" height="30" rx="15" fill="#F0FDF4" stroke="#BBF7D0"/>
+    <circle cx="942" cy="131" r="3.5" fill="#16A34A"/>
+    <text x="953" y="135" font-size="11.5" font-weight="600" fill="#15803D">Fresh &#183; Data hash 7e9f2a verified</text>
 
+    <!-- Course Scope Chips -->
+    <g font-size="11.5" font-weight="600">
+      <rect x="277" y="164" width="86" height="30" rx="9" fill="#FFFFFF" stroke="#E2E8F0"/>
+      <text x="320" y="183" text-anchor="middle" fill="#475569" font-weight="500">All Units</text>
+
+      <rect x="371" y="164" width="218" height="30" rx="9" fill="#3B82F6"/>
+      <text x="480" y="183" text-anchor="middle" fill="#FFFFFF">FIT5225 Cloud Computing</text>
+
+      <rect x="597" y="164" width="176" height="30" rx="9" fill="#FFFFFF" stroke="#E2E8F0"/>
+      <text x="685" y="183" text-anchor="middle" fill="#475569" font-weight="500">FIT5147 Data Exploration</text>
+
+      <rect x="781" y="164" width="168" height="30" rx="9" fill="#FFFFFF" stroke="#E2E8F0"/>
+      <text x="865" y="183" text-anchor="middle" fill="#475569" font-weight="500">FIT5216 Optimisation</text>
+    </g>
+
+    <!-- COLUMN 1: Structured Action Cards & Priorities (Left) -->
     <g>
-      <rect x="40" y="188" width="238" height="38" rx="11" fill="#3B82F6"/>
-      <g transform="translate(56,199) scale(0.68)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
-      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Generate This Week's Summary</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.036" values="1;0"/>
+      <rect x="277" y="208" width="430" height="518" rx="18" fill="#FFFFFF" stroke="#E2E8F0"/>
+
+      <!-- Column Header -->
+      <g transform="translate(297,225) scale(0.75)" fill="none" stroke="#3B82F6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </g>
+      <text x="321" y="238" font-size="14.5" font-weight="700" fill="#0F172A">Weekly Action Cards</text>
+      <rect x="635" y="222" width="60" height="22" rx="11" fill="#EEF2FF"/>
+      <text x="665" y="237" text-anchor="middle" font-size="11" font-weight="700" fill="#4F46E5">3 Active</text>
+      <text x="297" y="261" font-size="11.5" fill="#64748B">Coursework transformed into checkable, prioritized tasks</text>
+
+      <!-- Action Card 1: Urgent Assignment (Checked) -->
+      <g>
+        <rect x="297" y="274" width="390" height="96" rx="12" fill="#FEFCE8" stroke="#FEF08A"/>
+        <!-- Checkbox Checked -->
+        <rect x="311" y="288" width="18" height="18" rx="4" fill="#3B82F6"/>
+        <path d="M315 297l3 3 6-6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="337" y="302" font-size="13" font-weight="700" fill="#0F172A">Assignment 2: Cloud Deployment</text>
+        <rect x="589" y="287" width="86" height="20" rx="10" fill="#FEE2E2"/>
+        <text x="632" y="301" text-anchor="middle" font-size="10.5" font-weight="700" fill="#DC2626">4 days left</text>
+        <text x="337" y="324" font-size="11.5" fill="#475569">FIT5225 &#183; Weight: 30% &#183; Due 12 Mar, 16:30</text>
+        <rect x="337" y="335" width="338" height="24" rx="6" fill="#FEF9C3"/>
+        <text x="345" y="351" font-size="10.5" font-weight="600" fill="#854D0E">&#10003; Docker image built &#183; IAM policy check needed</text>
+      </g>
+
+      <!-- Action Card 2: Lab Scan (In Progress) -->
+      <g>
+        <rect x="297" y="380" width="390" height="88" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <!-- Checkbox Unchecked -->
+        <rect x="311" y="394" width="18" height="18" rx="4" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.8"/>
+        <text x="337" y="408" font-size="13" font-weight="700" fill="#0F172A">Lab 6: Docker Vulnerability Scan</text>
+        <rect x="597" y="393" width="78" height="20" rx="10" fill="#EFF6FF"/>
+        <text x="636" y="407" text-anchor="middle" font-size="10.5" font-weight="700" fill="#2563EB">In Progress</text>
+        <text x="337" y="430" font-size="11.5" fill="#475569">FIT5225 &#183; Trivy static analysis &amp; Dockerfile hardening</text>
+        <text x="337" y="450" font-size="11" fill="#64748B">Refer to worksheet tasks 4.1&#8211;4.3</text>
+      </g>
+
+      <!-- Action Card 3: Review Slides (Pending) -->
+      <g>
+        <rect x="297" y="478" width="390" height="88" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <!-- Checkbox Unchecked -->
+        <rect x="311" y="492" width="18" height="18" rx="4" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.8"/>
+        <text x="337" y="506" font-size="13" font-weight="700" fill="#0F172A">Review Lecture 6 Slides</text>
+        <rect x="613" y="491" width="62" height="20" rx="10" fill="#F1F5F9"/>
+        <text x="644" y="505" text-anchor="middle" font-size="10.5" font-weight="600" fill="#64748B">Pending</text>
+        <text x="337" y="528" font-size="11.5" fill="#475569">Slides 12&#8211;31: Container Orchestration &amp; ECS Tasks</text>
+        <text x="337" y="548" font-size="11" fill="#64748B">Pre-requisite for Week 7 hands-on session</text>
+      </g>
+
+      <!-- Action Card 4: Quiz Sitting (Closing Soon) -->
+      <g>
+        <rect x="297" y="576" width="390" height="88" rx="12" fill="#FEF2F2" stroke="#FECACA"/>
+        <!-- Checkbox Unchecked -->
+        <rect x="311" y="590" width="18" height="18" rx="4" fill="#FFFFFF" stroke="#F87171" stroke-width="1.8"/>
+        <text x="337" y="604" font-size="13" font-weight="700" fill="#991B1B">Quiz 1: Fundamentals</text>
+        <rect x="583" y="589" width="92" height="20" rx="10" fill="#FEE2E2"/>
+        <text x="629" y="603" text-anchor="middle" font-size="10.5" font-weight="700" fill="#DC2626">Closes Today</text>
+        <text x="337" y="626" font-size="11.5" fill="#7F1D1D">2 attempts remaining &#183; Closes 23:59 tonight</text>
+        <text x="337" y="646" font-size="11" fill="#991B1B">Sitting time: approx. 25 minutes</text>
+      </g>
+
+      <!-- Footer note -->
+      <text x="492" y="696" text-anchor="middle" font-size="11" fill="#94A3B8">Interactive cards update seamlessly when Moodle coursework changes</text>
     </g>
 
-    <g opacity="0">
-      <rect x="40" y="188" width="152" height="38" rx="11" fill="#3B82F6"/>
-      <g transform="translate(64,207)"><g><path d="M0 -7A7 7 0 0 1 7 0" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/><circle cx="0" cy="0" r="7" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="2.4"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.9s" repeatCount="indefinite"/></g></g>
-      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Generating...</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.036;0.714" values="0;1;0"/>
+    <!-- COLUMN 2: Cited Slide Q&A (Right) with Animated Typewriter -->
+    <g>
+      <rect x="721" y="208" width="430" height="518" rx="18" fill="#FFFFFF" stroke="#E2E8F0"/>
+
+      <!-- Column Header -->
+      <g transform="translate(741,225) scale(0.75)" fill="none" stroke="#6366F1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </g>
+      <text x="765" y="238" font-size="14.5" font-weight="700" fill="#0F172A">Slide-Grounded Q&amp;A</text>
+      <rect x="1030" y="222" width="109" height="22" rx="11" fill="#F0FDF4" stroke="#BBF7D0"/>
+      <circle cx="1042" cy="233" r="3.5" fill="#16A34A"/>
+      <text x="1053" y="237" font-size="11" font-weight="600" fill="#15803D">High Confidence</text>
+      <text x="741" y="261" font-size="11.5" fill="#64748B">Instant answers cited directly to lecture slides &amp; assignment briefs</text>
+
+      <!-- User Query Box -->
+      <rect x="741" y="274" width="390" height="50" rx="12" fill="#F1F5F9"/>
+      <g transform="translate(755,286) scale(0.65)" fill="none" stroke="#3B82F6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
+      </g>
+      <text x="778" y="295" font-size="12" font-weight="600" fill="#0F172A">What are the IAM security rules for Assignment 2?</text>
+      <text x="778" y="311" font-size="10.5" fill="#64748B">Grounded in FIT5225 Week 6 materials &amp; project specification</text>
+
+      <!-- Citations Row -->
+      <text x="741" y="342" font-size="10.5" font-weight="700" fill="#4F46E5" letter-spacing="0.5">VERIFIED SOURCE CITATIONS</text>
+      <g>
+        <rect x="741" y="350" width="190" height="24" rx="6" fill="#EEF2FF" stroke="#C7D2FE"/>
+        <text x="836" y="366" text-anchor="middle" font-size="10.5" font-weight="600" fill="#4338CA">&#128218; Lecture 6 &#183; Slide 14 (PDF)</text>
+
+        <rect x="941" y="350" width="190" height="24" rx="6" fill="#EEF2FF" stroke="#C7D2FE"/>
+        <text x="1036" y="366" text-anchor="middle" font-size="10.5" font-weight="600" fill="#4338CA">&#128196; Assignment 2 Brief &#183; p.3</text>
+      </g>
+
+      <!-- Streaming Answer Container -->
+      <rect x="741" y="386" width="390" height="278" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/>
+
+      <!-- Streaming Response Line 1 -->
+      <g opacity="0">
+        <circle cx="761" cy="412" r="3.5" fill="#3B82F6"/>
+        <text x="775" y="416" font-size="12.5" font-weight="700" fill="#0F172A">1. Least-Privilege IAM Execution Roles</text>
+        <text x="775" y="434" font-size="11.5" fill="#334155">Restrict ECS task execution roles strictly to S3 read</text>
+        <text x="775" y="450" font-size="11.5" fill="#334155">and ECR pull permissions.</text>
+        <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.05;0.08;1" values="0;0;1;1"/>
+      </g>
+
+      <!-- Streaming Response Line 2 -->
+      <g opacity="0">
+        <circle cx="761" cy="478" r="3.5" fill="#3B82F6"/>
+        <text x="775" y="482" font-size="12.5" font-weight="700" fill="#0F172A">2. AWS Secrets Manager Integration</text>
+        <text x="775" y="500" font-size="11.5" fill="#334155">Hardcoded DB passwords in env vars are strictly prohibited</text>
+        <text x="775" y="516" font-size="11.5" fill="#334155">by rubric Section 3.2 (-5% penalty if detected).</text>
+        <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.22;0.25;1" values="0;0;1;1"/>
+      </g>
+
+      <!-- Streaming Response Line 3 -->
+      <g opacity="0">
+        <circle cx="761" cy="544" r="3.5" fill="#3B82F6"/>
+        <text x="775" y="548" font-size="12.5" font-weight="700" fill="#0F172A">3. Security Group Ingress Isolation</text>
+        <text x="775" y="566" font-size="11.5" fill="#334155">Inbound port 5432 must be restricted to ALB SG only,</text>
+        <text x="775" y="582" font-size="11.5" fill="#334155">never exposed to 0.0.0.0/0.</text>
+        <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.45;0.48;1" values="0;0;1;1"/>
+      </g>
+
+      <!-- Blinking Cursor following streaming -->
+      <g opacity="0">
+        <text x="0" y="0" font-size="14" font-weight="700" fill="#3B82F6">&#9613;<animate attributeName="opacity" values="1;0" keyTimes="0;0.5" dur="0.9s" calcMode="discrete" repeatCount="indefinite"/></text>
+        <animateTransform attributeName="transform" type="translate" dur="14s" repeatCount="indefinite" calcMode="discrete"
+          keyTimes="0;0.08;0.25;0.48;0.7"
+          values="775,416;985,450;990,516;920,582;920,582"/>
+        <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.08;0.7" values="0;1;0"/>
+      </g>
+
+      <!-- Streaming Metadata Footer -->
+      <g opacity="0">
+        <line x1="755" y1="608" x2="1117" y2="608" stroke="#E2E8F0"/>
+        <text x="755" y="626" font-size="10.5" fill="#94A3B8">Generated locally &#183; OpenAI compatible &#183; zero cloud sync</text>
+        <text x="755" y="644" font-size="10.5" font-weight="600" fill="#10B981">&#10003; 100% verified against official Monash unit courseware</text>
+        <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.52;0.964" values="0;1;0"/>
+      </g>
+
+      <!-- Footer note -->
+      <text x="936" y="696" text-anchor="middle" font-size="11" fill="#94A3B8">Streaming output types live, fully Markdown rendered with verified citations</text>
     </g>
-
-    <g opacity="0">
-      <rect x="40" y="188" width="186" height="38" rx="11" fill="#3B82F6"/>
-      <g transform="translate(56,199) scale(0.68)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 15l.7 2.1L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.9z"/></g>
-      <text x="80" y="212" font-size="12.5" font-weight="600" fill="#FFFFFF">Regenerate Summary</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.714;0.964" values="0;1;0"/>
-    </g>
-    <rect x="40" y="244" width="900" height="410" rx="16" fill="#FCFCFD" stroke="#EDEFF2"/>
-
-    <g opacity="0"><text x="64" y="284" font-size="15" font-weight="700" fill="#000000">This Week at a Glance</text>
-      <line x1="64" y1="293" x2="916" y2="293" stroke="#E5E7EB"/>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.055;0.08;1" values="0;0;1;1"/></g>
-
-    <g opacity="0"><text x="64" y="318" font-size="12.5" fill="#333333">Week 6 centres on containerisation and secure cloud deployment. Assessment pressure is high this</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.107;0.132;1" values="0;0;1;1"/></g>
-    <g opacity="0"><text x="64" y="336" font-size="12.5" fill="#333333">week: Assignment 2 (30%) is due Thursday and Quiz 1 closes today.</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.159;0.184;1" values="0;0;1;1"/></g>
-
-    <g opacity="0"><text x="64" y="370" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">KEY RESOURCES</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.211;0.236;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="391" r="2.6" fill="#333333"/><text x="82" y="395" font-size="12.5" fill="#333333">Week 6 lecture slides &#8212; containerisation (PDF, 9.5 MB)</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.263;0.288;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="415" r="2.6" fill="#333333"/><text x="82" y="419" font-size="12.5" fill="#333333">Lab 6 worksheet &#8212; Docker images and vulnerability scanning</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.315;0.34;1" values="0;0;1;1"/></g>
-    <g opacity="0"><text x="64" y="453" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">ASSIGNMENTS &amp; QUIZZES</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.367;0.392;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="474" r="2.6" fill="#333333"/><text x="82" y="478" font-size="12.5" fill="#333333">Assignment 2: Cloud Deployment &#8212; due 12 Mar 2026, 16:30, weight 30%</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.419;0.444;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="498" r="2.6" fill="#333333"/><text x="82" y="502" font-size="12.5" fill="#333333">Quiz 1: Fundamentals &#8212; closes today, 2 attempts remaining</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.471;0.496;1" values="0;0;1;1"/></g>
-
-    <g opacity="0"><text x="64" y="536" font-size="11" font-weight="700" letter-spacing="0.5" fill="#4F46E5">NEXT STEPS</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.523;0.548;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="557" r="2.6" fill="#333333"/><text x="82" y="561" font-size="12.5" fill="#333333">Start Assignment 2 today &#8212; 30% of the unit and only 4 days left.</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.575;0.6;1" values="0;0;1;1"/></g>
-    <g opacity="0"><circle cx="70" cy="581" r="2.6" fill="#333333"/><text x="82" y="585" font-size="12.5" fill="#333333">Sit Quiz 1 before midnight, then re-read slides 12&#8211;31 for the lab.</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" keyTimes="0;0.627;0.652;1" values="0;0;1;1"/></g>
-
-    <g opacity="0">
-      <text x="0" y="0" font-size="14" font-weight="700" fill="#3B82F6">&#9613;<animate attributeName="opacity" values="1;0" keyTimes="0;0.5" dur="0.9s" calcMode="discrete" repeatCount="indefinite"/></text>
-      <animateTransform attributeName="transform" type="translate" dur="14s" repeatCount="indefinite" calcMode="discrete"
-        keyTimes="0;0.08;0.132;0.184;0.236;0.288;0.34;0.392;0.444;0.496;0.548;0.6;0.652"
-        values="64,284;236,284;570,318;450,336;152,370;418,395;444,419;208,453;494,478;424,502;146,536;462,561;462,585"/>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.08;0.7" values="0;1;0"/>
-    </g>
-
-    <g opacity="0">
-      <line x1="64" y1="612" x2="916" y2="612" stroke="#E5E7EB"/>
-      <text x="64" y="634" font-size="10.5" fill="#9AA0A6">Generated at 8/03/2026, 9:42:11 PM &#183; openai &#183; gpt-4o-mini</text>
-      <animate attributeName="opacity" dur="14s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.714;0.964" values="0;1;0"/>
-    </g>
-    <text x="490" y="678" text-anchor="middle" font-size="10.5" fill="#B4B9C0">Streaming output &#8212; the summary types in live, fully Markdown-rendered, in your interface language.</text>
   </g>
 </svg>
