@@ -1,3 +1,29 @@
+# Muster v0.2.4
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.4_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.4/Muster_0.2.4_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.4_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.4/Muster_0.2.4_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.4_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.4/Muster_0.2.4_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.4_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.4/Muster_0.2.4_x64.dmg) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised).
+
+## Fixes & Improvements
+
+- **Active-Language Date & Time Formatting:**
+  - **Fixed OS-Locale Fallback in UI Cards:** Resolved an issue where deadline timeline cards (e.g. "Due in the next 7 days") and badges rendered month/day dates using the host operating system's locale (e.g. displaying `9月18日` on English UI when running on Chinese Windows) due to passing `undefined` to `toLocaleDateString`.
+  - **Strict Multi-Language Locale Alignment:** Dates and timestamps now strictly follow the active application language: displaying `Sep 18` in English, `9月18日` in Chinese and Japanese, and `9월 18일` in Korean.
+  - **System Reminders & Notifications:** Synchronized due date notification banners and AI priorities generation timestamps to format using the user's active language choice.
+- **Landing Page & Web Presence Polish:**
+  - **Script Resilience & Syntax Correction:** Fixed unescaped quotation marks in localized footer strings that blocked JavaScript initialization on the landing page.
+  - **Progressive Reveal Enhancement:** Ensured all landing page sections and cards remain immediately legible and accessible across browsers and network environments.
+  - **Showcase SVGs & Authentic Copy:** Updated UI preview mockups and multi-language copywriting across Chinese, Japanese, and Korean landing page variants to accurately reflect the v0.2.3+ standalone AI cockpit navigation.
+
+---
+
 # Muster v0.2.3
 
 ## Download
