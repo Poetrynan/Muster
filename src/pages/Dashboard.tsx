@@ -274,7 +274,7 @@ export function Dashboard() {
     togglePinCourse,
   } = useAppStore();
 
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
 
   // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
   const onOpenSettings = useCallback(() => setActiveTab("settings"), []);
@@ -1133,10 +1133,11 @@ export function Dashboard() {
         const fresh = due.filter((d) => !reminded.has(d.id));
         if (fresh.length === 0) return;
         markReminded(fresh.map((d) => d.id));
+        const userLang = st.language || "en";
         const title = tr("reminders.dueTitle", { count: fresh.length });
         const body = fresh
           .slice(0, 3)
-          .map((d) => `${d.name} (${new Date(d.dueDateIso).toLocaleDateString()})`)
+          .map((d) => `${d.name} (${new Date(d.dueDateIso).toLocaleDateString(userLang, { month: "short", day: "numeric" })})`)
           .join("; ");
         setBanner({ id: `due:${Date.now()}`, title, body });
         showSystemNotification(title, body);
@@ -1242,7 +1243,7 @@ export function Dashboard() {
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-semibold text-foreground font-mono">
-                {new Date(item.ts).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                {new Date(item.ts).toLocaleDateString(lang, { month: "short", day: "numeric" })}
               </p>
               <p className="text-xs text-muted-foreground">{badge}</p>
             </div>

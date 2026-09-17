@@ -5,10 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString("zh-CN", {
+export function formatDate(date: string | Date, lang: string = "en"): string {
+  return new Date(date).toLocaleDateString(lang, {
     year: "numeric",
-    month: "long",
+    month: "short",
     day: "numeric",
   });
 }

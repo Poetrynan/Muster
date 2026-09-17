@@ -60,7 +60,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   const addSummary = useAppStore((s) => s.addSummary);
   const settings = useAppStore((s) => s.settings);
   const summaries = useAppStore((s) => s.summaries);
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
 
   const hasKey = !!settings.aiApiKey && !!settings.aiBaseUrl;
 
@@ -559,7 +559,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
               )}
               {aiInsights.priorities?.generatedAt && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  {t("dashboard.aiPriorities.generatedAt", { time: new Date(aiInsights.priorities.generatedAt).toLocaleTimeString() })}
+                  {t("dashboard.aiPriorities.generatedAt", { time: new Date(aiInsights.priorities.generatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) })}
                 </p>
               )}
             </CardContent>
