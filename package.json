@@ -1,7 +1,7 @@
 {
   "name": "muster",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.5",
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin",
     "tauri:build:mac-intel": "tauri build --target x86_64-apple-darwin",
     "tauri:build:windows-x64": "tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:linux-x64": "tauri build --target x86_64-unknown-linux-gnu",
     "test": "vitest run",
     "coverage": "node scripts/measure_coverage.mjs",
     "sync:preview": "node scripts/sync-preview.mjs"

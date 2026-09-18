@@ -52,7 +52,7 @@ export async function getCurrentAppVersion(): Promise<string> {
   return cachedVersion;
 }
 
-type DesktopPlatform = "macos" | "windows" | "other";
+type DesktopPlatform = "macos" | "windows" | "linux" | "other";
 type DesktopArch = "aarch64" | "x86_64" | "other";
 
 function getDesktopPlatform(): DesktopPlatform {
@@ -60,12 +60,11 @@ function getDesktopPlatform(): DesktopPlatform {
   const identity = `${navigator.platform || ""} ${navigator.userAgent || ""}`.toLowerCase();
   if (identity.includes("mac")) return "macos";
   if (identity.includes("win")) return "windows";
+  if (identity.includes("linux")) return "linux";
   return "other";
 }
 
-async function getDesktopArch(platform: DesktopPlatform): Promise<DesktopArch> {
-  if (platform !== "macos") return "other";
-
+async function getDesktopArch(_platform: DesktopPlatform): Promise<DesktopArch> {
   try {
     const arch = (await invoke<string>("get_target_arch")).toLowerCase();
     if (arch === "aarch64" || arch === "arm64") return "aarch64";
@@ -115,6 +114,15 @@ export function selectInstallerAsset(
     return (
       assets.find((asset) => lowerName(asset).endsWith(".msi")) ||
       assets.find((asset) => lowerName(asset).endsWith(".exe")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".zip"))
+    );
+  }
+
+  if (platform === "linux") {
+    return (
+      assets.find((asset) => lowerName(asset).endsWith(".appimage")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".deb")) ||
+      assets.find((asset) => lowerName(asset).endsWith(".tar.gz")) ||
       assets.find((asset) => lowerName(asset).endsWith(".zip"))
     );
   }
@@ -194,7 +202,9 @@ export async function checkForAppUpdates(
           ? `windows-${arch === "x86_64" ? "x86_64" : arch}`
           : platform === "macos"
             ? `darwin-${arch === "aarch64" ? "aarch64" : "x86_64"}`
-            : "";
+            : platform === "linux"
+              ? `linux-${arch === "aarch64" ? "aarch64" : "x86_64"}`
+              : "";
       const entry = platforms[want] || Object.values(platforms)[0];
       const htmlUrl = `https://github.com/${repo}/releases/latest`;
       return {

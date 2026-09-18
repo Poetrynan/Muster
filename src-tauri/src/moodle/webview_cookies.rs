@@ -36,11 +36,11 @@ pub fn extract_moodle_cookies(
     }
 }
 
-/// Read Moodle cookies from WKWebView on macOS through Tauri's cross-platform
-/// cookie API. This is deliberately a separate entry point so the established
-/// Windows COM implementation remains untouched.
-#[cfg(target_os = "macos")]
-pub fn extract_moodle_cookies_macos(
+/// Read Moodle cookies from WebKit (WKWebView on macOS, WebKitGTK on Linux) through
+/// Tauri's cross-platform cookie API. This is deliberately a separate entry point
+/// so the established Windows COM implementation remains untouched.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn extract_moodle_cookies_webkit(
     webview: &tauri::WebviewWindow,
 ) -> Result<Vec<CookieData>, String> {
     const MOODLE_URL: &str = "https://learning.monash.edu";
@@ -49,7 +49,7 @@ pub fn extract_moodle_cookies_macos(
         .map_err(|e| format!("invalid Moodle URL: {}", e))?;
     let cookies = webview
         .cookies_for_url(url)
-        .map_err(|e| format!("Failed to read WKWebView cookies: {}", e))?;
+        .map_err(|e| format!("Failed to read WebKit cookies: {}", e))?;
 
     Ok(cookies
         .into_iter()
@@ -71,9 +71,12 @@ pub fn extract_moodle_cookies_macos(
         .collect())
 }
 
-/// Seed a newly-created macOS in-app WKWebView with the saved Moodle session.
 #[cfg(target_os = "macos")]
-pub fn inject_moodle_cookies_macos(
+pub use extract_moodle_cookies_webkit as extract_moodle_cookies_macos;
+
+/// Seed a newly-created WebKit in-app WebView with the saved Moodle session.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn inject_moodle_cookies_webkit(
     webview: &tauri::WebviewWindow,
     cookies: &[CookieData],
     url: &str,
@@ -105,13 +108,16 @@ pub fn inject_moodle_cookies_macos(
             .build();
         webview
             .set_cookie(cookie)
-            .map_err(|e| format!("Failed to inject WKWebView cookie: {}", e))?;
+            .map_err(|e| format!("Failed to inject WebKit cookie: {}", e))?;
     }
 
     webview
         .navigate(target)
         .map_err(|e| format!("Failed to reload authenticated page: {}", e))
 }
+
+#[cfg(target_os = "macos")]
+pub use inject_moodle_cookies_webkit as inject_moodle_cookies_macos;
 
 /// Inject session cookies into WebView2 so the user does not need to re-login in in-app webviews.
 pub fn inject_moodle_cookies(

@@ -640,13 +640,13 @@ async fn start_sso_login_webview_inner(
         .recv_timeout(std::time::Duration::from_secs(15))
         .map_err(|e| format!("Cookie extraction timed out: {}", e))??;
 
-    #[cfg(target_os = "macos")]
-    let cookies = moodle::webview_cookies::extract_moodle_cookies_macos(&webview_window)?;
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let cookies = moodle::webview_cookies::extract_moodle_cookies_webkit(&webview_window)?;
 
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let cookies: Vec<CookieData> = {
         let _ = webview_window.close();
-        return Err("SSO cookie extraction is supported only on Windows and macOS.".to_string());
+        return Err("SSO cookie extraction is supported only on Windows, macOS, and Linux.".to_string());
     };
 
     let _ = webview_window.close();
@@ -739,8 +739,8 @@ async fn open_in_app_webview(
             });
         }
 
-        #[cfg(target_os = "macos")]
-        moodle::webview_cookies::inject_moodle_cookies_macos(
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        moodle::webview_cookies::inject_moodle_cookies_webkit(
             &webview_window,
             &cookies,
             &url,
@@ -863,7 +863,24 @@ fn detect_os_version() -> String {
             .map(|v| v.trim().to_string())
             .unwrap_or_else(|| "unknown".to_string())
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("PRETTY_NAME=") {
+                    return val.trim_matches('"').to_string();
+                }
+            }
+        }
+        std::process::Command::new("uname")
+            .arg("-r")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|v| v.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         "unknown".to_string()
     }

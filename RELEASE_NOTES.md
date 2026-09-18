@@ -1,3 +1,30 @@
+# Muster v0.2.5
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.5_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/Muster_0.2.5_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.5_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/Muster_0.2.5_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.5_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/Muster_0.2.5_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.5_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/Muster_0.2.5_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.2.5_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/Muster_0.2.5_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.2.5_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.2.5/muster_0.2.5_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.2.5/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Features & Improvements
+
+- **Official Linux Support:**
+  - **WebKitGTK SSO Integration:** Enabled cross-platform SSO cookie extraction and session injection for Linux WebKitGTK (`libwebkit2gtk-4.1`), providing the same one-click Monash Moodle authentication and in-app browsing experience as Windows and macOS.
+  - **Prebuilt Linux Packages:** Release pipeline now automatically builds `.AppImage` and `.deb` (Debian/Ubuntu) binaries on Ubuntu 22.04 LTS.
+  - **Arch Linux AUR Recipe:** Added official `PKGBUILD` and documentation under `dist-aur/` for Arch Linux users to install `muster-bin` via `makepkg -si`.
+  - **Distro Detection & Diagnostic Telemetry:** Linux diagnostics now detect distribution names directly from `/etc/os-release` (e.g. Ubuntu, Fedora, Arch Linux).
+  - **In-App Updater for Linux:** Added Linux desktop platform detection and asset selection prioritizing `.AppImage` and `.deb`.
+
+---
+
 # Muster v0.2.4
 
 ## Download

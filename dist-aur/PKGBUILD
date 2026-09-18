@@ -1,0 +1,40 @@
+# Maintainer: Poetrynan <https://github.com/Poetrynan>
+# Contributor: Community
+
+pkgname=muster-bin
+_pkgname=muster
+pkgver=0.2.5
+pkgrel=1
+pkgdesc="Unofficial desktop companion that collects your own Moodle course materials and deadlines"
+arch=('x86_64')
+url="https://github.com/Poetrynan/Muster"
+license=('custom:PolyForm-Noncommercial-1.0.0')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libayatana-appindicator'
+    'librsvg'
+    'openssl'
+)
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source_x86_64=(
+    "${pkgname}-${pkgver}.deb::https://github.com/Poetrynan/Muster/releases/download/v${pkgver}/muster_${pkgver}_amd64.deb"
+    "https://raw.githubusercontent.com/Poetrynan/Muster/v${pkgver}/LICENSE"
+)
+noextract=("${pkgname}-${pkgver}.deb")
+sha256sums_x86_64=(
+    'SKIP'
+    'SKIP'
+)
+
+package() {
+    # Extract the payload data archive from the debian package
+    bsdtar -O -xf "${srcdir}/${pkgname}-${pkgver}.deb" 'data.tar.*' | bsdtar -xf - -C "${pkgdir}"
+
+    # Ensure executable permission
+    chmod 755 "${pkgdir}/usr/bin/${_pkgname}"
+
+    # Install license
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

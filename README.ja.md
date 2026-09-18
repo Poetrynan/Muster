@@ -17,7 +17,7 @@
   <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/公式サイト-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="公式サイト"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.4-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.5-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -79,12 +79,13 @@ Muster は学生向けのデスクトップアプリです。Moodle に散らば
 
 ## 🚀 はじめ方
  
-> **対応プラットフォーム**：Muster は **Windows 10 / 11 (64-bit)** および **macOS 12+ (Apple Silicon & Intel)** に対応しています。
+> **対応プラットフォーム**：Muster は **Windows 10 / 11 (64-bit)**、**macOS 12+ (Apple Silicon & Intel)**、および **Linux (AppImage, .deb, AUR)** に対応しています。
 
 1. [Releases](https://github.com/Poetrynan/Muster/releases) ページまたは[公式サイト](https://poetrynan.github.io/Muster/)から対応するインストーラーをダウンロードします：
-   - **Windows**：`Muster_0.2.4_x64-setup.exe`（または `.msi`）
-   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.2.4_aarch64.dmg`
-   - **macOS (Intel)**：`Muster_0.2.4_x64.dmg`
+   - **Windows**：`Muster_0.2.5_x64-setup.exe`（または `.msi`）
+   - **macOS (Apple Silicon M1/M2/M3/M4)**：`Muster_0.2.5_aarch64.dmg`
+   - **macOS (Intel)**：`Muster_0.2.5_x64.dmg`
+   - **Linux (x86_64)**：`Muster_0.2.5_amd64.AppImage`（または `muster_0.2.5_amd64.deb`、Arch Linux は AUR の `muster-bin`）
 2. アプリを起動し、Monash アカウントでログインします（Okta SSO）。
 3. **Moodleと同期** をクリックすると、コース、課題、資料、お知らせが自動で取得されます。
 

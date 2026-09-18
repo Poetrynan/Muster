@@ -17,7 +17,7 @@
   <a href="https://poetrynan.github.io/Muster/"><img src="https://img.shields.io/badge/공식%20사이트-poetrynan.github.io%2FMuster-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white" alt="공식 사이트"></a>
   <a href="https://github.com/Poetrynan/Muster/stargazers"><img src="https://img.shields.io/github/stars/Poetrynan/Muster?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Stars"></a>
   <a href="https://github.com/Poetrynan/Muster"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository"></a>
-  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.4-38bdf8?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/Poetrynan/Muster/releases"><img src="https://img.shields.io/badge/version-0.2.5-38bdf8?style=for-the-badge" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-38bdf8?style=for-the-badge" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
@@ -79,12 +79,13 @@ Muster는 학생을 위한 데스크톱 앱입니다. Moodle 곳곳에 흩어진
 
 ## 🚀 시작하기
 
-> **지원 플랫폼**: Muster는 **Windows 10 / 11 (64-bit)** 및 **macOS 12+ (Apple Silicon & Intel)** 를 지원합니다.
+> **지원 플랫폼**: Muster는 **Windows 10 / 11 (64-bit)**, **macOS 12+ (Apple Silicon & Intel)** 및 **Linux (AppImage, .deb, AUR)** 를 지원합니다.
 
 1. [Releases](https://github.com/Poetrynan/Muster/releases) 페이지 또는 [공식 사이트](https://poetrynan.github.io/Muster/)에서 내 운영체제에 맞는 설치 파일을 다운로드합니다:
-   - **Windows**: `Muster_0.2.4_x64-setup.exe` (또는 `.msi`)
-   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.2.4_aarch64.dmg`
-   - **macOS (Intel)**: `Muster_0.2.4_x64.dmg`
+   - **Windows**: `Muster_0.2.5_x64-setup.exe` (또는 `.msi`)
+   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.2.5_aarch64.dmg`
+   - **macOS (Intel)**: `Muster_0.2.5_x64.dmg`
+   - **Linux (x86_64)**: `Muster_0.2.5_amd64.AppImage` (또는 `muster_0.2.5_amd64.deb`, Arch 사용자는 AUR의 `muster-bin`)
 2. 앱을 실행하고 Monash 계정으로 로그인합니다 (Okta SSO).
 3. **Moodle 데이터 동기화** 를 클릭하면 과목, 과제, 자료, 공지사항을 자동으로 불러옵니다.
 

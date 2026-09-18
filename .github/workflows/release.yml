@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g., v0.2.4)"
+        description: "Release tag (e.g., v0.2.5)"
         required: true
-        default: "v0.2.4"
+        default: "v0.2.5"
       platform:
         description: "Platforms to build"
         required: true
@@ -17,7 +17,10 @@ on:
         default: "all"
         options:
           - "all"
+          - "macos-arm"
           - "macos-intel"
+          - "windows"
+          - "linux"
 
 permissions:
   contents: write
@@ -40,6 +43,10 @@ jobs:
             platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
             args: "--target x86_64-pc-windows-msvc --bundles msi,nsis"
+          - id: "linux"
+            platform: "ubuntu-22.04"
+            target: "x86_64-unknown-linux-gnu"
+            args: "--target x86_64-unknown-linux-gnu --bundles deb,appimage"
 
     runs-on: ${{ matrix.platform }}
 
@@ -47,6 +54,22 @@ jobs:
       - name: Checkout repository
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
         uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: ${{ runner.os == 'Linux' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
 
       - name: Setup Node.js
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
