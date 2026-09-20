@@ -1,3 +1,27 @@
+# Muster v0.2.7
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.7_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/Muster_0.2.7_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.7_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/Muster_0.2.7_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.7_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/Muster_0.2.7_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.7_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/Muster_0.2.7_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.2.7_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/Muster_0.2.7_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.2.7_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.2.7/muster_0.2.7_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.2.7/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Features & Improvements
+
+- **Campus Links — Full Localisation:** The Campus Links directory is now fully localised in English, 简体中文, 日本語 and 한국어 — every site name, description and explainer is translated in all four languages.
+- **Four New Sites:** Added the Malaysia campus ISP Helpdesk (student pass/visa tickets), MUM Helpdesk (one-stop desk with a rich knowledge base), the Fees & Payments hub and the Malaysia fee payment methods guide — 19 sites in total.
+- **Clearer Naming:** The sidebar entry is now "Campus Links" (校园导航) to better reflect what it is.
+
+---
+
 # Muster v0.2.6
 
 ## Download

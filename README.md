@@ -72,6 +72,10 @@ One click summarizes the week's materials, assignments and announcements — wit
 
 <p align="center"><img src="assets/preview/ai-summary.svg" alt="Muster AI course summary streaming in live with Markdown rendering" width="760"></p>
 
+### 🧭 Campus Links Directory
+A curated directory of **19 essential Monash websites** — the Student Portal, WES, Allocate+, Ed, eAssessments, Special Consideration, fees and payment pages, Malaysia campus helpdesks, libraries and student societies — grouped into five categories with real site icons. Search across all of them, read a short explainer for each site, and open any of them in your browser with one click. Fully localised in English, 简体中文, 日本語 and 한국어.
+> For example: the info icon on the "Special Consideration" card explains exactly when and how to apply for an extension or a deferred exam — in your language.
+
 ### 🔒 Privacy-First
 All data stays on your machine. Authentication goes through Monash Okta SSO directly — no plain-text password is ever stored, and session cookies are protected by the OS credential store.
 > For example: uninstall the app and nothing of yours is left on any server.
@@ -82,10 +86,10 @@ All data stays on your machine. Authentication goes through Monash Okta SSO dire
 > **Platforms**: Muster supports **Windows 10 / 11 (64-bit)**, **macOS 12+ (Apple Silicon & Intel)**, and **Linux (AppImage, .deb, AUR)**.
 
 1. Download the latest installer from the [Releases](https://github.com/Poetrynan/Muster/releases) page or [Official Site](https://poetrynan.github.io/Muster/):
-   - **Windows**: `Muster_0.2.5_x64-setup.exe` (or `.msi`)
-   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.2.5_aarch64.dmg`
-   - **macOS (Intel)**: `Muster_0.2.5_x64.dmg`
-   - **Linux (x86_64)**: `Muster_0.2.5_amd64.AppImage` (or `muster_0.2.5_amd64.deb`, `muster-bin` on AUR)
+   - **Windows**: `Muster_0.2.7_x64-setup.exe` (or `.msi`)
+   - **macOS (Apple Silicon M1/M2/M3/M4)**: `Muster_0.2.7_aarch64.dmg`
+   - **macOS (Intel)**: `Muster_0.2.7_x64.dmg`
+   - **Linux (x86_64)**: `Muster_0.2.7_amd64.AppImage` (or `muster_0.2.7_amd64.deb`, `muster-bin` on AUR)
 2. Launch the app and sign in with your Monash account (Okta SSO).
 3. Click **Sync with Moodle** — courses, assignments, resources and announcements will be fetched automatically.
 
