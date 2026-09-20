@@ -139,6 +139,7 @@ import type { TranslationKey } from "../i18n/translations";
 const AssignmentsPage = lazy(() => import("./AssignmentsPage").then(m => ({ default: m.AssignmentsPage })));
 const SettingsPage = lazy(() => import("./SettingsPage").then(m => ({ default: m.SettingsPage })));
 const CourseDetail = lazy(() => import("./CourseDetail").then(m => ({ default: m.CourseDetail })));
+const LinksPage = lazy(() => import("./LinksPage").then(m => ({ default: m.LinksPage })));
 
 // Loading placeholder for sub-pages: a skeleton that mirrors the real page
 // layout (sidebar + header + tabs + content list) instead of a spinner.
@@ -195,6 +196,7 @@ const sidebarItems: { icon: any; labelKey: TranslationKey; id: string }[] = [
   { icon: CalendarDays, labelKey: "nav.calendar", id: "calendar" },
   { icon: Bell, labelKey: "nav.notifications", id: "notifications" },
   { icon: Sparkles, labelKey: "nav.ai", id: "ai" },
+  { icon: ExternalLink, labelKey: "nav.links", id: "links" },
   { icon: Settings, labelKey: "nav.settings", id: "settings" },
 ];
 
@@ -1589,6 +1591,15 @@ export function Dashboard() {
     return (
       <Suspense fallback={<PageLoading />}>
         <AIHubPage onBack={() => setActiveTab("home")} />
+      </Suspense>
+    );
+  }
+
+  // Quick links view
+  if (activeTab === "links") {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <LinksPage onBack={() => setActiveTab("home")} />
       </Suspense>
     );
   }

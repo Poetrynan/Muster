@@ -1,3 +1,27 @@
+# Muster v0.2.6
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.6_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/Muster_0.2.6_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.6_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/Muster_0.2.6_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.6_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/Muster_0.2.6_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.6_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/Muster_0.2.6_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.2.6_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/Muster_0.2.6_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.2.6_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.2.6/muster_0.2.6_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.2.6/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Features & Improvements
+
+- **Quick Links Hub:** New sidebar tab collecting 15 essential Monash student websites — Student Portal, WES, Allocate+, Ed, eAssessment, Special Consideration, Ask.monash, Library, M-Pass, CareerConnect, StudentVIP and campus societies — each with its real site icon (Monash crest fallback), grouped into 5 categories.
+- **Category Filter & Search:** Filter sites by category and search by name, description or domain.
+- **Site Info Dialog:** The info icon on each card opens a centered dialog explaining what the site is for, with a direct "Open website" action.
+
+---
+
 # Muster v0.2.5
 
 ## Download
