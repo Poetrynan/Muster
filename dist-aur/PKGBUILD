@@ -3,7 +3,7 @@
 
 pkgname=muster-bin
 _pkgname=muster
-pkgver=0.2.7
+pkgver=0.2.8
 pkgrel=1
 pkgdesc="Unofficial desktop companion that collects your own Moodle course materials and deadlines"
 arch=('x86_64')
