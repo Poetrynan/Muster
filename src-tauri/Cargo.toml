@@ -1,6 +1,6 @@
 [package]
 name = "muster"
-version = "0.2.8"
+version = "0.2.9"
 description = "Unofficial desktop companion that collects your own Moodle course materials and deadlines"
 authors = ["Poetrynan"]
 license = "PolyForm-Noncommercial-1.0.0"
@@ -27,6 +27,10 @@ tauri-plugin-dialog = "2"
 # process plugin restarts the app once it is installed.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Incident v0.2.9: without this, double-clicking the icon (or the NSIS installer
+# relaunching the app mid-update) spawned parallel instances. Combined with the
+# old launch-time auto-install this cascaded into 20+ windows and froze a user's PC.
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", features = ["json", "cookies", "stream"] }

@@ -1,3 +1,27 @@
+# Muster v0.2.9
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.9_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/Muster_0.2.9_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.9_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/Muster_0.2.9_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.9_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/Muster_0.2.9_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.9_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/Muster_0.2.9_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.2.9_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/Muster_0.2.9_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.2.9_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.2.9/muster_0.2.9_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.2.9/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Fixes
+
+- **Critical stability fix:** Launching the app multiple times (or during an update install) could spawn parallel instances; combined with the previous launch-time auto-update this cascaded into dozens of windows and could freeze the machine. Fixed on both fronts:
+  - **Single-instance lock:** launching Muster again now simply brings the existing window to the front.
+  - **Updates are now opt-in:** the app no longer installs updates silently in the background — when a new version is found you'll see a banner and install with one explicit click.
+
+---
+
 # Muster v0.2.8
 
 ## Download

@@ -907,6 +907,21 @@ pub fn run() {
     boot_log("rust", "run() entered, building tauri app");
 
     tauri::Builder::default()
+        // MUST be the first plugin (per tauri-plugin-single-instance docs):
+        // any second launch of the app is redirected here — we just focus the
+        // existing main window and exit the new process. Without this, every
+        // double-click (and every NSIS-installer relaunch during an update)
+        // spawned a fully parallel instance. Incident report: 20+ cascading
+        // windows froze a user's PC (see v0.2.9 release notes).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager;
+            boot_log("rust", "single-instance callback: focusing existing window");
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

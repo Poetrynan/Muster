@@ -1049,29 +1049,14 @@ export function Dashboard() {
     let cancelled = false;
     getCurrentAppVersion()
       .then((version) => checkForAppUpdates(version))
-      .then(async (res) => {
+      .then((res) => {
         if (cancelled || !res.hasUpdate || !res.latestRelease) return;
+        // v0.2.9 incident fix — DO NOT auto-install on launch. The old code
+        // silently downloaded + installed here, and on Windows the NSIS
+        // installer exits/relaunches the app; combined with no single-instance
+        // lock this cascaded into 20+ windows and froze a user's PC. The banner
+        // below has an explicit install button — the user decides.
         setUpdateBanner(res.latestRelease);
-        // Auto-download in the background right away: the banner flips to its
-        // progress / "restart now" states through the same states the manual
-        // button drives, so closing or ignoring the banner never blocks the app.
-        try {
-          setBannerInstalling(true);
-          setBannerPercent(null);
-          const outcome = await installUpdateInAppWithRetry((p) => setBannerPercent(p.percent ?? null));
-          if (cancelled) return;
-          if (outcome.status === "installed") {
-            setBannerInstalled(true);
-            showToast(t("settings.about.updateReady"));
-          } else if (outcome.status === "upToDate") {
-            setUpdateBanner(null);
-          }
-          // unsupported/failed → the banner stays with the manual button + release-page path
-        } catch {
-          /* keep the banner; the user can retry manually or open the release page */
-        } finally {
-          if (!cancelled) setBannerInstalling(false);
-        }
       })
       .catch(() => {
         /* silent: never block the app on an update-check failure */
