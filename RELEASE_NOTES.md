@@ -1,3 +1,25 @@
+# Muster v0.2.10
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.2.10_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/Muster_0.2.10_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.2.10_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/Muster_0.2.10_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.2.10_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/Muster_0.2.10_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.2.10_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/Muster_0.2.10_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.2.10_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/Muster_0.2.10_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.2.10_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.2.10/muster_0.2.10_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.2.10/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Fixes
+
+- **Campus Links — Student Portal URL corrected:** the portal card now opens `home.student.monash`, the actual student portal address.
+
+---
+
 # Muster v0.2.9
 
 ## Download
