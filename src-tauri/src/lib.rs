@@ -9,7 +9,7 @@ mod server;
 use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
 use moodle::scraper::MoodleScraper;
 use moodle::scraper::DownloadResult;
-use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, CourseTabData, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions};
+use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions, SyncResult};
 use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
@@ -236,16 +236,7 @@ async fn sync_all(
     state: State<'_, AppState>,
     options: Option<SyncOptions>,
     #[allow(unused)] include_fixed_tabs: Option<bool>,
-) -> Result<
-    (
-        Vec<Course>,
-        Vec<Resource>,
-        Vec<Assignment>,
-        Vec<Announcement>,
-        Vec<CourseTabData>,
-    ),
-    String,
-> {
+) -> Result<SyncResult, String> {
     let scraper_guard = state.scraper.lock().await;
     let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
     let progress: Option<std::sync::Arc<dyn Fn(usize, usize, &str) + Send + Sync>> =

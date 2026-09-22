@@ -5,7 +5,7 @@ use crate::moodle::models::{
     Announcement, AssessmentType, Assignment, AssignmentStatus, CalendarEvent, Course, CourseContact,
     CourseTabData, GradeEntry, GradeOverviewRow, Member, Quiz, Recording, Schedule, ScheduleItem, SubmissionStatus, UnitDashboard,
     UnitInfo, UnitInfoSection, Resource, ResourceType, UnitWeek,
-    LearningObjective, LearningNavItem, SyncOptions,
+    LearningObjective, LearningNavItem, SyncOptions, SyncResult,
 };
 
 #[derive(Debug, Clone)]
@@ -30,6 +30,18 @@ pub struct MoodleScraper {
 pub struct DownloadResult {
     pub path: String,
     pub skipped: bool,
+}
+
+/// Per-course outcome of the fingerprint probe step, collected by `fetch_all_data`.
+/// `unchanged = true` means the probe matched the stored fingerprint and nothing
+/// but the correctness carve-outs (announcements + recordings) was fetched.
+struct FingerprintOutcome {
+    fingerprint: String,
+    unchanged: bool,
+    resources: Vec<Resource>,
+    assignments: Vec<Assignment>,
+    announcements: Vec<Announcement>,
+    tab_data: CourseTabData,
 }
 
 /// Parse a `Content-Disposition` header value and return the suggested filename.
@@ -1894,9 +1906,25 @@ impl MoodleScraper {
 
     /// Fetch announcements for a specific course
     pub async fn fetch_announcements(&self, course_id: u64) -> Result<Vec<Announcement>, String> {
+        self.fetch_announcements_with_base(course_id, None).await
+    }
+
+    /// Announcements with an optional pre-fetched course main page. When the caller
+    /// already downloaded `course/view.php?id=X` for the fingerprint probe, passing
+    /// it here saves one duplicate request per changed course.
+    pub async fn fetch_announcements_with_base(
+        &self,
+        course_id: u64,
+        base_html: Option<String>,
+    ) -> Result<Vec<Announcement>, String> {
         let client = self.auth.get_authenticated_client().await?;
-        let base_url = format!("{}/course/view.php?id={}", self.base_url, course_id);
-        let base_html = Self::fetch_course_view_text(&client, &self.request_gate, &base_url).await?;
+        let base_html = match base_html {
+            Some(html) => html,
+            None => {
+                let base_url = format!("{}/course/view.php?id={}", self.base_url, course_id);
+                Self::fetch_course_view_text(&client, &self.request_gate, &base_url).await?
+            }
+        };
 
         let mut out: Vec<Announcement> = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -2676,20 +2704,84 @@ impl MoodleScraper {
         }
     }
 
+    /// Extract a change fingerprint from the course main page (`course/view.php`).
+    ///
+    /// Signals included (all server-rendered, stable across sessions — the
+    /// courseindex sidebar is a JS placeholder so it is deliberately NOT used):
+    /// 1. The full section map — every `section=N` link with its title. A teacher
+    ///    adding "Week 13", renaming a week, or the weekly `currentweek` marker
+    ///    moving to the next section all change this map.
+    /// 2. Every activity link (`/mod/...`) in the rendered content with its anchor
+    ///    text — the static HTML contains the CURRENT week's activities. Past weeks
+    ///    live on separate `&section=N` pages and are covered by the `cached_weeks`
+    ///    skip instead (per the design: past weeks are frozen after first fetch).
+    ///
+    /// Returns a short hash string. An empty/unparsable page returns "" which the
+    /// caller treats as "changed" (safe fallback to the old fetch path).
+    fn extract_course_fingerprint(html: &str, course_id: u64) -> String {
+        use scraper::{Html, Selector};
+        use std::hash::{Hash, Hasher};
+
+        let doc = Html::parse_document(html);
+        let mut parts: Vec<String> = Vec::new();
+
+        // 1) Section map: (section number, title) pairs.
+        let mut sec_parts: Vec<String> = extract_mst_section_links(html, course_id)
+            .into_iter()
+            .map(|(sec, title)| format!("S{}={}", sec, title.trim()))
+            .collect();
+        sec_parts.sort();
+        parts.extend(sec_parts);
+
+        // 2) The `currentweek` marker — its href moves to the next section weekly.
+        if let Ok(cur_sel) = Selector::parse("a.currentweek") {
+            for el in doc.select(&cur_sel) {
+                if let Some(href) = el.value().attr("href") {
+                    parts.push(format!("CUR:{}", href));
+                }
+            }
+        }
+
+        // 3) Activity links (cmid + anchor text). Navigation links pointing back
+        //    at course/view.php are excluded — only real module activities count.
+        if let Ok(a_sel) = Selector::parse("a[href*='/mod/']") {
+            let mut acts: Vec<String> = doc
+                .select(&a_sel)
+                .filter_map(|a| {
+                    let href = a.value().attr("href")?;
+                    if href.contains("course/view.php") {
+                        return None;
+                    }
+                    // Normalize: keep only the path+id part so moodleworld noise
+                    // (extra &params, tokens) cannot destabilise the hash.
+                    let base = href.split(['?', '&']).take(2).collect::<Vec<_>>().join("?");
+                    Some(format!("{}|{}", base, a.text().collect::<String>().trim()))
+                })
+                .collect();
+            acts.sort();
+            acts.dedup();
+            parts.extend(acts);
+        }
+
+        if parts.is_empty() {
+            return String::new();
+        }
+
+        parts.sort();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for p in &parts {
+            p.hash(&mut hasher);
+        }
+        format!("fp{:016x}", hasher.finish())
+    }
+
     pub async fn fetch_all_data(
         &self,
         progress: Option<Arc<dyn Fn(usize, usize, &str) + Send + Sync>>,
         options: SyncOptions,
-    ) -> Result<
-        (
-            Vec<Course>,
-            Vec<Resource>,
-            Vec<Assignment>,
-            Vec<Announcement>,
-            Vec<CourseTabData>,
-        ),
-        String,
-    > {
+    ) -> Result<SyncResult, String> {
+        let requests_before = self.request_gate.total_count();
+
         let courses = self.fetch_courses().await?;
         // Portal/hub courses (IT Student Portal, MUM Academic Success, etc.) are not academic courses:
         let real_courses: Vec<Course> = courses.into_iter().filter(|c| !c.is_portal).collect();
@@ -2730,8 +2822,61 @@ impl MoodleScraper {
                 let include_fixed_tabs = options.include_fixed_tabs;
                 let cached_weeks = options.cached_weeks.get(&course_id).cloned().unwrap_or_default();
                 let completed_ids = options.completed_assignment_ids.clone();
+                let old_fp = options.fingerprints.get(&course_id).cloned();
                 tokio::spawn(async move {
                     let _permit = sem.acquire().await;
+
+                    // ---- Probe: exactly ONE request for the course main page ----
+                    // The probe doubles as the announcements base page below, so a
+                    // changed course does not pay an extra request for it.
+                    let client = match scraper.auth.get_authenticated_client().await {
+                        Ok(c) => c,
+                        Err(e) => return Err(e),
+                    };
+                    let probe_url = format!("{}/course/view.php?id={}", scraper.base_url, course_id);
+                    let probe_html = Self::fetch_course_view_text(&client, &scraper.request_gate, &probe_url)
+                        .await
+                        .unwrap_or_default();
+                    let new_fp = if probe_html.is_empty() {
+                        // Probe failed (network hiccup) → treat as changed so the
+                        // regular fetch path runs; no fingerprint update.
+                        String::new()
+                    } else {
+                        Self::extract_course_fingerprint(&probe_html, course_id)
+                    };
+
+                    // ---- Fingerprint hit: nothing changed since the last sync ----
+                    // Correctness carve-outs that stay dynamic (they cannot be probed
+                    // from the main page): announcements + recordings. Resources,
+                    // assessments and the dashboard are served from client cache.
+                    if !full_refresh && !new_fp.is_empty() && old_fp.as_deref() == Some(new_fp.as_str()) {
+                        let announcements = scraper
+                            .fetch_announcements_with_base(course_id, Some(probe_html))
+                            .await
+                            .unwrap_or_default();
+                        let recordings = scraper
+                            .fetch_course_recordings(course_id)
+                            .await
+                            .unwrap_or_default();
+                        let tab_data = CourseTabData {
+                            course_id,
+                            dashboard: None,
+                            unit_info: None,
+                            schedule: None,
+                            recordings,
+                            contacts: Vec::new(),
+                        };
+                        return Ok(FingerprintOutcome {
+                            fingerprint: new_fp,
+                            unchanged: true,
+                            resources: Vec::new(),
+                            assignments: Vec::new(),
+                            announcements,
+                            tab_data,
+                        });
+                    }
+
+                    // ---- Changed / first sync: existing incremental path ----
                     // P1: fetch the 3 kinds of per-course data in parallel, cutting sync time by roughly 60%.
                     // Assignments use fetch_course_assessments (Assessments section): it covers quizzes as well
                     // as regular assignments, and enriches real submission state (detail pages + gradebook),
@@ -2739,15 +2884,21 @@ impl MoodleScraper {
                     let (resources, assignments, announcements, tab_data) = tokio::join!(
                         scraper.fetch_course_resources_incremental(course_id, full_refresh, &cached_weeks),
                         scraper.fetch_course_assessments_incremental(course_id, full_refresh, &completed_ids),
-                        scraper.fetch_announcements(course_id),
+                        scraper.fetch_announcements_with_base(course_id, Some(probe_html)),
                         scraper.fetch_course_tab_data(course_id, include_fixed_tabs),
                     );
-                    (
-                        resources.unwrap_or_default(),
-                        assignments.unwrap_or_default(),
-                        announcements.unwrap_or_default(),
+
+                    // Only publish a fingerprint when ALL fetches succeeded — a partial
+                    // failure must cause a retry on the next sync, not a sticky "unchanged".
+                    let fp_ok = resources.is_ok() && assignments.is_ok() && announcements.is_ok();
+                    Ok(FingerprintOutcome {
+                        fingerprint: if fp_ok { new_fp } else { String::new() },
+                        unchanged: false,
+                        resources: resources.unwrap_or_default(),
+                        assignments: assignments.unwrap_or_default(),
+                        announcements: announcements.unwrap_or_default(),
                         tab_data,
-                    )
+                    })
                 })
             })
             .collect();
@@ -2756,19 +2907,50 @@ impl MoodleScraper {
         let mut all_assignments = Vec::new();
         let mut all_announcements = Vec::new();
         let mut all_tab_data = Vec::new();
+        let mut unchanged_course_ids = Vec::new();
+        let mut new_fingerprints: std::collections::HashMap<u64, String> = std::collections::HashMap::new();
         let mut done_courses = 0usize;
 
         for handle in handles {
-            if let Ok((resources, assignments, announcements, tab_data)) = handle.await {
-                all_resources.extend(resources);
-                all_assignments.extend(assignments);
-                all_announcements.extend(announcements);
-                all_tab_data.push(tab_data);
+            // The task returns Result<FingerprintOutcome, String> (inner = auth
+            // failure), wrapped in the JoinError layer. A failed course must not
+            // abort the whole sync — treat it as "no data" so the client keeps
+            // its cached copy and the fingerprint is not published (retry next sync).
+            let outcome = match handle.await {
+                Ok(Ok(o)) => Some(o),
+                Ok(Err(e)) => {
+                    eprintln!("[muster][sync] course task failed: {}", e);
+                    None
+                }
+                Err(e) => {
+                    eprintln!("[muster][sync] course task panicked: {}", e);
+                    None
+                }
+            };
+            if let Some(outcome) = outcome {
+                let course_id = outcome.tab_data.course_id;
+                let fingerprint = outcome.fingerprint;
+                if outcome.unchanged {
+                    unchanged_course_ids.push(course_id);
+                } else {
+                    all_resources.extend(outcome.resources);
+                    all_assignments.extend(outcome.assignments);
+                    all_announcements.extend(outcome.announcements);
+                }
+                all_tab_data.push(outcome.tab_data);
+                if !fingerprint.is_empty() {
+                    new_fingerprints.insert(course_id, fingerprint);
+                }
             }
             done_courses += 1;
             if let Some(p) = &progress {
                 p(done_courses, total_courses, "course");
             }
+        }
+
+        // Courses outside the scrape set keep their previous fingerprint untouched.
+        for (cid, fp) in &options.fingerprints {
+            new_fingerprints.entry(*cid).or_insert_with(|| fp.clone());
         }
 
         // Course name backfill: merge back the full course names extracted from <title>/<h1> when fetching course pages
@@ -2786,7 +2968,17 @@ impl MoodleScraper {
             }
         }
 
-        Ok((enriched, all_resources, all_assignments, all_announcements, all_tab_data))
+        let requests_used = self.request_gate.total_count().saturating_sub(requests_before);
+        Ok(SyncResult {
+            courses: enriched,
+            resources: all_resources,
+            assignments: all_assignments,
+            announcements: all_announcements,
+            tabs: all_tab_data,
+            unchanged_course_ids,
+            fingerprints: new_fingerprints,
+            requests_used,
+        })
     }
 
     /// Download a file from Moodle and save it to the specified path
@@ -6694,6 +6886,56 @@ mod tests {
         assert_eq!(extract_week_num("第5周 课程资料"), Some(5));
         assert_eq!(extract_week_num("UNIT DASHBOARD"), None);
         assert_eq!(extract_week_num("Additional information and resources"), None);
+    }
+
+    /// ChangeSignature fingerprint (v0.3.0): stable when nothing changed, sensitive
+    /// to new activities and to section-map changes (new week / currentweek move).
+    #[test]
+    fn course_fingerprint_stable_and_change_sensitive() {
+        let base = r#"
+        <html><body>
+          <a class="" href="https://learning.monash.edu/course/view.php?id=1&amp;section=7" title="Week 1 - Module 1">Week 1</a>
+          <a class="currentweek" href="https://learning.monash.edu/course/view.php?id=1&amp;section=11" title="Week 2 - Module 2">Week 2</a>
+          <a href="https://learning.monash.edu/mod/resource/view.php?id=999">Lecture slides</a>
+          <a href="https://learning.monash.edu/mod/quiz/view.php?id=888">Quiz 1</a>
+        </body></html>"#;
+
+        let fp1 = MoodleScraper::extract_course_fingerprint(base, 1);
+        assert!(!fp1.is_empty(), "a parseable page must produce a fingerprint");
+        assert_eq!(fp1, MoodleScraper::extract_course_fingerprint(base, 1), "identical page must be stable");
+
+        // A new activity appears in the current week → fingerprint must change.
+        let new_activity = base.replace(
+            "mod/resource/view.php?id=999",
+            "mod/resource/view.php?id=1000",
+        );
+        assert_ne!(
+            fp1,
+            MoodleScraper::extract_course_fingerprint(&new_activity, 1),
+            "activity id change must be detected"
+        );
+
+        // The weekly `currentweek` marker moves to the next section → change.
+        let next_week = base.replace("class=\"currentweek\"", "class=\"\"");
+        assert_ne!(
+            fp1,
+            MoodleScraper::extract_course_fingerprint(&next_week, 1),
+            "currentweek marker must be part of the signature"
+        );
+
+        // A brand-new week section appears in the section map → change.
+        let new_week = base.replace(
+            "</body>",
+            "<a href=\"https://learning.monash.edu/course/view.php?id=1&amp;section=15\" title=\"Week 3 - Module 3\">Week 3</a></body>",
+        );
+        assert_ne!(
+            fp1,
+            MoodleScraper::extract_course_fingerprint(&new_week, 1),
+            "new section must be detected"
+        );
+
+        // Empty page → empty fingerprint (caller treats as changed).
+        assert_eq!(MoodleScraper::extract_course_fingerprint("", 1), "");
     }
 
     /// Parenthesized weights (common in activity names, e.g. "(35%)") should also be extracted;

@@ -720,7 +720,22 @@ export function Dashboard() {
       const prevState = useAppStore.getState();
       const options = getSyncOptions(prevState, fullRefresh);
       const data = await syncAll(options);
-      updateAllSyncedData({ ...data, fullRefresh });
+      // P0 baseline metric (ChangeSignature design): how many Moodle requests did
+      // this sync actually consume, and how many courses were fingerprint-skipped.
+      console.info(
+        `[Muster][sync] requests=${data.requestsUsed} unchanged=${data.unchangedCourseIds.length}/${data.courses.length}`
+      );
+      updateAllSyncedData({
+        courses: data.courses,
+        resources: data.resources,
+        assignments: data.assignments,
+        announcements: data.announcements,
+        tabs: data.tabs,
+        unchangedCourseIds: data.unchangedCourseIds,
+        newFingerprints: data.fingerprints,
+        requestsUsed: data.requestsUsed,
+        fullRefresh,
+      });
       // Stamp the cooldown timestamp only after a successful sync — writing it before
       // meant a failed manual sync would suppress the next launch auto-sync for an hour.
       useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
@@ -950,7 +965,21 @@ export function Dashboard() {
         // Handle the syncAll result (includes courses/resources/assignments/announcements)
         // In dev mode shouldAutoSync=false, so synced.value is null and we simply skip
         if (synced.status === "fulfilled" && synced.value) {
-          updateAllSyncedData({ ...synced.value, fullRefresh: false });
+          const d = synced.value;
+          console.info(
+            `[Muster][sync] requests=${d.requestsUsed} unchanged=${d.unchangedCourseIds.length}/${d.courses.length}`
+          );
+          updateAllSyncedData({
+            courses: d.courses,
+            resources: d.resources,
+            assignments: d.assignments,
+            announcements: d.announcements,
+            tabs: d.tabs,
+            unchangedCourseIds: d.unchangedCourseIds,
+            newFingerprints: d.fingerprints,
+            requestsUsed: d.requestsUsed,
+            fullRefresh: false,
+          });
           setIsLoadingCourses(false);
           // Stamp the cooldown timestamp ONLY after a successful sync. A failed auto-sync
           // must not suppress the next launch's auto-sync (see note above).

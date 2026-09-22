@@ -389,6 +389,12 @@ pub struct SyncOptions {
     /// will be fetched (plus any newly discovered courses not in cached_weeks).
     #[serde(default)]
     pub target_course_ids: Option<Vec<u64>>,
+    /// Per-course fingerprint from the previous sync (course main-page probe, see
+    /// `extract_course_fingerprint`). A course whose probed fingerprint matches the
+    /// stored one is skipped entirely except the correctness carve-outs (announcements
+    /// + recordings). Absent → the course is always treated as changed.
+    #[serde(default)]
+    pub fingerprints: HashMap<u64, String>,
 }
 
 impl Default for SyncOptions {
@@ -399,7 +405,28 @@ impl Default for SyncOptions {
             cached_weeks: HashMap::new(),
             completed_assignment_ids: Vec::new(),
             target_course_ids: None,
+            fingerprints: HashMap::new(),
         }
     }
+}
+
+/// Result of `sync_all`. Beyond the fetched data it carries the fingerprint
+/// bookkeeping the client persists for the next incremental sync.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncResult {
+    pub courses: Vec<Course>,
+    pub resources: Vec<Resource>,
+    pub assignments: Vec<Assignment>,
+    pub announcements: Vec<Announcement>,
+    pub tabs: Vec<CourseTabData>,
+    /// Courses whose probe matched the stored fingerprint — no course data was
+    /// fetched for them; the client keeps its cached copy untouched.
+    pub unchanged_course_ids: Vec<u64>,
+    /// Updated fingerprints for every probed course (client persists them).
+    pub fingerprints: HashMap<u64, String>,
+    /// Exact number of Moodle requests this sync consumed (global gate counter
+    /// delta) — the baseline metric for the fingerprint-sync design.
+    pub requests_used: u64,
 }
 

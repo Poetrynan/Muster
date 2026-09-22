@@ -151,7 +151,17 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       const state = useAppStore.getState();
       const options = getSyncOptions(state, fullRefresh);
       const data = await syncAll(options);
-      updateAllSyncedData({ ...data, fullRefresh });
+      updateAllSyncedData({
+        courses: data.courses,
+        resources: data.resources,
+        assignments: data.assignments,
+        announcements: data.announcements,
+        tabs: data.tabs,
+        unchangedCourseIds: data.unchangedCourseIds,
+        newFingerprints: data.fingerprints,
+        requestsUsed: data.requestsUsed,
+        fullRefresh,
+      });
       // Stamp the cooldown timestamp only after a successful sync, so a failed one
       // never suppresses the next launch auto-sync.
       updateSettings({ lastAutoSyncAt: new Date().toISOString() });

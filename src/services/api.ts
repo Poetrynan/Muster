@@ -568,6 +568,24 @@ export interface SyncOptions {
   completedAssignmentIds?: number[];
   /** Target course IDs to actively scrape in incremental sync. */
   targetCourseIds?: number[];
+  /** Per-course fingerprints from the previous sync (course main-page probe). A course whose
+   *  probed fingerprint matches is skipped entirely except announcements + recordings. */
+  fingerprints?: Record<number, string>;
+}
+
+/** Result of sync_all — carries the fetched data plus fingerprint bookkeeping. */
+export interface SyncResult {
+  courses: Course[];
+  resources: Resource[];
+  assignments: Assignment[];
+  announcements: Announcement[];
+  tabs: CourseTabData[];
+  /** Courses whose probe matched the stored fingerprint — no course data fetched, keep cached copy. */
+  unchangedCourseIds: number[];
+  /** Updated fingerprints for every probed course — persist for the next sync. */
+  fingerprints: Record<number, string>;
+  /** Exact number of Moodle requests this sync consumed (baseline metric). */
+  requestsUsed: number;
 }
 
 /**
@@ -576,13 +594,7 @@ export interface SyncOptions {
  *    to drop sync requests and latency dramatically.
  *  - Supports full force refresh when user explicitly requests it.
  */
-export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean = true): Promise<{
-  courses: Course[];
-  resources: Resource[];
-  assignments: Assignment[];
-  announcements: Announcement[];
-  tabs: CourseTabData[];
-}> {
+export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean = true): Promise<SyncResult> {
   const options: SyncOptions =
     typeof optionsOrIncludeFixedTabs === "boolean"
       ? { includeFixedTabs: optionsOrIncludeFixedTabs }
@@ -590,15 +602,14 @@ export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean =
 
   const invoke = getInvoke();
   if (invoke) {
-    const result = invoke<[Course[], Resource[], Assignment[], Announcement[], CourseTabData[]]>(
+    const result = invoke<SyncResult>(
       "sync_all",
       {
         options,
         includeFixedTabs: options.includeFixedTabs ?? true,
       }
     );
-    const [courses, resources, assignments, announcements, tabs] = await result;
-    return { courses, resources, assignments, announcements, tabs };
+    return await result;
   }
   
   // P2: parallelized mock — all 3 resource kinds for every course are requested at once, cutting wait time by about 60%
@@ -629,6 +640,9 @@ export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean =
     assignments: allAssignments,
     announcements: allAnnouncements,
     tabs: [],
+    unchangedCourseIds: [],
+    fingerprints: {},
+    requestsUsed: 0,
   };
 }
 

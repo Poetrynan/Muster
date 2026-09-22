@@ -11,6 +11,7 @@
 //! user's own AI provider calls are intentionally not throttled: they are
 //! one-off and user-initiated.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use tokio::sync::{Mutex, Semaphore, SemaphorePermit};
@@ -80,6 +81,10 @@ pub struct RequestGate {
     semaphore: Semaphore,
     last_request: Mutex<Instant>,
     min_interval: Duration,
+    /// Total Moodle requests paced since the process started. Read out before/after
+    /// a sync to measure the real per-sync request footprint (P0 baseline metric
+    /// for the ChangeSignature fingerprint-sync design).
+    counter: AtomicU64,
 }
 
 impl RequestGate {
@@ -88,7 +93,14 @@ impl RequestGate {
             semaphore: Semaphore::new(config.max_concurrency),
             last_request: Mutex::new(Instant::now() - config.min_interval),
             min_interval: config.min_interval,
+            counter: AtomicU64::new(0),
         }
+    }
+
+    /// Total requests paced so far (monotonic). Snapshot before and after a sync
+    /// and diff the two to get the exact per-sync request footprint.
+    pub fn total_count(&self) -> u64 {
+        self.counter.load(Ordering::Relaxed)
     }
 
     /// Wait until this request may start, then return a permit that must be
@@ -117,6 +129,7 @@ impl RequestGate {
             .acquire()
             .await
             .expect("request gate semaphore is never closed");
+        self.counter.fetch_add(1, Ordering::Relaxed);
         RequestPermit { _permit: permit }
     }
 }

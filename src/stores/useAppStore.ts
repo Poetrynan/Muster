@@ -46,6 +46,11 @@ interface AppState {
   recordings: Record<number, Recording[]>;
   contacts: Record<number, CourseContact[]>;
 
+  // ChangeSignature fingerprints (course main-page probe) from the last sync.
+  // Persisted: a fingerprint match on the next sync lets the backend skip all
+  // course data fetching except announcements + recordings.
+  courseFingerprints: Record<number, string>;
+
   // Download manager (not persisted)
   downloads: DownloadItem[];
 
@@ -92,6 +97,12 @@ interface AppState {
     announcements?: Announcement[];
     tabs?: CourseTabData[];
     fullRefresh?: boolean;
+    /** Courses whose fingerprint matched — their cached data is kept untouched. */
+    unchangedCourseIds?: number[];
+    /** Updated fingerprints for every probed course — persisted for the next sync. */
+    newFingerprints?: Record<number, string>;
+    /** Exact Moodle request count consumed by this sync (baseline metric). */
+    requestsUsed?: number;
   }) => void;
   hideCourse: (courseId: number) => void;
   unhideCourse: (courseId: number) => void;
@@ -174,6 +185,7 @@ export const useAppStore = create<AppState>()(
   schedules: {},
   recordings: {},
   contacts: {},
+  courseFingerprints: {},
   downloads: [],
   reminderBanner: null,
   settings: defaultSettings,
@@ -357,6 +369,13 @@ export const useAppStore = create<AppState>()(
         }
       }
 
+      // Persist the updated fingerprints (v0.3.0 ChangeSignature sync). Unchanged
+      // courses contribute no fetched rows — the merge helpers above keep their
+      // cached data intact, and the fingerprint tells the next sync to skip them.
+      const newFingerprints: Record<number, string> = isFull
+        ? { ...(data.newFingerprints ?? {}) }
+        : { ...state.courseFingerprints, ...(data.newFingerprints ?? {}) };
+
       return {
         courses: updatedCourses,
         allResources: updatedResources,
@@ -368,6 +387,7 @@ export const useAppStore = create<AppState>()(
         schedules: newSchedules,
         recordings: newRecordings,
         contacts: newContacts,
+        courseFingerprints: newFingerprints,
         syncStatus: {
           ...state.syncStatus,
           isRunning: false,
@@ -442,6 +462,9 @@ export const useAppStore = create<AppState>()(
       schedules: {},
       recordings: {},
       contacts: {},
+      // Fingerprints belong to the previous account's courses: clear on logout
+      // so the next account always does a full first sync.
+      courseFingerprints: {},
       // Cross-course data belongs to the previous account/session: clear it too,
       // otherwise stale deadlines and grades survive a logout.
       calendarEvents: [],
@@ -484,6 +507,7 @@ export const useAppStore = create<AppState>()(
         unitInfos: state.unitInfos,
         schedules: state.schedules,
         contacts: state.contacts,
+        courseFingerprints: state.courseFingerprints,
         summaries: state.summaries,
         settings: state.settings,
       }),
@@ -521,6 +545,7 @@ export function getSyncOptions(
     allResources: Resource[];
     assignments: Assignment[];
     unitInfos: Record<number, UnitInfo>;
+    courseFingerprints?: Record<number, string>;
     settings?: {
       hiddenCourseIds?: number[];
       pinnedCourseIds?: number[];
@@ -534,6 +559,7 @@ export function getSyncOptions(
       includeFixedTabs: true,
       cachedWeeks: {},
       completedAssignmentIds: [],
+      fingerprints: {},
     };
   }
 
@@ -606,5 +632,6 @@ export function getSyncOptions(
     cachedWeeks,
     completedAssignmentIds,
     targetCourseIds: targetCourseIds.length > 0 ? targetCourseIds : undefined,
+    fingerprints: state.courseFingerprints ?? {},
   };
 }

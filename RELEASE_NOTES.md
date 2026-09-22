@@ -1,3 +1,25 @@
+# Muster v0.3.0
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.3.0_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/Muster_0.3.0_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.3.0_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/Muster_0.3.0_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.3.0_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/Muster_0.3.0_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.3.0_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/Muster_0.3.0_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.3.0_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/Muster_0.3.0_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.3.0_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.3.0/muster_0.3.0_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.3.0/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **New sync engine — ChangeSignature:** each course is now probed with a single lightweight request. If nothing changed since the last sync, the course is skipped entirely; only genuinely updated parts are re-fetched. This cuts Moodle requests per sync by well over half while keeping deadlines and announcements equally fresh.
+
+---
+
 # Muster v0.2.10
 
 ## Download
