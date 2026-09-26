@@ -157,6 +157,26 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
+      # The macOS updater archive is the exact artifact whose absence stranded
+      # every Mac user (see the matrix comment above). Asserting it here is more
+      # direct than reading the manifest back: it runs in the leg that built it,
+      # needs no token, and cannot be confused by draft-release visibility.
+      - name: Assert the macOS updater artifact was produced
+        if: ${{ startsWith(matrix.id, 'macos') && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          echo "contents of $base:"
+          ls -la "$base" || true
+          for f in "Muster.app.tar.gz" "Muster.app.tar.gz.sig"; do
+            if [ ! -f "$base/$f" ]; then
+              echo "::error::$base/$f is missing — without it macOS cannot auto-update"
+              exit 1
+            fi
+            echo "  ok  $f"
+          done
+
   # A release only ships if every supported platform can actually update itself.
   #
   # This job exists because the opposite shipped once: macOS DMGs were built and
@@ -189,11 +209,21 @@ jobs:
           tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
 
           # The release is a draft, so the public download URL is not readable
-          # without a token — go through the API instead. `gh` drops the file in
-          # the working directory; there is no --output flag on this command.
+          # either — go through the API with the workflow token.
+          #
+          # `--repo` is REQUIRED here. This job has no `actions/checkout`, so
+          # there is no git remote for `gh` to infer the repository from, and
+          # every call fails with "not a git repository". That mistake shipped
+          # once and the check reported "no latest.json asset found" — the wrong
+          # reason entirely, because the real error was swallowed by 2>/dev/null.
+          # Keep the message visible.
+          gh_err=""
           for attempt in $(seq 1 10); do
             rm -f latest.json
-            if gh release download "$tag" --pattern latest.json --clobber 2>/dev/null && [ -s latest.json ]; then
+            if gh_err=$(gh release download "$tag" \
+                          --repo "$GITHUB_REPOSITORY" \
+                          --pattern latest.json --clobber -O latest.json 2>&1) \
+               && [ -s latest.json ]; then
               echo "fetched latest.json from the $tag release"
               break
             fi
@@ -201,7 +231,7 @@ jobs:
             sleep 30
           done
           if [ ! -s latest.json ]; then
-            echo "::error::no latest.json asset found on release $tag — the updater has nothing to read"
+            echo "::error::could not fetch latest.json for $tag — last gh error: ${gh_err:-<none>}"
             exit 1
           fi
 
