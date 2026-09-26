@@ -1,3 +1,28 @@
+# Muster v0.3.1
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.3.1_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/Muster_0.3.1_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.3.1_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/Muster_0.3.1_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.3.1_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/Muster_0.3.1_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.3.1_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/Muster_0.3.1_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.3.1_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/Muster_0.3.1_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.3.1_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.3.1/muster_0.3.1_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.3.1/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Fixed automatic updates on macOS.** The release pipeline built the macOS bundles with `--bundles dmg`, which produces a DMG but not the `.app.tar.gz` archive the updater actually installs. Because the release manifest is assembled from the artifacts that exist, `latest.json` shipped without any `darwin-*` entry, and every Mac failed to update with `None of the fallback platforms '["darwin-aarch64-app", "darwin-aarch64"]' were found in the response 'platforms' object`. The macOS bundles now include the `app` target, so the updater archive is built and published.
+- **The release pipeline now verifies the manifest.** Before a release is considered good, the workflow asserts that `latest.json` contains an entry for every supported platform. A missing platform previously failed silently — each platform build succeeds on its own, so nothing noticed — and left those users with no way to update.
+
+There are no application changes in this release: v0.3.1 behaves exactly like v0.3.0. It exists to repair the macOS update channel so Apple Silicon and Intel users receive future versions automatically again. If you are on macOS, please install this version manually once — after that, updates will work as normal.
+
+---
+
 # Muster v0.3.0
 
 ## Download

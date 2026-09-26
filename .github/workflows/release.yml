@@ -31,14 +31,37 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `app` MUST stay in the macOS bundle list.
+          #
+          # The macOS updater artifact is a `.app.tar.gz` built from the `.app`
+          # bundle, and tauri-bundler only creates it when `app` is among the
+          # *requested* targets:
+          #
+          #   if package_types.contains(&PackageType::MacOsBundle) || has_v1_target {
+          #       updater_bundle::bundle_project(...)   // -> .app.tar.gz + .sig
+          #   } else {
+          #       log::warn!("... enable one of these targets: app, appimage, deb, rpm, msi, nsis")
+          #   }
+          #
+          # (`createUpdaterArtifacts: true` is the v2 mode, so `has_v1_target` is
+          # false — the `app` target is the only thing that can satisfy this.)
+          #
+          # Shipping `--bundles dmg` alone produced DMGs with no updater
+          # artifact. tauri-action collects artifacts by existence, so it
+          # silently skipped them and latest.json came out with no `darwin-*`
+          # key — every macOS install then failed to update with:
+          #   None of the fallback platforms '["darwin-aarch64-app",
+          #   "darwin-aarch64"]' were found in the response 'platforms' object
+          # The bundler also deletes the .app when it is not requested, so the
+          # only trace of the mistake is one warning line in the build log.
           - id: "macos-arm"
             platform: "macos-15"
             target: "aarch64-apple-darwin"
-            args: "--target aarch64-apple-darwin --bundles dmg"
+            args: "--target aarch64-apple-darwin --bundles app,dmg"
           - id: "macos-intel"
             platform: "macos-15-intel"
             target: "x86_64-apple-darwin"
-            args: "--target x86_64-apple-darwin --bundles dmg"
+            args: "--target x86_64-apple-darwin --bundles app,dmg"
           - id: "windows"
             platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
@@ -133,3 +156,64 @@ jobs:
           # second per-machine install with its own uninstaller. Prefer NSIS.
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
+
+  # A release only ships if every supported platform can actually update itself.
+  #
+  # This job exists because the opposite shipped once: macOS DMGs were built and
+  # published while latest.json carried no `darwin-*` key, so every Apple Silicon
+  # user hit
+  #   None of the fallback platforms '["darwin-aarch64-app", "darwin-aarch64"]'
+  #   were found in the response 'platforms' object
+  # with no way forward short of downloading a DMG by hand.
+  #
+  # Each platform build succeeds in isolation, so nothing in the matrix could
+  # notice — the manifest is the only place the gap is visible. Checking it here
+  # turns a silent, user-facing dead end into a red workflow.
+  verify-updater-manifest:
+    needs: build-and-release
+    # Run even when a leg failed: a missing platform is exactly what we need to
+    # hear about, and a failed leg is a likely cause of it.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    # Deliberately inherits the workflow-level `contents: write` rather than
+    # narrowing to `read`: the release is a *draft*, and drafts are only visible
+    # with push access. A read-only token gets a 404 here and the check would
+    # fail for the wrong reason. The job only ever downloads.
+    steps:
+      - name: Assert latest.json covers every supported platform
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+
+          # The release is a draft, so the public download URL is not readable
+          # without a token — go through the API instead. `gh` drops the file in
+          # the working directory; there is no --output flag on this command.
+          for attempt in $(seq 1 10); do
+            rm -f latest.json
+            if gh release download "$tag" --pattern latest.json --clobber 2>/dev/null && [ -s latest.json ]; then
+              echo "fetched latest.json from the $tag release"
+              break
+            fi
+            echo "latest.json not on the release yet (attempt $attempt)"
+            sleep 30
+          done
+          if [ ! -s latest.json ]; then
+            echo "::error::no latest.json asset found on release $tag — the updater has nothing to read"
+            exit 1
+          fi
+
+          # darwin-* is the pair that regressed and stranded Apple users; the
+          # others are here so no platform can be dropped silently either.
+          missing=0
+          for key in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64; do
+            if python3 -c "import json,sys; sys.exit(0 if '$key' in json.load(open('latest.json')).get('platforms',{}) else 1)"; then
+              echo "  ok      $key"
+            else
+              echo "::error::latest.json has no '$key' entry — that platform cannot auto-update"
+              missing=1
+            fi
+          done
+          exit $missing
