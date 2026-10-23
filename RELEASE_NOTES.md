@@ -1,3 +1,27 @@
+# Muster v0.3.2
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.3.2_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/Muster_0.3.2_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.3.2_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/Muster_0.3.2_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.3.2_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/Muster_0.3.2_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.3.2_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/Muster_0.3.2_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.3.2_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/Muster_0.3.2_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.3.2_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.3.2/muster_0.3.2_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.3.2/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Exam timetable on the Dashboard.** Muster now shows your official exam schedule as a dedicated card: date, start time, seat number, room and duration for every exam, with a Today / Tomorrow / "in N days" badge that flips to "Passed" once an exam is over. The timetable is fetched from the Monash exam timetable service using your existing Monash session (a short in-app sign-in verifies it once), cached locally, and localised in all four UI languages.
+- **Submitted work no longer stays "pending".** The v0.3.0 fingerprint sync skipped a course entirely whenever its main page was unchanged — but a submission or grade release never changes the main page, so freshly submitted assignments and quizzes could keep showing "Pending" no matter how often you synced, and one flaky-VPN sync (dropped detail-page requests) could freeze a wrong status indefinitely. Sync now re-verifies the detail pages of every not-yet-graded assessment even when the course itself is fingerprint-skipped, so submissions and released grades appear on the next refresh. Failed re-checks no longer stick either: they are logged and retried on the next sync instead of being frozen.
+- **Assignments now show for every course, not just one.** The assessment list was hard-coded to the MST template's section number (`section=56`). Courses built on a different template quietly parsed to zero items, so only MST-layout courses showed assignments at all. The Assessments section is now discovered from each course's own navigation (falling back to the course main page and to section 56), zero-item courses are reported in the log, and a cross-course id collision in the assignment merge (assessment-widget category rows share the same section ids across courses) can no longer overwrite other courses' entries.
+
+---
+
 # Muster v0.3.1
 
 ## Download
