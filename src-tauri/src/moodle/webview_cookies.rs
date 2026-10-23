@@ -74,6 +74,45 @@ pub fn extract_moodle_cookies_webkit(
 #[cfg(target_os = "macos")]
 pub use extract_moodle_cookies_webkit as extract_moodle_cookies_macos;
 
+/// Extract cookies for any URL from a WebView2 webview (Windows).
+/// Generalization of `extract_cookies_webview2` that accepts a target URL.
+#[cfg(windows)]
+pub fn extract_cookies_for_url(
+    webview: &tauri::webview::PlatformWebview,
+    target_url: &str,
+) -> Result<Vec<CookieData>, String> {
+    extract_cookies_webview2_for_url(webview, target_url)
+}
+
+/// Extract cookies for any URL from a WebKit webview (macOS/Linux).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn extract_cookies_for_url_webkit(
+    webview: &tauri::WebviewWindow,
+    target_url: &str,
+) -> Result<Vec<CookieData>, String> {
+    let url = url::Url::parse(target_url)
+        .map_err(|e| format!("invalid target URL: {}", e))?;
+    let cookies = webview
+        .cookies_for_url(url)
+        .map_err(|e| format!("Failed to read WebKit cookies: {}", e))?;
+
+    Ok(cookies
+        .into_iter()
+        .filter(|cookie| {
+            cookie.domain().is_none_or(|domain| {
+                let domain = domain.trim_start_matches('.');
+                domain == "monash.edu" || domain.ends_with(".monash.edu")
+            })
+        })
+        .map(|cookie| CookieData {
+            name: cookie.name().to_string(),
+            value: cookie.value().to_string(),
+            domain: cookie.domain().unwrap_or("monash.edu").to_string(),
+            path: cookie.path().unwrap_or("/").to_string(),
+        })
+        .collect())
+}
+
 /// Seed a newly-created WebKit in-app WebView with the saved Moodle session.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn inject_moodle_cookies_webkit(
@@ -197,14 +236,20 @@ fn inject_cookies_webview2(
 fn extract_cookies_webview2(
     webview: &tauri::webview::PlatformWebview,
 ) -> Result<Vec<CookieData>, String> {
+    extract_cookies_webview2_for_url(webview, "https://learning.monash.edu")
+}
+
+#[cfg(windows)]
+fn extract_cookies_webview2_for_url(
+    webview: &tauri::webview::PlatformWebview,
+    target_url: &str,
+) -> Result<Vec<CookieData>, String> {
     use std::sync::mpsc;
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2Cookie, ICoreWebView2_2, ICoreWebView2CookieList,
     };
     use webview2_com::{CoTaskMemPWSTR, GetCookiesCompletedHandler};
     use windows::core::Interface;
-
-    const MOODLE_URL: &str = "https://learning.monash.edu";
 
     // controller -> CoreWebView2 -> ICoreWebView2_2 -> CookieManager
     let controller = webview.controller();
@@ -229,7 +274,7 @@ fn extract_cookies_webview2(
 
     // Build a wide-string URI. GetCookies takes PCWSTR; CoTaskMemPWSTR owns the
     // allocation and derefs to PCWSTR for the duration of the borrow.
-    let uri = CoTaskMemPWSTR::from(MOODLE_URL);
+    let uri = CoTaskMemPWSTR::from(target_url);
     let uri_pcwstr = *uri.as_ref().as_pcwstr();
 
     // `wait_for_async_operation` requires a `'static` closure, so capture owned

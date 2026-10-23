@@ -145,6 +145,23 @@ export interface SessionData {
   user?: User;
 }
 
+// Exam schedule from my-timetable.monash.edu
+export interface ExamSchedule {
+  id: string;
+  courseId?: number;
+  courseName: string;
+  courseCode: string;
+  examType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  seatNumber?: string;
+  durationMinutes?: number;
+  instructions?: string;
+  url?: string;
+}
+
 // Settings-related
 export interface AppSettings {
   /** API protocol type: openai=OpenAI compatible (/v1/chat/completions), anthropic=Anthropic native (/v1/messages) */

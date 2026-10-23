@@ -452,7 +452,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
             <p className="text-xs text-muted-foreground leading-relaxed">{t("settings.ai.freeZaiDesc")}</p>
           </div>
           <Button
-            onClick={() => window.dispatchEvent(new CustomEvent("muster:open-settings"))}
+            onClick={() => window.dispatchEvent(new CustomEvent("muster:open-settings", { detail: "ai" }))}
             className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-600/90 hover:to-violet-600/90 text-white"
           >
             <SettingsIcon className="w-4 h-4 mr-2" />

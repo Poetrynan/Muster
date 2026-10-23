@@ -34,12 +34,16 @@ pub struct DownloadResult {
 
 /// Per-course outcome of the fingerprint probe step, collected by `fetch_all_data`.
 /// `unchanged = true` means the probe matched the stored fingerprint and nothing
-/// but the correctness carve-outs (announcements + recordings) was fetched.
+/// but the correctness carve-outs (announcements + recordings + status re-checks)
+/// was fetched.
 struct FingerprintOutcome {
     fingerprint: String,
     unchanged: bool,
     resources: Vec<Resource>,
     assignments: Vec<Assignment>,
+    /// Live status/grade changes discovered by re-probing cached items on a
+    /// fingerprint hit (see `recheck_assignment_statuses`). Empty unless unchanged.
+    status_updates: Vec<Assignment>,
     announcements: Vec<Announcement>,
     tab_data: CourseTabData,
 }
@@ -543,23 +547,65 @@ impl MoodleScraper {
         Ok(assignments)
     }
 
-    /// Fetch the course assessment overview (Assessments section, `&section=56`) (legacy / full fetch).
+    /// Fetch the course assessment overview (legacy / full fetch; standalone callers
+    /// have no probe page, so the Assessments section is discovered via one extra
+    /// main-page request).
     pub async fn fetch_course_assessments(&self, course_id: u64) -> Result<Vec<Assignment>, String> {
-        self.fetch_course_assessments_incremental(course_id, true, &[]).await
+        self.fetch_course_assessments_incremental(course_id, true, &[], None).await
     }
 
-    /// Fetch course assessments with incremental skip support for completed items
+    /// Fetch course assessments with incremental skip support for completed items.
+    ///
+    /// `probe_html` (the already-fetched course main page, when the caller has one) is
+    /// used to discover which section actually hosts the Assessments widget: the Monash
+    /// MST template pins it at `section=56`, but other course templates place it
+    /// elsewhere, and a hard-coded 56 silently parsed zero items for those courses
+    /// (user report: assignments visible for only one course).
     pub async fn fetch_course_assessments_incremental(
         &self,
         course_id: u64,
         full_refresh: bool,
         completed_assignment_ids: &[u64],
+        probe_html: Option<&str>,
     ) -> Result<Vec<Assignment>, String> {
         let client = self.auth.get_authenticated_client().await?;
-        let url = format!("{}/course/view.php?id={}&section=56", self.base_url, course_id);
+
+        // Discover the Assessments section from the main page's section map (title
+        // containing "assess", e.g. "ASSESSMENTS"); fall back to the MST default 56.
+        let (discovered, main_html_owned) = match probe_html {
+            Some(html) => (discover_assessments_section_from_html(html, course_id), None),
+            None => {
+                let main_url = format!("{}/course/view.php?id={}", self.base_url, course_id);
+                let html = Self::fetch_course_view_text(&client, &self.request_gate, &main_url).await?;
+                let discovered = discover_assessments_section_from_html(&html, course_id);
+                (discovered, Some(html))
+            }
+        };
+        let section_num = discovered.unwrap_or(56);
+
+        let url = format!(
+            "{}/course/view.php?id={}&section={}",
+            self.base_url, course_id, section_num
+        );
         let html = Self::fetch_course_view_text(&client, &self.request_gate, &url).await?;
-        Self::dump_course_view_section_html(course_id, 56, &html);
+        Self::dump_course_view_section_html(course_id, section_num, &html);
         let mut assignments = self.parse_assessments_from_html(&html, course_id)?;
+
+        // Fallback: the chosen section page had nothing parseable (wrong/invalid
+        // section number, non-MST template). Try the course main page — its current-week
+        // `li.activity` items still carry mod_assign/mod_quiz entries.
+        if assignments.is_empty() {
+            if let Some(main_html) = main_html_owned.as_deref().or(probe_html) {
+                assignments = self.parse_assessments_from_html(main_html, course_id)?;
+            }
+            if assignments.is_empty() {
+                eprintln!(
+                    "[muster][assessments] course {}: 0 items parsed (section {} and main-page fallback both empty)",
+                    course_id, section_num
+                );
+            }
+        }
+
         // The widget's STATUS column is rendered by JS and stays empty in static HTML, so enrich
         // real submission state from each item's detail page + the course gradebook.
         self.enrich_assessment_statuses(
@@ -1017,6 +1063,96 @@ impl MoodleScraper {
         }
 
         Ok(out)
+    }
+
+    /// Re-verify the submission status/grade of cached assessment items against their live
+    /// detail pages (fingerprint-hit carve-out).
+    ///
+    /// A submission or grade release happens entirely off the course main page, so it can
+    /// never flip the fingerprint: without this re-check, submitted work stayed "pending"
+    /// no matter how often the user synced (user report). Only items whose status or grade
+    /// actually changed are returned; fetch/parse failures are logged and skipped, so a
+    /// transient network error never corrupts cached state (the next sync re-probes).
+    async fn recheck_assignment_statuses(
+        &self,
+        client: &reqwest::Client,
+        course_id: u64,
+        items: &[Assignment],
+    ) -> Vec<Assignment> {
+        use futures_util::StreamExt;
+        // Owned clones (not borrows): the fetch futures are spawned behind tokio::spawn,
+        // which requires 'static — borrowed items would not live long enough.
+        let targets: Vec<Assignment> = items
+            .iter()
+            .filter(|a| a.course_id == course_id && a.url.is_some() && a.status != AssignmentStatus::Graded)
+            .cloned()
+            .collect();
+        if targets.is_empty() {
+            return Vec::new();
+        }
+
+        // Owned job tuples: the map closure stored in the stream must take owned args —
+        // a reference-taking closure inside the future breaks tokio::spawn's lifetime
+        // generalization (rustc "implementation of FnOnce is not general enough").
+        let jobs: Vec<(u64, String, String)> = targets
+            .iter()
+            .map(|a| (a.id, a.name.clone(), a.url.clone().unwrap_or_default()))
+            .collect();
+        let fetches = jobs.into_iter().map(|(id, name, url)| {
+            let client = client.clone();
+            let gate = self.request_gate.clone();
+            async move { (id, name, Self::fetch_course_view_text(&client, &gate, &url).await) }
+        });
+        let results: Vec<(u64, String, Result<String, String>)> =
+            futures_util::stream::iter(fetches).buffered(8).collect().await;
+
+        let mut updated = Vec::new();
+        for (id, name, res) in results {
+            let Ok(html) = res else {
+                eprintln!(
+                    "[muster][status-recheck] course {} assignment {} ({:?}): detail page fetch failed",
+                    course_id, id, name
+                );
+                continue;
+            };
+            let a = targets.iter().find(|a| a.id == id).expect("target id present");
+            let mut new_status = a.status.clone();
+            let mut new_grade = a.grade.clone();
+            match a.assessment_type {
+                AssessmentType::Quiz => {
+                    if parse_quiz_submission_from_html(&html) {
+                        new_status = AssignmentStatus::Submitted;
+                    }
+                    if let Some(g) = parse_quiz_grade_from_html(&html) {
+                        new_status = AssignmentStatus::Graded;
+                        new_grade = Some(g);
+                    }
+                }
+                AssessmentType::Assignment => {
+                    if let Ok(s) = self.parse_submission_status_from_html(&html, a.id) {
+                        if s.submitted {
+                            new_status = AssignmentStatus::Submitted;
+                        }
+                        if s.graded {
+                            new_status = AssignmentStatus::Graded;
+                        }
+                        if let Some(g) = s.grade {
+                            new_grade = Some(g);
+                        }
+                    }
+                }
+            }
+            // Only report actual changes: the client merges these verbatim, and a
+            // failed/ambiguous parse must never downgrade a cached status.
+            if new_status != a.status || new_grade != a.grade {
+                let mut item = a.clone();
+                item.status = new_status;
+                item.grade = new_grade;
+                item.has_submission_status = true;
+                updated.push(item);
+            }
+        }
+        updated
     }
 
     /// Best-effort enrichment of assessment submission state.
@@ -2822,6 +2958,13 @@ impl MoodleScraper {
                 let include_fixed_tabs = options.include_fixed_tabs;
                 let cached_weeks = options.cached_weeks.get(&course_id).cloned().unwrap_or_default();
                 let completed_ids = options.completed_assignment_ids.clone();
+                // Only this course's slice of the re-check list (client sends one global list).
+                let status_recheck: Vec<Assignment> = options
+                    .status_recheck
+                    .iter()
+                    .filter(|a| a.course_id == course_id)
+                    .cloned()
+                    .collect();
                 let old_fp = options.fingerprints.get(&course_id).cloned();
                 tokio::spawn(async move {
                     let _permit = sem.acquire().await;
@@ -2847,9 +2990,18 @@ impl MoodleScraper {
 
                     // ---- Fingerprint hit: nothing changed since the last sync ----
                     // Correctness carve-outs that stay dynamic (they cannot be probed
-                    // from the main page): announcements + recordings. Resources,
-                    // assessments and the dashboard are served from client cache.
+                    // from the main page): announcements + recordings + submission
+                    // statuses. Resources, assessments and the dashboard are served
+                    // from client cache.
                     if !full_refresh && !new_fp.is_empty() && old_fp.as_deref() == Some(new_fp.as_str()) {
+                        // Carve-out: submission/grade state lives on each item's detail
+                        // page and in the gradebook, invisible to the main-page probe.
+                        // Re-verify the client's cached not-yet-graded items so a
+                        // submission made after the last sync is not frozen behind the
+                        // fingerprint skip (it never changes the main page).
+                        let status_updates = scraper
+                            .recheck_assignment_statuses(&client, course_id, &status_recheck)
+                            .await;
                         let announcements = scraper
                             .fetch_announcements_with_base(course_id, Some(probe_html))
                             .await
@@ -2871,6 +3023,7 @@ impl MoodleScraper {
                             unchanged: true,
                             resources: Vec::new(),
                             assignments: Vec::new(),
+                            status_updates,
                             announcements,
                             tab_data,
                         });
@@ -2881,9 +3034,15 @@ impl MoodleScraper {
                     // Assignments use fetch_course_assessments (Assessments section): it covers quizzes as well
                     // as regular assignments, and enriches real submission state (detail pages + gradebook),
                     // so the Dashboard / AssignmentsPage stats are no longer quiz-blind.
+                    let probe_for_assessments = probe_html.clone();
                     let (resources, assignments, announcements, tab_data) = tokio::join!(
                         scraper.fetch_course_resources_incremental(course_id, full_refresh, &cached_weeks),
-                        scraper.fetch_course_assessments_incremental(course_id, full_refresh, &completed_ids),
+                        scraper.fetch_course_assessments_incremental(
+                            course_id,
+                            full_refresh,
+                            &completed_ids,
+                            Some(&probe_for_assessments),
+                        ),
                         scraper.fetch_announcements_with_base(course_id, Some(probe_html)),
                         scraper.fetch_course_tab_data(course_id, include_fixed_tabs),
                     );
@@ -2896,6 +3055,7 @@ impl MoodleScraper {
                         unchanged: false,
                         resources: resources.unwrap_or_default(),
                         assignments: assignments.unwrap_or_default(),
+                        status_updates: Vec::new(),
                         announcements: announcements.unwrap_or_default(),
                         tab_data,
                     })
@@ -2906,6 +3066,7 @@ impl MoodleScraper {
         let mut all_resources = Vec::new();
         let mut all_assignments = Vec::new();
         let mut all_announcements = Vec::new();
+        let mut all_status_updates = Vec::new();
         let mut all_tab_data = Vec::new();
         let mut unchanged_course_ids = Vec::new();
         let mut new_fingerprints: std::collections::HashMap<u64, String> = std::collections::HashMap::new();
@@ -2937,6 +3098,7 @@ impl MoodleScraper {
                     all_assignments.extend(outcome.assignments);
                     all_announcements.extend(outcome.announcements);
                 }
+                all_status_updates.extend(outcome.status_updates);
                 all_tab_data.push(outcome.tab_data);
                 if !fingerprint.is_empty() {
                     new_fingerprints.insert(course_id, fingerprint);
@@ -2978,6 +3140,7 @@ impl MoodleScraper {
             unchanged_course_ids,
             fingerprints: new_fingerprints,
             requests_used,
+            status_updates: all_status_updates,
         })
     }
 
@@ -5376,6 +5539,19 @@ fn extract_mst_section_links(html: &str, course_id: u64) -> Vec<(u64, String)> {
     map.into_iter().collect()
 }
 
+/// Discover the section number hosting the Assessments widget from a course main page.
+///
+/// MST courses render `<a href="...&section=56" title="ASSESSMENTS">` in the nav; other
+/// templates use a different number (and possibly wording like "Assessment"). Returns the
+/// first section whose title/text contains "assess" (case-insensitive), or None when the
+/// page has no such nav — the caller then falls back to the MST default (56).
+fn discover_assessments_section_from_html(html: &str, course_id: u64) -> Option<u64> {
+    extract_mst_section_links(html, course_id)
+        .into_iter()
+        .find(|(_, title)| title.to_lowercase().contains("assess"))
+        .map(|(sec, _)| sec)
+}
+
 /// Find the nearest h1/h2/h3 group heading text before `marker` (e.g. `data-id="4447072"`) in `html`.
 /// Used to infer the "assessment category" (Written / Quiz / Test) for assessment items.
 /// Pure string scanning, working around scraper having no convenient "previous sibling" API.
@@ -6886,6 +7062,39 @@ mod tests {
         assert_eq!(extract_week_num("第5周 课程资料"), Some(5));
         assert_eq!(extract_week_num("UNIT DASHBOARD"), None);
         assert_eq!(extract_week_num("Additional information and resources"), None);
+    }
+
+    /// Assessments-section discovery: the MST nav carries `title="ASSESSMENTS"` on the
+    /// section link (verified on live_course_view_46961.html); the number must be found
+    /// case-insensitively, and a page without such nav returns None (the caller falls
+    /// back to the MST default 56).
+    #[test]
+    fn discover_assessments_section_from_nav() {
+        let course_id = 46961u64;
+        let html = r#"
+        <html><body>
+          <a class="courseindex-link" href="https://learning.monash.edu/course/view.php?id=46961&amp;section=1" title="UNIT INFORMATION">Unit Information</a>
+          <a class="courseindex-link" href="https://learning.monash.edu/course/view.php?id=46961&amp;section=56" title="ASSESSMENTS">Assessments</a>
+          <a class="courseindex-link" href="https://learning.monash.edu/course/view.php?id=46961&amp;section=57" title="1. QUIZ / TEST">1. Quiz / Test</a>
+        </body></html>"#;
+        assert_eq!(
+            discover_assessments_section_from_html(html, course_id),
+            Some(56)
+        );
+
+        // No assess-titled nav → None; a differently-numbered template is discovered.
+        let other = r#"
+        <html><body>
+          <a href="https://learning.monash.edu/course/view.php?id=46961&amp;section=1">Week 1</a>
+          <a href="https://learning.monash.edu/course/view.php?id=46961&amp;section=40" title="Assessment">Assessment</a>
+        </body></html>"#;
+        assert_eq!(
+            discover_assessments_section_from_html(other, course_id),
+            Some(40)
+        );
+
+        let plain = r#"<html><body><a href="https://learning.monash.edu/course/view.php?id=46961&amp;section=1">Week 1</a></body></html>"#;
+        assert_eq!(discover_assessments_section_from_html(plain, course_id), None);
     }
 
     /// ChangeSignature fingerprint (v0.3.0): stable when nothing changed, sensitive

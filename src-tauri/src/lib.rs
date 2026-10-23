@@ -4,12 +4,15 @@
 #![allow(dead_code)]
 
 pub mod moodle;
+pub mod timetable;
 mod server;
 
-use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
+use moodle::auth::{MoodleAuth, CookieData, SessionInfo, SessionData};
 use moodle::scraper::MoodleScraper;
 use moodle::scraper::DownloadResult;
-use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions, SyncResult};
+use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions, SyncResult, ExamSchedule};
+use timetable::auth::TimetableAuth;
+use timetable::scraper::TimetableScraper;
 use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
@@ -28,6 +31,9 @@ pub struct AppState {
     ai_config: Arc<Mutex<Option<AiConfig>>>,
     /// Minimize to tray instead of closing the window (synced from the frontend settings, on by default)
     close_to_tray: std::sync::atomic::AtomicBool,
+    /// Timetable (my-timetable.monash.edu) auth + scraper for exam data
+    timetable_auth: Arc<Mutex<Option<TimetableAuth>>>,
+    timetable_scraper: Arc<Mutex<Option<TimetableScraper>>>,
 }
 
 impl AppState {
@@ -38,6 +44,8 @@ impl AppState {
             scraper: Arc::new(Mutex::new(None)),
             ai_config: Arc::new(Mutex::new(None)),
             close_to_tray: std::sync::atomic::AtomicBool::new(true),
+            timetable_auth: Arc::new(Mutex::new(None)),
+            timetable_scraper: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -640,9 +648,8 @@ async fn start_sso_login_webview_inner(
         return Err("SSO cookie extraction is supported only on Windows, macOS, and Linux.".to_string());
     };
 
-    let _ = webview_window.close();
-
     if cookies.is_empty() {
+        let _ = webview_window.close();
         return Err(
             "No valid session cookie was obtained after login. Please try logging in again.".to_string(),
         );
@@ -656,9 +663,205 @@ async fn start_sso_login_webview_inner(
     if response.success {
         let mut scraper_guard = state.scraper.lock().await;
         *scraper_guard = Some(MoodleScraper::new(state.auth.clone()));
+        drop(scraper_guard);
+
+        // Navigate the SAME WebView to the timetable page. The SSO cookies
+        // from the Moodle login will auto-complete the SSO flow for the
+        // timetable domain — no second login needed.
+        let tt_url = "https://my-timetable.monash.edu/even/student";
+        println!("[timetable] Navigating to {}...", tt_url);
+        let _ = webview_window.navigate(tt_url.parse().unwrap());
+
+        // Wait for SSO redirect chain to complete (up to 15 seconds)
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+        // Extract timetable cookies from the same WebView
+        #[cfg(windows)]
+        let tt_cookies = {
+            let (tx, rx) = std::sync::mpsc::channel::<Vec<CookieData>>();
+            let webview_for_extract = webview_window.clone();
+            let nav_result = webview_for_extract.with_webview(move |pw| {
+                let cookies = moodle::webview_cookies::extract_cookies_for_url(
+                    &pw,
+                    "https://my-timetable.monash.edu",
+                ).unwrap_or_default();
+                let _ = tx.send(cookies);
+            });
+            if nav_result.is_err() {
+                println!("[timetable] with_webview failed, trying parent cookies only");
+                vec![]
+            } else {
+                rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap_or_default()
+            }
+        };
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let tt_cookies = moodle::webview_cookies::extract_cookies_for_url_webkit(
+            &webview_window,
+            "https://my-timetable.monash.edu",
+        ).unwrap_or_default();
+
+        println!("[timetable] Got {} cookies from WebView", tt_cookies.len());
+
+        // Close the WebView after extracting timetable cookies
+        let _ = webview_window.close();
+
+        if !tt_cookies.is_empty() {
+            let tt_session = SessionData {
+                cookies: tt_cookies,
+                user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
+                timestamp: chrono::Local::now().to_rfc3339(),
+            };
+            match TimetableAuth::new(&tt_session) {
+                Ok(tt_auth) => {
+                    match tt_auth.initialize().await {
+                        Ok(_) => {
+                            let mut tt_scraper_guard = state.timetable_scraper.lock().await;
+                            *tt_scraper_guard = Some(TimetableScraper::new(Arc::new(tt_auth.clone())));
+                            let mut tt_auth_guard = state.timetable_auth.lock().await;
+                            *tt_auth_guard = Some(tt_auth);
+                            println!("Timetable auth initialized successfully");
+                        }
+                        Err(e) => {
+                            println!("Timetable auth init failed (non-fatal): {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Timetable auth creation failed (non-fatal): {}", e);
+                }
+            }
+        } else {
+            println!("Timetable WebView returned no cookies (non-fatal)");
+        }
     }
 
     Ok(response)
+}
+
+/// Open a second WebView pointing at my-timetable.monash.edu to complete
+/// the SSO flow for the timetable domain. The existing SSO session from
+/// the Moodle login will auto-redirect and set the timetable-specific cookies.
+async fn init_timetable_webview(
+    app_handle: &tauri::AppHandle,
+) -> Result<Vec<CookieData>, String> {
+    use std::sync::Arc;
+    use tauri::WebviewUrl;
+    use tauri::webview::WebviewWindowBuilder;
+    use tauri::Manager;
+    use url::Url;
+
+    const TT_URL: &str = "https://my-timetable.monash.edu/even/student";
+    const TT_WINDOW_LABEL: &str = "sso-timetable";
+
+    // Close any stale window
+    if let Some(existing) = app_handle.get_webview_window(TT_WINDOW_LABEL) {
+        let _ = existing.close();
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
+    // Signal when the WebView lands on the timetable page (not SSO)
+    let success_tx: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Url>>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let (tx, rx) = tokio::sync::oneshot::channel::<Url>();
+    *success_tx.lock().unwrap() = Some(tx);
+
+    let success_tx_clone = success_tx.clone();
+    let on_nav = move |url: &Url| -> bool {
+        let host = url.host_str().unwrap_or("");
+        if host.contains("my-timetable.monash.edu") {
+            if let Some(sender) = success_tx_clone.lock().unwrap().take() {
+                let _ = sender.send(url.clone());
+            }
+        }
+        true
+    };
+
+    let tt_url: Url = TT_URL.parse().map_err(|e| format!("invalid timetable URL: {}", e))?;
+
+    let webview_window = WebviewWindowBuilder::new(
+        app_handle,
+        TT_WINDOW_LABEL,
+        WebviewUrl::External(tt_url),
+    )
+    .title("Timetable SSO")
+    .inner_size(1000.0, 700.0)
+    .min_inner_size(640.0, 480.0)
+    .center()
+    .on_navigation(on_nav)
+    .build()
+    .map_err(|e| format!("Failed to open timetable window: {}", e))?;
+
+    // Wait up to 60 seconds for SSO to complete
+    let _success_url = match tokio::time::timeout(std::time::Duration::from_secs(60), rx).await {
+        Ok(Ok(url)) => url,
+        Ok(Err(_)) => {
+            let _ = webview_window.close();
+            return Err("Timetable SSO window closed.".to_string());
+        }
+        Err(_) => {
+            let _ = webview_window.close();
+            return Err("Timetable SSO timed out (60s).".to_string());
+        }
+    };
+
+    // Give cookies time to commit
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    // Extract cookies
+    #[cfg(windows)]
+    {
+        let (cookies_tx, cookies_rx) = std::sync::mpsc::channel::<Result<Vec<CookieData>, String>>();
+        let webview_for_extract = webview_window.clone();
+        webview_for_extract
+            .with_webview(move |pw| {
+                // Extract cookies for the timetable domain specifically
+                let result = moodle::webview_cookies::extract_cookies_for_url(
+                    &pw,
+                    "https://my-timetable.monash.edu",
+                );
+                let _ = cookies_tx.send(result);
+            })
+            .map_err(|e| format!("Failed to access WebView for cookie extraction: {}", e))?;
+
+        let cookies = cookies_rx
+            .recv_timeout(std::time::Duration::from_secs(15))
+            .map_err(|e| format!("Timetable cookie extraction timed out: {}", e))??;
+
+        let _ = webview_window.close();
+        Ok(cookies)
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let cookies = moodle::webview_cookies::extract_cookies_for_url_webkit(
+            &webview_window,
+            "https://my-timetable.monash.edu",
+        )?;
+        let _ = webview_window.close();
+        Ok(cookies)
+    }
+
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        let _ = webview_window.close();
+        Err("Timetable cookie extraction is only supported on Windows, macOS, and Linux.".to_string())
+    }
+}
+
+/// Fetch exam schedule from my-timetable.monash.edu.
+#[tauri::command]
+async fn fetch_exams(state: State<'_, AppState>) -> Result<Vec<ExamSchedule>, String> {
+    let scraper_guard = state.timetable_scraper.lock().await;
+    let scraper = scraper_guard.as_ref().ok_or("Timetable not authenticated")?;
+    scraper.fetch_exams().await
+}
+
+/// Verify the timetable session is still valid.
+#[tauri::command]
+async fn verify_timetable_session(state: State<'_, AppState>) -> Result<bool, String> {
+    let auth_guard = state.timetable_auth.lock().await;
+    let auth = auth_guard.as_ref().ok_or("Timetable not authenticated")?;
+    auth.verify_session().await
 }
 
 /// Open a Moodle URL in an in-app WebView window.
@@ -1078,6 +1281,8 @@ pub fn run() {
             fetch_course_gradebook,
             fetch_course_unit_dashboard,
             fetch_grade_overview,
+            fetch_exams,
+            verify_timetable_session,
             set_close_to_tray,
             get_target_arch,
             get_system_info,

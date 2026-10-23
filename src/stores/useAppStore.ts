@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { idbStorage } from "../services/idbStorage";
-import type { AppSettings, SyncStatus, Summary, AiPriorities, AiPlan } from "../types";
+import type { AppSettings, SyncStatus, Summary, AiPriorities, AiPlan, ExamSchedule } from "../types";
 import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData, SyncOptions } from "../services/api";
 import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from "../lib/courseHelpers";
 
@@ -35,6 +35,11 @@ interface AppState {
   calendarEvents: CalendarEvent[];
   // Cross-course grade overview (/grade/report/overview)
   gradeOverview: GradeOverviewRow[];
+
+  // Exam schedule from my-timetable.monash.edu
+  // Exams are immutable — once fetched, permanently cached (examsFetched flag).
+  exams: ExamSchedule[];
+  examsFetched: boolean;
 
   // Per-course tab data from the full sync. unitInfos / schedules / contacts are semester-fixed
   // (persisted cache — fetched once, reused on later launches); unitDashboards / recordings are
@@ -82,6 +87,8 @@ interface AppState {
   setSyncStatus: (status: Partial<SyncStatus>) => void;
   setCalendarEvents: (events: CalendarEvent[]) => void;
   setGradeOverview: (rows: GradeOverviewRow[]) => void;
+  setExams: (exams: ExamSchedule[]) => void;
+  resetExams: () => void;
   setCourseTabData: (tabs: CourseTabData[]) => void;
   upsertDownload: (item: DownloadItem) => void;
   removeDownload: (key: string) => void;
@@ -103,6 +110,9 @@ interface AppState {
     newFingerprints?: Record<number, string>;
     /** Exact Moodle request count consumed by this sync (baseline metric). */
     requestsUsed?: number;
+    /** Live status/grade changes re-verified on fingerprint-hit courses; merged on top
+     *  of the cached assignments (see SyncOptions.statusRecheck / SyncResult.statusUpdates). */
+    statusUpdates?: Assignment[];
   }) => void;
   hideCourse: (courseId: number) => void;
   unhideCourse: (courseId: number) => void;
@@ -180,6 +190,8 @@ export const useAppStore = create<AppState>()(
   syncStatus: defaultSyncStatus,
   calendarEvents: [],
   gradeOverview: [],
+  exams: [],
+  examsFetched: false,
   unitDashboards: {},
   unitInfos: {},
   schedules: {},
@@ -226,6 +238,8 @@ export const useAppStore = create<AppState>()(
     })),
   setCalendarEvents: (calendarEvents) => set({ calendarEvents }),
   setGradeOverview: (gradeOverview) => set({ gradeOverview }),
+  setExams: (exams) => set({ exams, examsFetched: true }),
+  resetExams: () => set({ exams: [], examsFetched: false }),
   setCourseTabData: (tabs) =>
     set((state) => {
       const unitDashboards = { ...state.unitDashboards };
@@ -287,15 +301,20 @@ export const useAppStore = create<AppState>()(
         return Array.from(map.values());
       };
 
+      // Merge key must include the course: the assessment widget's category rows use the
+      // per-course data-section number as id (57/58/...), identical across courses — a
+      // bare id key made different courses' rows overwrite each other (user report:
+      // assignments visible for only one course).
+      const assignmentKey = (item: Assignment) => `${item.courseId}::${item.id || item.url || item.name}`;
+
       const mergeAssignments = (incoming: Assignment[] | undefined, existing: Assignment[]): Assignment[] => {
         if (!incoming || incoming.length === 0) return existing;
         const map = new Map<string | number, Assignment>();
         for (const item of existing) {
-          const key = item.id || item.url || item.name;
-          map.set(key, item);
+          map.set(assignmentKey(item), item);
         }
         for (const item of incoming) {
-          const key = item.id || item.url || item.name;
+          const key = assignmentKey(item);
           const prev = map.get(key);
           if (prev && !isFull) {
             map.set(key, {
@@ -335,6 +354,15 @@ export const useAppStore = create<AppState>()(
       const updatedResources = mergeResources(data.resources, state.allResources);
       const updatedAssignments = mergeAssignments(data.assignments, state.assignments);
       const updatedAnnouncements = mergeAnnouncements(data.announcements, state.announcements);
+
+      // Fingerprint-hit courses re-verify their cached items' live status/grade on the
+      // backend (SyncOptions.statusRecheck); only items whose status actually changed
+      // come back here. Apply them on top of the merged list, keyed identically.
+      let finalAssignments = updatedAssignments;
+      if (data.statusUpdates && data.statusUpdates.length > 0) {
+        const updates = new Map(data.statusUpdates.map((u) => [assignmentKey(u), u]));
+        finalAssignments = updatedAssignments.map((a) => updates.get(assignmentKey(a)) ?? a);
+      }
 
       // Adopt the aggregated per-course tab data (Dashboard / Unit Info / Schedule /
       // Recordings / Contacts) from the sync.
@@ -379,7 +407,7 @@ export const useAppStore = create<AppState>()(
       return {
         courses: updatedCourses,
         allResources: updatedResources,
-        assignments: updatedAssignments,
+        assignments: finalAssignments,
         announcements: updatedAnnouncements,
         courseResources: newCourseResources,
         unitDashboards: newUnitDashboards,
@@ -469,6 +497,8 @@ export const useAppStore = create<AppState>()(
       // otherwise stale deadlines and grades survive a logout.
       calendarEvents: [],
       gradeOverview: [],
+      exams: [],
+      examsFetched: false,
       downloads: [],
     }),
     }),
@@ -501,6 +531,9 @@ export const useAppStore = create<AppState>()(
         courseResources: state.courseResources,
         calendarEvents: state.calendarEvents,
         gradeOverview: state.gradeOverview,
+        // Exams are immutable — once fetched, permanently cached.
+        exams: state.exams,
+        examsFetched: state.examsFetched,
         // Semester-fixed tabs (unit info / schedule / contacts) are cached: fetch once,
         // reuse across launches. The dynamic tabs (dashboard / recordings) are NOT
         // persisted — they are re-fetched live on every login.
@@ -560,6 +593,7 @@ export function getSyncOptions(
       cachedWeeks: {},
       completedAssignmentIds: [],
       fingerprints: {},
+      statusRecheck: [],
     };
   }
 
@@ -626,6 +660,15 @@ export function getSyncOptions(
     state.courses.length > 0 &&
     state.courses.some((c) => Boolean(state.unitInfos[c.id]));
 
+  // Submission status re-checks for fingerprint-hit syncs: a submission or grade release
+  // never changes the course main page, so fingerprint-matched courses must re-verify the
+  // detail pages of their not-yet-settled items (see SyncOptions.statusRecheck). Trackable
+  // = has a detail-page URL; category summary rows (hasSubmissionStatus === false) have no
+  // page to probe and are excluded. The list shrinks as items get graded.
+  const statusRecheck = state.assignments.filter(
+    (a) => a.status !== "graded" && a.hasSubmissionStatus !== false && Boolean(a.url)
+  );
+
   return {
     fullRefresh: false,
     includeFixedTabs: !hasAnyFixedTabs,
@@ -633,5 +676,6 @@ export function getSyncOptions(
     completedAssignmentIds,
     targetCourseIds: targetCourseIds.length > 0 ? targetCourseIds : undefined,
     fingerprints: state.courseFingerprints ?? {},
+    statusRecheck,
   };
 }

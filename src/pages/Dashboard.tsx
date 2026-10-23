@@ -48,7 +48,8 @@ import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
-import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
+import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress, fetchExams } from "../services/api";
+import { ExamCard } from "../components/ExamCard";
 import { batchDownload } from "../services/batchDownload";
 // Reopening the app within this window after the last auto sync renders from local
 // data instead of re-scraping everything (user request: "1 小时内关闭再打开不重新抓取").
@@ -271,6 +272,9 @@ export function Dashboard() {
     setCalendarEvents,
     gradeOverview,
     setGradeOverview,
+    exams,
+    examsFetched,
+    setExams,
     hideCourse,
     unhideCourse,
     togglePinCourse,
@@ -279,7 +283,15 @@ export function Dashboard() {
   const { t, lang } = useTranslation();
 
   // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
-  const onOpenSettings = useCallback(() => setActiveTab("settings"), []);
+  // The event may carry a `detail` field with the target settings section (e.g. "ai").
+  const [initialSettingsSection, setInitialSettingsSection] = useState<string | undefined>(undefined);
+  const onOpenSettings = useCallback((e: Event) => {
+    const section = (e as CustomEvent).detail as string | undefined;
+    if (section) {
+      setInitialSettingsSection(section);
+    }
+    setActiveTab("settings");
+  }, []);
   useEffect(() => {
     window.addEventListener("muster:open-settings", onOpenSettings);
     return () => window.removeEventListener("muster:open-settings", onOpenSettings);
@@ -703,9 +715,15 @@ export function Dashboard() {
 
   // P1: request de-duplication — prevents StrictMode or rapid interactions from triggering multiple syncs
   // Real-time sync progress: backend emits "sync-progress" (done/total/phase) during fetch_all_data
+  // Use a ref to capture progress synchronously — the Tauri event listener is async,
+  // so events fired before the listener resolves would be lost.
+  const syncProgressRef = useRef<{ done: number; total: number; phase: string } | null>(null);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    onSyncProgress((p) => setSyncProgress(p)).then((fn) => {
+    onSyncProgress((p) => {
+      syncProgressRef.current = p;
+      setSyncProgress(p);
+    }).then((fn) => {
       unlisten = fn;
     });
     return () => unlisten?.();
@@ -734,18 +752,34 @@ export function Dashboard() {
         unchangedCourseIds: data.unchangedCourseIds,
         newFingerprints: data.fingerprints,
         requestsUsed: data.requestsUsed,
+        statusUpdates: data.statusUpdates,
         fullRefresh,
       });
       // Stamp the cooldown timestamp only after a successful sync — writing it before
       // meant a failed manual sync would suppress the next launch auto-sync for an hour.
       useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       // Calendar events + grade overview (parallel; failures never block the main flow)
-      const [cal, grades] = await Promise.all([
+      const [cal, grades, examResult] = await Promise.all([
         fetchCalendarEvents().catch(() => [] as CalendarEvent[]),
         fetchGradeOverview().catch(() => [] as GradeOverviewRow[]),
+        // Exams are immutable — only fetch once (examsFetched flag).
+        prevState.examsFetched
+          ? Promise.resolve(null)
+          : fetchExams().then(
+              (data) => ({ success: true as const, data }),
+              (err) => {
+                console.warn("Exam fetch failed:", err);
+                return { success: false as const, error: String(err) };
+              }
+            ),
       ]);
       setCalendarEvents(cal);
       setGradeOverview(grades);
+      if (examResult && examResult.success) {
+        setExams(examResult.data);
+      } else if (examResult && !examResult.success) {
+        console.warn("Exam fetch failed:", examResult.error);
+      }
       // Grade-release reminder: diff against pre-sync overview
       try {
         const stG = prevState.settings;
@@ -978,6 +1012,7 @@ export function Dashboard() {
             unchangedCourseIds: d.unchangedCourseIds,
             newFingerprints: d.fingerprints,
             requestsUsed: d.requestsUsed,
+            statusUpdates: d.statusUpdates,
             fullRefresh: false,
           });
           setIsLoadingCourses(false);
@@ -1170,7 +1205,7 @@ export function Dashboard() {
   // Assignments are prioritized over day-level calendar events to retain exact due times and submission statuses.
 
   const deadlineItems = useMemo(() => {
-    type Item = { key: string; courseId: number | null; kind: "quiz" | "assign"; title: string; ts: number };
+    type Item = { key: string; courseId: number | null; kind: "quiz" | "assign" | "exam"; title: string; ts: number };
     const items: Item[] = [];
 
     // 1. Assignments take HIGHEST precedence: they contain exact due times from course assessment pages,
@@ -1199,6 +1234,20 @@ export function Dashboard() {
       });
     });
 
+    // 3. Exams from my-timetable.monash.edu (immutable, permanently cached).
+    (exams || []).forEach((exam) => {
+      const examDate = new Date(exam.date);
+      const t = examDate.getTime();
+      if (Number.isNaN(t) || t <= 0) return;
+      items.push({
+        key: `exam:${exam.id}`,
+        courseId: exam.courseId ?? null,
+        kind: "exam",
+        title: `${exam.courseCode} ${exam.examType}`,
+        ts: t,
+      });
+    });
+
     const seen = new Set<string>();
     const norm = (s: string) =>
       s.toLowerCase().replace(/\s*(closes|opens|is due|due)\s*$/i, "").trim();
@@ -1212,7 +1261,7 @@ export function Dashboard() {
       return true;
     });
     return out.sort((a, b) => a.ts - b.ts);
-  }, [calendarEvents, assignments, courses, hiddenCourseIds]);
+  }, [calendarEvents, assignments, courses, hiddenCourseIds, exams]);
 
   const dueSoonCount = deadlineItems.filter((d) => {
     const diff = getCalendarDayDiff(d.ts);
@@ -1220,7 +1269,7 @@ export function Dashboard() {
   }).length;
   const gradedCount = (gradeOverview || []).filter((g) => g.grade !== "-").length;
 
-  const renderDeadlineCard = (item: { key: string; courseId: number | null; kind: "quiz" | "assign"; title: string; ts: number }) => {
+  const renderDeadlineCard = (item: { key: string; courseId: number | null; kind: "quiz" | "assign" | "exam"; title: string; ts: number }) => {
     const diff = getCalendarDayDiff(item.ts);
     const isPast = item.ts < Date.now();
     const badge =
@@ -1235,7 +1284,12 @@ export function Dashboard() {
       ) : (
         <Badge variant="secondary">{t("dashboard.dueInDays", { count: diff })}</Badge>
       );
-    const Icon = item.kind === "quiz" ? ClipboardList : FileText;
+    const Icon = item.kind === "quiz" ? ClipboardList : item.kind === "exam" ? CalendarDays : FileText;
+    const iconColor = item.kind === "quiz"
+      ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
+      : item.kind === "exam"
+        ? "bg-red-500/15 text-red-600 dark:text-red-400"
+        : "bg-sky-500/15 text-sky-600 dark:text-sky-400";
     const course = (courses || []).find((cc) => cc.id === item.courseId);
     const courseLabel = course ? `${course.shortName || course.fullName}` : "";
     return (
@@ -1250,7 +1304,7 @@ export function Dashboard() {
           onClick={() => item.courseId != null && setSelectedCourseId(item.courseId)}
         >
           <CardContent className="p-4 flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.kind === "quiz" ? "bg-purple-500/15 text-purple-600 dark:text-purple-400" : "bg-sky-500/15 text-sky-600 dark:text-sky-400"}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconColor}`}>
               <Icon className="w-4 h-4" aria-hidden="true" />
             </div>
             <div className="flex-1 min-w-0">
@@ -1622,7 +1676,13 @@ export function Dashboard() {
   if (activeTab === "settings") {
     return (
       <Suspense fallback={<PageLoading />}>
-        <SettingsPage onBack={() => setActiveTab("home")} />
+        <SettingsPage
+          onBack={() => {
+            setInitialSettingsSection(undefined);
+            setActiveTab("home");
+          }}
+          initialSection={initialSettingsSection}
+        />
       </Suspense>
     );
   }
@@ -2117,6 +2177,25 @@ export function Dashboard() {
                     })
                     .slice(0, 6)
                     .map(renderDeadlineCard)}
+                </div>
+              )}
+
+              {/* Exam timetable */}
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-foreground">{t("dashboard.examsTitle")}</h3>
+                <span className="text-xs text-muted-foreground">{t("dashboard.examsSubtitle")}</span>
+              </div>
+              {exams.length === 0 ? (
+                <div className="mb-6 p-6 rounded-2xl bg-card border border-border text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {examsFetched ? t("dashboard.examsEmpty") : t("dashboard.examsLoading")}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6" role="list" aria-label={t("dashboard.examsTitle")}>
+                  {exams.map((exam) => (
+                    <ExamCard key={exam.id} exam={exam} />
+                  ))}
                 </div>
               )}
 

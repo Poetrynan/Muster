@@ -92,7 +92,7 @@ pub struct Assignment {
     pub has_submission_status: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AssignmentStatus {
     #[serde(rename = "pending")]
     Pending,
@@ -104,7 +104,7 @@ pub enum AssignmentStatus {
     Upcoming,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AssessmentType {
     #[serde(rename = "assignment")]
     Assignment,
@@ -347,6 +347,28 @@ pub struct GradeOverviewRow {
     pub grade: String,
 }
 
+/// Exam schedule entry from my-timetable.monash.edu.
+/// Exams are immutable — once fetched, they are permanently cached and never re-scraped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExamSchedule {
+    pub id: String,
+    pub course_id: Option<u64>,
+    pub course_name: String,
+    pub course_code: String,
+    /// Exam type: "Final", "Supplementary", etc.
+    pub exam_type: String,
+    /// ISO date string (YYYY-MM-DD).
+    pub date: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub location: String,
+    pub seat_number: Option<String>,
+    pub duration_minutes: Option<u32>,
+    pub instructions: Option<String>,
+    pub url: Option<String>,
+}
+
 
 /// All tab data of one course, aggregated by the background pre-fetch (part of the full
 /// sync) so the course detail page can render every tab instantly from cache — Unit
@@ -395,6 +417,15 @@ pub struct SyncOptions {
     /// + recordings). Absent → the course is always treated as changed.
     #[serde(default)]
     pub fingerprints: HashMap<u64, String>,
+    /// Cached assessment items the client wants re-verified on fingerprint hits.
+    ///
+    /// Submission state lives on each item's detail page + the gradebook, which the
+    /// main-page probe cannot see: without this, a submission made after the last
+    /// sync is frozen behind the fingerprint skip (user report: submitted work kept
+    /// showing "pending" no matter how often they synced). Only not-yet-graded,
+    /// trackable (has URL) items are sent; the backend re-probes their detail pages.
+    #[serde(default)]
+    pub status_recheck: Vec<Assignment>,
 }
 
 impl Default for SyncOptions {
@@ -406,6 +437,7 @@ impl Default for SyncOptions {
             completed_assignment_ids: Vec::new(),
             target_course_ids: None,
             fingerprints: HashMap::new(),
+            status_recheck: Vec::new(),
         }
     }
 }
@@ -428,5 +460,10 @@ pub struct SyncResult {
     /// Exact number of Moodle requests this sync consumed (global gate counter
     /// delta) — the baseline metric for the fingerprint-sync design.
     pub requests_used: u64,
+    /// Assessment items whose live status/grade differs from the client's cached
+    /// copy, discovered by re-probing detail pages on fingerprint-hit courses
+    /// (see `SyncOptions.status_recheck`). The client merges them by courseId+id.
+    #[serde(default)]
+    pub status_updates: Vec<Assignment>,
 }
 

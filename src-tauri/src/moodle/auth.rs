@@ -559,39 +559,58 @@ impl MoodleAuth {
             return Ok(SessionInfo { logged_in: false, user: None });
         }
 
-        // Fast path: Immediately set auth state and initialize scraper instance
+        // Verify session BEFORE returning to the frontend. The old fast-path
+        // returned `logged_in: true` immediately and verified in the background,
+        // which meant an expired session still rendered the Dashboard for a few
+        // seconds before the `session-expired` event fired.
+        let client = match Self::create_client_with_session(&session) {
+            Ok(c) => c,
+            Err(_) => return Ok(SessionInfo { logged_in: false, user: None }),
+        };
+
+        let is_valid = match client
+            .get(MY_COURSES_URL)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let final_url = resp.url().as_str().to_string();
+                !is_logged_out_url(&final_url)
+            }
+            Err(_) => {
+                // Network error — offline mode fallback, consider session valid
+                true
+            }
+        };
+
+        if !is_valid {
+            println!("load_saved_session: session expired on startup, purging");
+            // Purge the expired session
+            if let Ok(entry) = Self::get_keyring_entry() {
+                let _ = entry.delete_password();
+            }
+            if self.session_path.exists() {
+                let _ = fs::remove_file(&self.session_path);
+            }
+            return Ok(SessionInfo { logged_in: false, user: None });
+        }
+
+        // Session is valid — set auth state and initialize scraper
         {
             let mut is_logged_in = self.is_logged_in.lock().await;
             *is_logged_in = true;
         }
-
         {
             let mut session_guard = self.session.lock().await;
             *session_guard = Some(session.clone());
         }
-
         {
             let mut scraper_guard = scraper.lock().await;
             *scraper_guard = Some(MoodleScraper::new(Arc::new(self.clone())));
         }
 
-        // Background verification: Spawn asynchronous un-awaited Tokio task
-        let auth_clone = self.clone();
-        let session_clone = session.clone();
-        let scraper_clone = scraper.clone();
-        tokio::spawn(async move {
-            auth_clone
-                .verify_session_background(session_clone, app_handle, scraper_clone)
-                .await;
-        });
-
-        // Repopulate the user object from the restored session so the frontend
-        // does not fall back to the persisted placeholder on restart. Network
-        // failure here must NOT fail the restore — degrade to `user: None`.
-        let client = match Self::create_client_with_session(&session) {
-            Ok(c) => c,
-            Err(_) => return Ok(SessionInfo { logged_in: true, user: None }),
-        };
+        // Repopulate the user object from the restored session
         let user = self.fetch_user_info_with_client(&client).await.ok();
 
         Ok(SessionInfo { logged_in: true, user })

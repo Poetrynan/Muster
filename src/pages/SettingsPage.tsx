@@ -48,6 +48,7 @@ import { getDesktopPlatform } from "../lib/utils";
 
 interface SettingsPageProps {
   onBack: () => void;
+  initialSection?: string;
 }
 
 type SettingsSection = "account" | "appearance" | "notifications" | "ai" | "sync" | "feedback" | "about";
@@ -85,8 +86,10 @@ function formatAiError(
   return { friendly: t("settings.ai.errUnknown"), raw: message };
 }
 
-export function SettingsPage({ onBack }: SettingsPageProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("account");
+export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
+  const [activeSection, setActiveSection] = useState<SettingsSection>(
+    (initialSection as SettingsSection) || "account"
+  );
   const { user, settings, updateSettings, updateAllSyncedData, setSyncStatus, syncStatus, courses, unhideCourse } = useAppStore();
   const { t } = useTranslation();
 
@@ -160,6 +163,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         unchangedCourseIds: data.unchangedCourseIds,
         newFingerprints: data.fingerprints,
         requestsUsed: data.requestsUsed,
+        statusUpdates: data.statusUpdates,
         fullRefresh,
       });
       // Stamp the cooldown timestamp only after a successful sync, so a failed one

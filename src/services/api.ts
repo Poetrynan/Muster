@@ -518,6 +518,23 @@ export interface GradeEntry {
   url?: string | null;
 }
 
+/** Exam schedule entry from my-timetable.monash.edu. */
+export interface ExamSchedule {
+  id: string;
+  courseId?: number;
+  courseName: string;
+  courseCode: string;
+  examType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  seatNumber?: string;
+  durationMinutes?: number;
+  instructions?: string;
+  url?: string;
+}
+
 export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   const invoke = getInvoke();
   if (invoke) {
@@ -554,6 +571,16 @@ export async function fetchUnitDashboard(courseId: number): Promise<UnitDashboar
   return invoke<UnitDashboard>("fetch_course_unit_dashboard", { courseId });
 }
 
+/// Fetch exam schedule from my-timetable.monash.edu.
+/// Returns all exams for the current semester.
+export async function fetchExams(): Promise<ExamSchedule[]> {
+  const invoke = getInvoke();
+  if (invoke) {
+    return invoke<ExamSchedule[]>("fetch_exams");
+  }
+  return [];
+}
+
 /**
  * Full sync (called on every login / launch).
  */
@@ -571,6 +598,11 @@ export interface SyncOptions {
   /** Per-course fingerprints from the previous sync (course main-page probe). A course whose
    *  probed fingerprint matches is skipped entirely except announcements + recordings. */
   fingerprints?: Record<number, string>;
+  /** Cached assessment items the backend should re-verify on fingerprint hits: submission
+   *  state lives on each item's detail page (invisible to the main-page probe), so without
+   *  this a submission made after the last sync stays frozen at "pending". Only send
+   *  trackable (has URL) not-yet-graded items — the list shrinks as items settle. */
+  statusRecheck?: Assignment[];
 }
 
 /** Result of sync_all — carries the fetched data plus fingerprint bookkeeping. */
@@ -586,6 +618,9 @@ export interface SyncResult {
   fingerprints: Record<number, string>;
   /** Exact number of Moodle requests this sync consumed (baseline metric). */
   requestsUsed: number;
+  /** Assessment items whose live status/grade differs from the cached copy, re-verified
+   *  on fingerprint-hit courses (see SyncOptions.statusRecheck). Merge by courseId+id. */
+  statusUpdates: Assignment[];
 }
 
 /**
@@ -642,6 +677,7 @@ export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean =
     tabs: [],
     unchangedCourseIds: [],
     fingerprints: {},
+    statusUpdates: [],
     requestsUsed: 0,
   };
 }
