@@ -1121,7 +1121,7 @@ impl MoodleScraper {
         let results: Vec<(u64, String, Result<String, String>)> =
             futures_util::stream::iter(fetches).buffered(8).collect().await;
 
-        let mut updated = Vec::new();
+        let mut checked = targets.clone();
         for (id, name, res) in results {
             let Ok(html) = res else {
                 eprintln!(
@@ -1130,7 +1130,7 @@ impl MoodleScraper {
                 );
                 continue;
             };
-            let a = targets.iter().find(|a| a.id == id).expect("target id present");
+            let a = checked.iter_mut().find(|a| a.id == id).expect("target id present");
             let mut new_status = a.status.clone();
             let mut new_grade = a.grade.clone();
             match a.assessment_type {
@@ -1157,17 +1157,27 @@ impl MoodleScraper {
                     }
                 }
             }
-            // Only report actual changes: the client merges these verbatim, and a
-            // failed/ambiguous parse must never downgrade a cached status.
+            // A failed/ambiguous parse keeps the cached value (never downgrades).
             if new_status != a.status || new_grade != a.grade {
-                let mut item = a.clone();
-                item.status = new_status;
-                item.grade = new_grade;
-                item.has_submission_status = true;
-                updated.push(item);
+                a.status = new_status;
+                a.grade = new_grade;
+                a.has_submission_status = true;
             }
         }
-        updated
+
+        // One gradebook request per course: a grade released there (detail page may hide
+        // it) marks the item Graded, and its range gives the maximum for bare scores.
+        if let Ok(gradebook) = self.fetch_course_gradebook(course_id).await {
+            apply_gradebook(&mut checked, &gradebook);
+        }
+
+        // Only report actual changes: the client merges these verbatim.
+        checked
+            .into_iter()
+            .zip(targets.iter())
+            .filter(|(new, old)| new.status != old.status || new.grade != old.grade || new.grade_max != old.grade_max)
+            .map(|(new, _)| new)
+            .collect()
     }
 
     /// Best-effort enrichment of assessment submission state.
@@ -1259,55 +1269,7 @@ impl MoodleScraper {
 
         // ---- 2) gradebook: a real grade => Graded (overrides Submitted) ----
         if let Ok(gradebook) = self.fetch_course_gradebook(course_id).await {
-            // Normalize an activity name for fuzzy matching (strip weight like "(35%)",
-            // collapse whitespace) so gradebook entries without a direct cmid link can
-            // still be paired with the corresponding assignment.
-            let norm = |s: &str| -> String {
-                s.to_lowercase()
-                    .replace(|c: char| c.is_whitespace(), " ")
-                    .replace("  ", " ")
-                    .trim()
-                    .to_string()
-            };
-            let normalize_for_match = |s: &str| -> String {
-                use regex::Regex;
-                let re = Regex::new(r"\(\s*\d+(?:\.\d+)?\s*%\s*\)").unwrap();
-                let stripped = re.replace_all(s, "").to_string();
-                norm(&stripped)
-            };
-
-            for a in assignments.iter_mut() {
-                // 2a) Primary match: direct cmid from the gradebook entry URL
-                let by_cmid = gradebook
-                    .iter()
-                    .find(|e| cmid_from_url(e.url.as_deref()) == Some(a.id));
-                // 2b) Fallback: fuzzy name match (weight % stripped) for entries without a URL
-                let entry = by_cmid.or_else(|| {
-                    let target = normalize_for_match(&a.name);
-                    gradebook.iter().find(|e| {
-                        !target.is_empty()
-                            && normalize_for_match(&e.item) == target
-                    })
-                });
-                let Some(entry) = entry else { continue };
-
-                // Keep the maximum so the grade breakdown can turn a bare score into a %.
-                if let Some(max) = entry.range.as_deref().and_then(parse_range_max) {
-                    a.grade_max = Some(max);
-                }
-
-                if let Some(g) = entry.grade.as_deref() {
-                    let g = g.trim();
-                    if !g.is_empty() && g != "-" {
-                        a.status = AssignmentStatus::Graded;
-                        // Keep the richer "X / Y" format from the detail page when
-                        // available; fall back to the gradebook raw score otherwise.
-                        if a.grade.is_none() {
-                            a.grade = Some(g.to_string());
-                        }
-                    }
-                }
-            }
+            apply_gradebook(assignments, &gradebook);
         }
     }
 
@@ -2935,6 +2897,11 @@ impl MoodleScraper {
 
         parts.sort();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        // Parser schema version: bump whenever the cached assessment/resource shape gains
+        // fields. Old fingerprints then miss once, so every course is re-parsed after an
+        // upgrade instead of serving cached rows without the new fields (v0.4.0: grade
+        // breakdown needs is_category / category_id / grade_max).
+        ASSESSMENT_SCHEMA_VERSION.hash(&mut hasher);
         for p in &parts {
             p.hash(&mut hasher);
         }
@@ -4594,6 +4561,39 @@ impl Default for MoodleScraper {
 }
 
 /// Extract the numeric ID from a Moodle URL.
+/// Apply the course gradebook to assessment items: a real grade marks the item Graded
+/// (the gradebook is authoritative even when the detail page hides the score), and the
+/// range maximum is kept so a bare score can be turned into a percentage.
+/// Matching: cmid from the gradebook link, else the name with "(35%)" weights stripped.
+pub(crate) fn apply_gradebook(assignments: &mut [Assignment], gradebook: &[GradeEntry]) {
+    let weight_re = regex::Regex::new(r"\(\s*\d+(?:\.\d+)?\s*%\s*\)").unwrap();
+    let normalize = |s: &str| -> String {
+        weight_re.replace_all(s, "").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+    };
+    for a in assignments.iter_mut().filter(|a| !a.is_category) {
+        let by_cmid = gradebook.iter().find(|e| cmid_from_url(e.url.as_deref()) == Some(a.id));
+        let entry = by_cmid.or_else(|| {
+            let target = normalize(&a.name);
+            gradebook.iter().find(|e| !target.is_empty() && normalize(&e.item) == target)
+        });
+        let Some(entry) = entry else { continue };
+
+        if let Some(max) = entry.range.as_deref().and_then(parse_range_max) {
+            a.grade_max = Some(max);
+        }
+        if let Some(g) = entry.grade.as_deref().map(str::trim).filter(|g| !g.is_empty() && *g != "-") {
+            a.status = AssignmentStatus::Graded;
+            // Keep the richer "X / Y" from the detail page when available.
+            if a.grade.is_none() {
+                a.grade = Some(g.to_string());
+            }
+        }
+    }
+}
+
+/// Version of the cached assessment shape, mixed into every course fingerprint.
+const ASSESSMENT_SCHEMA_VERSION: u32 = 2;
+
 /// Upper bound of a gradebook range: "0–13", "0-100", "0.00–25.00" -> 13 / 100 / 25.
 fn parse_range_max(range: &str) -> Option<f64> {
     let re = regex::Regex::new(r"(\d+(?:\.\d+)?)\s*$").ok()?;
@@ -5813,6 +5813,39 @@ mod tests {
         }
         let weighted: f64 = items.iter().filter(|a| a.is_category).filter_map(|a| a.category_weight).sum();
         assert_eq!(weighted, 100.0);
+    }
+
+    // A grade released only in the gradebook (detail page hides it) must still mark the
+    // item Graded and record the maximum; category rows are never matched.
+    #[test]
+    fn gradebook_marks_graded_and_keeps_range_max() {
+        use crate::moodle::models::{Assignment, AssessmentType, AssignmentStatus, GradeEntry};
+        let item = |id: u64, name: &str, status: AssignmentStatus, grade: Option<&str>, is_category: bool| Assignment {
+            id, name: name.into(), course_id: 1, due_date: None, due_date_iso: None, status, grade: grade.map(Into::into),
+            url: None, assessment_type: AssessmentType::Assignment, weight: Some(40.0), category: None,
+            has_submission_status: true, is_category, category_weight: Some(40.0), category_id: Some(57), grade_max: None,
+        };
+        let entry = |name: &str, url: Option<&str>, grade: &str, range: &str| GradeEntry {
+            course_id: 1, item: name.into(), grade: Some(grade.into()), range: Some(range.into()), feedback: None, url: url.map(Into::into),
+        };
+        let mut items = vec![
+            item(57, "1. Exercise", AssignmentStatus::Pending, None, true),
+            item(6121001, "Chapter 4", AssignmentStatus::Submitted, None, false),
+            item(6121002, "Workshop Quiz - Week 7  (Malaysia)", AssignmentStatus::Graded, Some("4.00 / 4.00"), false),
+            item(6121003, "Test 1 (18%)", AssignmentStatus::Graded, Some("15.90"), false),
+        ];
+        let gradebook = vec![
+            entry("Chapter 4", Some("https://learning.monash.edu/mod/assign/view.php?id=6121001"), "7.00", "0–12"),
+            entry("Workshop Quiz - Week 7 (Malaysia)", None, "4.00", "0–4"),
+            entry("Test 1", None, "15.90", "0–18"),
+            entry("Exercise", None, "30.00", "0–40"),
+        ];
+        super::apply_gradebook(&mut items, &gradebook);
+        assert_eq!(items[0].status, AssignmentStatus::Pending, "category rows are not gradebook items");
+        assert_eq!(items[0].grade_max, None);
+        assert_eq!((items[1].status.clone(), items[1].grade.as_deref(), items[1].grade_max), (AssignmentStatus::Graded, Some("7.00"), Some(12.0)));
+        assert_eq!((items[2].grade.as_deref(), items[2].grade_max), (Some("4.00 / 4.00"), Some(4.0)), "richer detail-page grade is kept");
+        assert_eq!(items[3].grade_max, Some(18.0), "weight suffix stripped for name matching");
     }
 
     #[test]

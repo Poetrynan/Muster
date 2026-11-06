@@ -82,6 +82,87 @@ describe("FIT5122: Exercise 40% (10 items), Demonstration 25%, Project 35%, unwe
   });
 });
 
+describe("caches synced before v0.4 (no isCategory / categoryId / gradeMax)", () => {
+  // Shape of the real cached rows: category rows have no url and a "N. " prefix; children
+  // inherit the full category weight; names repeat. Scores are made up.
+  const legacy = (name: string, weight: number | undefined, category: string, status: Assignment["status"], grade?: string, url = true): Assignment => ({
+    id: nextId++, name, courseId: 1, status, grade, weight, category, url: url ? "https://x/mod/assign/view.php?id=9" : undefined,
+  });
+  it("FIT5222: keeps the two 'Project' and two 'Quiz / Test' categories apart by order", () => {
+    const g = buildCourseGrade([
+      legacy("1. Project", 32, "Project", "pending", undefined, false),
+      legacy("Warm-up", 32, "Project", "pending"), legacy("Challenge", 32, "Project", "graded", "50.00 / 100.00"),
+      legacy("2. Project", 32, "Project", "pending", undefined, false),
+      legacy("Group project (Weight: 32%)", 32, "Project", "submitted"), legacy("Presentation", 32, "Project", "pending"),
+      legacy("3. Quiz / Test", 18, "Quiz / Test", "pending", undefined, false),
+      legacy("Test 1 (18%)", 18, "Quiz / Test", "graded", "12.00"),
+      legacy("4. Quiz / Test", 18, "Quiz / Test", "pending", undefined, false),
+      legacy("Test 2 (18%)", 18, "Quiz / Test", "graded", "15.00"),
+    ]);
+    expect(g.categories.map((c) => [c.name, c.weight, c.items.length])).toEqual([
+      ["Project", 32, 2], ["Project", 32, 2], ["Quiz / Test", 18, 1], ["Quiz / Test", 18, 1],
+    ]);
+    expect(g.totalWeight).toBe(100);
+    expect(g.earned).toBeCloseTo(8); // 16% share × 50%
+    // Bare test scores without a known maximum stay "hidden" until a resync fills gradeMax.
+    expect(g.hiddenWeight).toBe(36);
+  });
+  it("FIT5201: A1 and A2 stay in their own 'Artefact' categories", () => {
+    const g = buildCourseGrade([
+      legacy("2. Artefact", 25, "Artefact", "pending", undefined, false),
+      legacy("Assignment 1", 25, "Artefact", "graded", "80.00 / 100.00"),
+      legacy("3. Artefact", 16, "Artefact", "pending", undefined, false),
+      legacy("Assessment 2", 16, "Artefact", "submitted"),
+    ]);
+    expect(g.categories.map((c) => [c.weight, c.items.map((i) => i.name)])).toEqual([[25, ["Assignment 1"]], [16, ["Assessment 2"]]]);
+    expect(g.earned).toBeCloseTo(20);
+    expect(g.pendingWeight).toBeCloseTo(16);
+  });
+  it("FIT5122: the unnumbered, unweighted supplementary row doesn't join 'Project'", () => {
+    const g = buildCourseGrade([
+      legacy("3. Project", 35, "Project", "pending", undefined, false),
+      legacy("Business Report", 35, "Project", "submitted"), legacy("Professional Conversation", 35, "Project", "pending"),
+      { id: nextId++, name: "Supplementary assessment", courseId: 1, status: "pending" },
+    ]);
+    expect(g.categories.map((c) => [c.name, c.items.length])).toEqual([["Project", 2]]);
+    expect(g.categories[0].items[0].share).toBe(17.5);
+  });
+});
+
+describe("Master thesis: five copies of the structure, weights in item names", () => {
+  const named = (categoryId: number, name: string, weight: number, status: Assignment["status"], grade?: string, gradeMax?: number): Assignment => ({
+    ...item(categoryId, weight, status, grade, gradeMax), name,
+  });
+  const rows: Assignment[] = [
+    cat(26, "1. Demonstration", "Demonstration", 15),
+    named(26, "Literature Review + Proposal Submission (15%)", 15, "graded", "80.00", 100),
+    named(26, "Interim Presentation Video File Submission (Part One)", 15, "submitted"),
+    named(26, "Interim Presentation Discussion Forum (Part Two)", 15, "pending"),
+    cat(27, "2. Written", "Written", 80),
+    named(27, "Final Thesis Paper (80%)", 80, "submitted"),
+    cat(28, "3. Artefact", "Artefact", 5),
+    named(28, "Final Presentation Video Submission (5%)", 5, "pending"),
+    // The page repeats the category set four more times with no items under them.
+    ...[29, 32, 35, 38].flatMap((id) => [cat(id, "1. Artefact", "Artefact", 15), cat(id + 1, "2. Presentation", "Presentation", 5), cat(id + 2, "3. Written", "Written", 80)]),
+  ];
+  const g = buildCourseGrade(rows);
+
+  it("drops the empty duplicate structures instead of totalling 500%", () => {
+    expect(g.categories.map((c) => [c.name, c.weight])).toEqual([["Demonstration", 15], ["Written", 80], ["Artefact", 5]]);
+    expect(g.totalWeight).toBe(100);
+    expect(g.weightsComplete).toBe(true);
+  });
+  it("uses the weight stated in an item's name", () => {
+    expect(g.categories[0].items.map((i) => i.share)).toEqual([15, 0, 0]);
+    expect(g.earned).toBeCloseTo(12);
+    expect(g.pendingWeight).toBeCloseTo(85);
+  });
+  it("falls back to an equal split when stated weights exceed the category", () => {
+    const odd = buildCourseGrade([cat(1, "1. A", "A", 10), named(1, "Part (8%)", 10, "pending"), named(1, "Part (7%)", 10, "pending")]);
+    expect(odd.categories[0].items.map((i) => i.share)).toEqual([5, 5]);
+  });
+});
+
 describe("edge cases", () => {
   it("keeps graded-but-hidden scores out of both earned and remaining", () => {
     const g = buildCourseGrade([cat(1, "1. Essay", "Essay", 60), item(1, 60, "graded"), cat(2, "2. Exam", "Exam", 40)]);

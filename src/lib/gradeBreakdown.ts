@@ -67,9 +67,36 @@ export function parseScorePercent(grade: string | undefined, max?: number): numb
   return null;
 }
 
-/** Category rows synced before `isCategory` existed look like "1. Quiz / Test" with no link. */
-function isCategoryRow(a: Assignment): boolean {
-  return a.isCategory ?? (!a.url && a.weight != null && /^\d+\.\s/.test(a.name));
+/** Rows synced before `isCategory` existed: a widget page has "1. Quiz / Test"-style rows. */
+const looksLikeWidget = (rows: Assignment[]) => rows.some((a) => a.isCategory || (!a.url && /^\d+\.\s/.test(a.name)));
+
+/**
+ * On widget pages every linkless row is a category: the parser only keeps items that
+ * carry an activity link. This also catches unnumbered, unweighted rows such as
+ * FIT5122's "Supplementary assessment", which would otherwise join the previous category.
+ */
+function isCategoryRow(a: Assignment, widget: boolean): boolean {
+  return a.isCategory ?? (widget && !a.url);
+}
+
+/** Weight written in an item's own name: "Final Thesis Paper (80%)", "Too Many Chefs (Weight: 32%)". */
+function statedWeight(name: string): number | null {
+  const m = name.match(/\((?:weight(?:ing)?\s*:?\s*)?(\d+(?:\.\d+)?)\s*%\)/i);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Split a category's weight across its items: an item that states its own weight in its
+ * name keeps it, and the rest is shared equally by the others. Inconsistent data (stated
+ * weights exceeding the category) falls back to an equal split.
+ */
+function shares(items: Assignment[], weight: number): number[] {
+  const stated = items.map((a) => statedWeight(a.name));
+  const statedTotal = stated.reduce<number>((t, w) => t + (w ?? 0), 0);
+  const unstated = stated.filter((w) => w == null).length;
+  if (statedTotal === 0 || statedTotal > weight + 0.01) return items.map(() => weight / items.length);
+  const rest = unstated > 0 ? (weight - statedTotal) / unstated : 0;
+  return stated.map((w) => w ?? rest);
 }
 
 const keyOf = (a: Assignment) => (a.categoryId != null ? `id:${a.categoryId}` : `name:${(a.category ?? "").toLowerCase()}`);
@@ -88,18 +115,35 @@ function category(key: string, name: string, weight: number, items: ItemScore[])
 
 /** Build the per-category breakdown and pass outlook for one course's assessments. */
 export function buildCourseGrade(assessments: Assignment[]): CourseGrade {
-  const cats = assessments.filter(isCategoryRow);
+  const widget = looksLikeWidget(assessments);
+  const isCat = (a: Assignment) => isCategoryRow(a, widget);
+  const cats = assessments.filter(isCat);
   const categories: CategoryScore[] = [];
 
   if (cats.length > 0) {
+    // Owner of each item: its categoryId (synced by v0.4+), else the nearest preceding
+    // category row — the widget lists each category's items right after it. Names alone
+    // can't be used: FIT5201 has two "Artefact" rows, FIT5222 two "Project" rows.
+    const catKey = new Map<Assignment, string>();
+    const owner = new Map<Assignment, string>();
+    let current: string | undefined;
+    assessments.forEach((a, i) => {
+      if (isCat(a)) {
+        current = a.categoryId != null ? `id:${a.categoryId}` : `row:${i}`;
+        catKey.set(a, current);
+      } else {
+        owner.set(a, a.categoryId != null ? `id:${a.categoryId}` : current ?? keyOf(a));
+      }
+    });
     // Widget pages: category weight is authoritative and split equally across its items.
     for (const cat of cats) {
       const weight = cat.categoryWeight ?? cat.weight ?? 0;
       if (!(weight > 0)) continue; // e.g. "Supplementary assessment"
-      const key = cat.categoryId != null ? `id:${cat.categoryId}` : keyOf(cat);
-      const children = assessments.filter((a) => !isCategoryRow(a) && keyOf(a) === key);
+      const key = catKey.get(cat)!;
+      const children = assessments.filter((a) => owner.get(a) === key);
+      const split = shares(children, weight);
       const items = children.length
-        ? children.map((a) => scoreItem(a, weight / children.length))
+        ? children.map((a, i) => scoreItem(a, split[i]))
         // Not yet published (typically the final exam): the whole category is still to come.
         : [{ id: cat.id, name: cat.name, share: weight, percent: null, state: "pending" as const, placeholder: true }];
       categories.push(category(key, (cat.category ?? cat.name).trim(), weight, items));
@@ -116,6 +160,15 @@ export function buildCourseGrade(assessments: Assignment[]): CourseGrade {
       const items = list.map((a) => scoreItem(a, a.weight!));
       categories.push(category(`name:${name.toLowerCase()}`, name, items.reduce((t, i) => t + i.share, 0), items));
     }
+  }
+
+  // Some pages carry several assessment structures — the Master thesis lists five sets of
+  // the same three categories (500% in total) but only one set holds items. Over 100%,
+  // keep the categories that actually hold items (an empty exam category in a page that
+  // sums to 100% is kept as "still to come").
+  if (categories.reduce((t, c) => t + c.weight, 0) > 100.5) {
+    const populated = categories.filter((c) => !c.items[0]?.placeholder);
+    if (populated.length) categories.splice(0, categories.length, ...populated);
   }
 
   const total = (f: (c: CategoryScore) => number) => categories.reduce((t, c) => t + f(c), 0);

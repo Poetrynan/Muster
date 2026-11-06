@@ -44,12 +44,39 @@ export function GradeBar({ grade, label }: { grade: CourseGrade; label: string }
   return (
     <div className="relative h-2 w-full rounded-full bg-secondary overflow-visible" role="img" aria-label={label}>
       <div className="absolute inset-0 flex rounded-full overflow-hidden">
-        <div className="h-full bg-primary" style={{ width: pct(grade.earned) }} />
-        <div className="h-full bg-muted-foreground/25" style={{ width: pct(lost) }} />
-        <div className="h-full bg-amber-500/30" style={{ width: pct(grade.hiddenWeight) }} />
+        <div className={`h-full ${SEGMENTS[0].swatch}`} style={{ width: pct(grade.earned) }} />
+        <div className={`h-full ${SEGMENTS[1].swatch}`} style={{ width: pct(lost) }} />
+        <div className={`h-full ${SEGMENTS[2].swatch}`} style={{ width: pct(grade.hiddenWeight) }} />
       </div>
       <div className="absolute -top-1 -bottom-1 w-px bg-foreground/60" style={{ left: pct(PASS_MARK) }} aria-hidden="true" />
     </div>
+  );
+}
+
+// Shared with GradeBar so the legend swatches always match the bar segments.
+const SEGMENTS = [
+  { key: "grades.legendEarned", swatch: "bg-primary" },
+  { key: "grades.legendLost", swatch: "bg-muted-foreground/25" },
+  { key: "grades.legendHidden", swatch: "bg-amber-500/30" },
+  { key: "grades.legendRemaining", swatch: "bg-secondary ring-1 ring-inset ring-border" },
+] as const;
+
+/** Key for the bar colours and the pass-mark tick. */
+export function GradeLegend({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <ul className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground ${className}`} aria-label={t("grades.breakdownTitle")}>
+      {SEGMENTS.map((s) => (
+        <li key={s.key} className="inline-flex items-center gap-1.5">
+          <span className={`inline-block h-2 w-4 rounded-full ${s.swatch}`} aria-hidden="true" />
+          {t(s.key)}
+        </li>
+      ))}
+      <li className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-3 w-px bg-foreground/60" aria-hidden="true" />
+        {t("grades.legendPass", { mark: PASS_MARK })}
+      </li>
+    </ul>
   );
 }
 
@@ -138,6 +165,7 @@ export function GradeBreakdownPanel({ grade }: { grade: CourseGrade }) {
           {t("grades.earned", { earned: fmtPoints(grade.earned), graded: fmtPoints(grade.gradedWeight + grade.hiddenWeight) })}
         </p>
         <GradeBar grade={grade} label={outlook} />
+        <GradeLegend />
         <p className={`text-sm ${OUTCOME_TONE[grade.outcome]}`} role="status">{outlook}</p>
         {grade.hiddenWeight > 0 && (
           <p className="text-xs text-muted-foreground">{t("grades.hidden", { hidden: fmtPoints(grade.hiddenWeight) })}</p>

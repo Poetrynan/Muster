@@ -1,6 +1,6 @@
 import { refreshExamSchedule, examErrorKey } from "../services/examSchedule";
-import { buildCourseGrade, PASS_MARK } from "../lib/gradeBreakdown";
-import { CourseGradeRow } from "../components/GradeBreakdown";
+import { buildCourseGrade } from "../lib/gradeBreakdown";
+import { CourseGradeRow, GradeLegend } from "../components/GradeBreakdown";
 import {
   BookOpen,
   Calendar,
@@ -2232,8 +2232,8 @@ export function Dashboard() {
               {/* Grades progress */}
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-foreground">{t("dashboard.gradesProgress")}</h3>
-                <span className="text-sm text-muted-foreground">{t("grades.passMark", { mark: PASS_MARK })}</span>
               </div>
+              {courseGrades.length > 0 && <GradeLegend className="mb-3" />}
               {courseGrades.length === 0 ? (
                 <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
                   <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
@@ -2247,7 +2247,8 @@ export function Dashboard() {
                     <div key={course.id} role="listitem">
                       <CourseGradeRow
                         code={course.code}
-                        name={course.name}
+                        // Two thesis enrolments share a name; the term tells them apart.
+                        name={course.term && courseGrades.filter((x) => x.course.name === course.name).length > 1 ? `${course.name} (${course.term})` : course.name}
                         grade={grade}
                         onOpen={() => { setSelectedCourseTab("assignments"); setSelectedCourseId(course.id); }}
                       />
