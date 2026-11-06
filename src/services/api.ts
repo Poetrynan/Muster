@@ -65,6 +65,14 @@ export interface Assignment {
   category?: string;
   /** Whether a submission status exists ("-" / empty = untrackable, excluded from the progress denominator) */
   hasSubmissionStatus?: boolean;
+  /** Category row of the Assessments widget ("1. Quiz / Test  9%"), not a gradable item. */
+  isCategory?: boolean;
+  /** Weight of the whole category; children inherit it in `weight`, so it must be split, not summed. */
+  categoryWeight?: number;
+  /** Id of the owning category row. Category names repeat (FIT5201: two "Artefact" rows). */
+  categoryId?: number;
+  /** Max score from the gradebook range, to convert a bare score into a percentage. */
+  gradeMax?: number;
 }
 
 /** Unit handbook (Unit Information section, `&section=1`). Structures MST's CMS blocks into individual sections. */

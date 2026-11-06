@@ -90,6 +90,24 @@ pub struct Assignment {
     /// false = no submission entry / not trackable; excluded from the frontend progress denominator.
     #[serde(default)]
     pub has_submission_status: bool,
+    /// True for an assessment *category* row of the Assessments widget
+    /// ("1. Quiz / Test  9%"); its children carry `category_weight` instead.
+    #[serde(default)]
+    pub is_category: bool,
+    /// Weight of the whole category this item belongs to (widget pages only). Children
+    /// inherit the full category weight in `weight`, so the grade breakdown must split
+    /// this across the category's items rather than summing `weight`.
+    #[serde(default)]
+    pub category_weight: Option<f64>,
+    /// Id of the category row this item belongs to (the row's `data-section`; equals
+    /// `id` on the category row itself). Category *names* can repeat — FIT5201 has
+    /// "2. Artefact 25%" and "3. Artefact 16%" — so grouping must use this id.
+    #[serde(default)]
+    pub category_id: Option<u64>,
+    /// Maximum score from the gradebook range ("0–13" -> 13), so a bare score can be
+    /// converted to a percentage.
+    #[serde(default)]
+    pub grade_max: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

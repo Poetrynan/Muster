@@ -876,6 +876,10 @@ impl MoodleScraper {
                     weight,
                     category: category_opt.clone(),
                     has_submission_status: false,
+                    is_category: true,
+                    category_weight: weight,
+                    category_id: section_no,
+                    grade_max: None,
                 });
 
                 // ---- Child rows: **push down** the category weight to every individual assignment/quiz under it ----
@@ -898,6 +902,9 @@ impl MoodleScraper {
                 let Some(list) = document.select(&list_sel).next() else { continue };
 
                 for child in list.select(child_row_sel) {
+                    // Unlinked rows (plain `.name-column`, e.g. FIT5122's "… - Alternative") are
+                    // restricted to other cohorts/campuses. Skipping them keeps them out of this
+                    // student's item count and the equal split of the category weight.
                     let Some(a) = child.select(child_name_sel).next() else { continue };
                     let child_name = a.text().collect::<String>().trim().to_string();
                     if child_name.is_empty() {
@@ -958,6 +965,10 @@ impl MoodleScraper {
                         weight,
                         category: category_opt.clone(),
                         has_submission_status: false,
+                        is_category: false,
+                        category_weight: weight,
+                        category_id: Some(sec),
+                        grade_max: None,
                     });
                 }
             }
@@ -1052,6 +1063,10 @@ impl MoodleScraper {
                 weight,
                 category,
                 has_submission_status: false,
+                is_category: false,
+                category_weight: None,
+                category_id: None,
+                grade_max: None,
             });
         }
         // Supplement weight from the name (e.g. activity name has "(Weight: 25%)"); convert due date to ISO.
@@ -1275,6 +1290,11 @@ impl MoodleScraper {
                     })
                 });
                 let Some(entry) = entry else { continue };
+
+                // Keep the maximum so the grade breakdown can turn a bare score into a %.
+                if let Some(max) = entry.range.as_deref().and_then(parse_range_max) {
+                    a.grade_max = Some(max);
+                }
 
                 if let Some(g) = entry.grade.as_deref() {
                     let g = g.trim();
@@ -4331,6 +4351,10 @@ Follow these rules strictly:\n\
                     weight: None,
                     category: None,
                     has_submission_status,
+                    is_category: false,
+                    category_weight: None,
+                    category_id: None,
+                    grade_max: None,
                 });
             }
         }
@@ -4390,6 +4414,10 @@ Follow these rules strictly:\n\
                 weight: None,
                 category: None,
                 has_submission_status: false,
+                is_category: false,
+                category_weight: None,
+                category_id: None,
+                grade_max: None,
             });
         }
 
@@ -4566,6 +4594,13 @@ impl Default for MoodleScraper {
 }
 
 /// Extract the numeric ID from a Moodle URL.
+/// Upper bound of a gradebook range: "0–13", "0-100", "0.00–25.00" -> 13 / 100 / 25.
+fn parse_range_max(range: &str) -> Option<f64> {
+    let re = regex::Regex::new(r"(\d+(?:\.\d+)?)\s*$").ok()?;
+    let max: f64 = re.captures(range.trim())?[1].parse().ok()?;
+    (max > 0.0).then_some(max)
+}
+
 fn extract_id_from_url(url: &str) -> Option<u64> {
     if let Ok(parsed) = url::Url::parse(url) {
         for (key, value) in parsed.query_pairs() {
@@ -5741,6 +5776,54 @@ fn sanitize_filename(raw: &str) -> String {
 mod tests {
     // Shape mirrors the live overview (samples/explore_20260814/grade_overview.html):
     // units plus non-unit hub/portal sites, each linked by course id.
+    // Local-only check against the saved FIT5201 Assessments page (samples/ is gitignored,
+    // so this is skipped in CI): categories are flagged and children carry the category weight.
+    #[test]
+    fn assessment_widget_marks_categories_against_local_sample() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../samples/debug_course_view_46961_section_56.html");
+        let Ok(html) = std::fs::read_to_string(path) else { return };
+        let scraper = super::MoodleScraper::new(std::sync::Arc::new(crate::moodle::auth::MoodleAuth::new()));
+        let items = scraper.parse_assessments_from_html(&html, 46961).unwrap();
+        let cats: Vec<_> = items.iter().filter(|a| a.is_category).collect();
+        assert!(!cats.is_empty());
+        for cat in &cats { assert_eq!(cat.category_id, Some(cat.id)); }
+        for child in items.iter().filter(|a| !a.is_category) {
+            let parent = cats.iter().find(|c| c.category_id == child.category_id).expect("child has a category row");
+            assert_eq!(child.category_weight, parent.category_weight);
+        }
+        // Two categories share the name "Artefact" (25% and 16%) but stay distinct.
+        let artefacts: Vec<_> = cats.iter().filter(|c| c.category.as_deref() == Some("Artefact")).collect();
+        assert_eq!(artefacts.len(), 2);
+        assert_ne!(artefacts[0].category_id, artefacts[1].category_id);
+        let total: f64 = cats.iter().filter_map(|c| c.category_weight).sum();
+        assert_eq!(total, 100.0);
+    }
+
+    // FIT5122 (saved 2026-08-12): Exercise 40% / Demonstration 25% / Project 35%, plus an
+    // unweighted "Supplementary assessment" category that must not count towards the total.
+    #[test]
+    fn assessment_widget_fit5122_local_sample() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../samples/live_20260812/assessments_46900.html");
+        let Ok(html) = std::fs::read_to_string(path) else { return };
+        let scraper = super::MoodleScraper::new(std::sync::Arc::new(crate::moodle::auth::MoodleAuth::new()));
+        let items = scraper.parse_assessments_from_html(&html, 46900).unwrap();
+        for a in items.iter().filter(|a| a.is_category) {
+            let n = items.iter().filter(|c| !c.is_category && c.category_id == a.category_id).count();
+            eprintln!("category {:?} weight={:?} children={}", a.name, a.category_weight, n);
+        }
+        let weighted: f64 = items.iter().filter(|a| a.is_category).filter_map(|a| a.category_weight).sum();
+        assert_eq!(weighted, 100.0);
+    }
+
+    #[test]
+    fn gradebook_range_max_parses_live_formats() {
+        assert_eq!(super::parse_range_max("0–13"), Some(13.0));
+        assert_eq!(super::parse_range_max("0-100"), Some(100.0));
+        assert_eq!(super::parse_range_max("0.00–25.50"), Some(25.5));
+        assert_eq!(super::parse_range_max("0–0"), None);
+        assert_eq!(super::parse_range_max("-"), None);
+    }
+
     #[test]
     fn grade_overview_rows_keep_course_ids() {
         let html = r#"<table><tr><th>Course name</th><th>Grade</th></tr>

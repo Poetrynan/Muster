@@ -1,5 +1,6 @@
 import { refreshExamSchedule, examErrorKey } from "../services/examSchedule";
-import { gradesForCourses } from "../lib/gradeOverview";
+import { buildCourseGrade, PASS_MARK } from "../lib/gradeBreakdown";
+import { CourseGradeRow } from "../components/GradeBreakdown";
 import {
   BookOpen,
   Calendar,
@@ -213,6 +214,8 @@ export function Dashboard() {
   const [notifCourseFilter, setNotifCourseFilter] = useState<number | null>(null);
   const [notifHistoryOpen, setNotifHistoryOpen] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  // Tab to open in CourseDetail (grade rows jump straight to the assessments breakdown).
+  const [selectedCourseTab, setSelectedCourseTab] = useState<string | undefined>(undefined);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number; phase: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -272,7 +275,6 @@ export function Dashboard() {
     upsertDownload,
     calendarEvents,
     setCalendarEvents,
-    gradeOverview,
     setGradeOverview,
     exams,
     examsFetched,
@@ -1381,13 +1383,15 @@ export function Dashboard() {
     });
   }, [courses, settings.courseSortBy, selectedSemesterTab, currentSemesterKey, hiddenCourseIds, pinnedCourseIds]);
 
-  // Grade progress counts only the courses shown under "My Courses", not every
-  // enrolment the Moodle overview lists (past terms, school hubs, portals).
-  const visibleGrades = useMemo(() => {
-    const shown = new Set(displayCourses.map((c) => c.id));
-    return gradesForCourses(gradeOverview, (courses || []).filter((c) => shown.has(c.id)));
-  }, [gradeOverview, courses, displayCourses]);
-  const gradedCount = visibleGrades.filter((g) => g.grade !== "-").length;
+  // Grade progress: one pass outlook per course shown under "My Courses", built from
+  // its synced assessment categories (weights) and gradebook scores.
+  const courseGrades = useMemo(
+    () =>
+      displayCourses
+        .map((c) => ({ course: c, grade: buildCourseGrade(assignments.filter((a) => a.courseId === c.id)) }))
+        .filter(({ grade }) => grade.outcome !== "no-data"),
+    [displayCourses, assignments]
+  );
 
   // Stats are computed from active non-hidden data.
   const quickStats = [
@@ -1655,7 +1659,8 @@ export function Dashboard() {
       <Suspense fallback={<PageLoading />}>
         <CourseDetail
           courseId={selectedCourseId}
-          onBack={() => setSelectedCourseId(null)}
+          initialTab={selectedCourseTab}
+          onBack={() => { setSelectedCourseId(null); setSelectedCourseTab(undefined); }}
         />
       </Suspense>
     );
@@ -2227,41 +2232,27 @@ export function Dashboard() {
               {/* Grades progress */}
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-foreground">{t("dashboard.gradesProgress")}</h3>
-                <span className="text-sm text-muted-foreground">
-                  {t("dashboard.gradedOf", { graded: gradedCount, total: visibleGrades.length })}
-                </span>
+                <span className="text-sm text-muted-foreground">{t("grades.passMark", { mark: PASS_MARK })}</span>
               </div>
-              {visibleGrades.length === 0 ? (
+              {courseGrades.length === 0 ? (
                 <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
                   <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
                     {t("dashboard.gradesNoData")}
                   </p>
                 </div>
-              ) : gradedCount === 0 ? (
-                <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
-                  <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-                    {t("dashboard.gradesEmpty")}
-                  </p>
-                </div>
               ) : (
-                <div className="mb-8 p-4 rounded-2xl bg-card border border-border">
-                  <div className="flex flex-wrap gap-2">
-                    {visibleGrades.slice(0, 12).map((g) => (
-                      <span
-                        key={g.unit}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                          g.grade !== "-"
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                            : "bg-secondary text-muted-foreground border-border"
-                        }`}
-                        title={g.unit}
-                      >
-                        {g.grade !== "-" ? g.grade : "–"}
-                      </span>
-                    ))}
-                  </div>
+                <div className="mb-8 p-2 rounded-2xl bg-card border border-border divide-y divide-border" role="list" aria-label={t("dashboard.gradesProgress")}>
+                  {courseGrades.map(({ course, grade }) => (
+                    <div key={course.id} role="listitem">
+                      <CourseGradeRow
+                        code={course.code}
+                        name={course.name}
+                        grade={grade}
+                        onOpen={() => { setSelectedCourseTab("assignments"); setSelectedCourseId(course.id); }}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
 

@@ -53,11 +53,15 @@ import type {
   UnitDashboard,
 } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
+import { buildCourseGrade } from "../lib/gradeBreakdown";
+import { GradeBreakdownPanel } from "../components/GradeBreakdown";
 import { getEffectiveAssignmentStatus, buildCourseDownloadDir , buildSectionDownloadDir } from "../lib/utils";
 
 interface CourseDetailProps {
   courseId: number;
   onBack: () => void;
+  /** Tab to open first (Home's grade rows open "assignments" for the breakdown). */
+  initialTab?: string;
 }
 
 // Zustand v5 uses useSyncExternalStore, so a selector's return value must be referentially stable:
@@ -71,8 +75,8 @@ function cleanTitle(s: string): string {
   return s.replace(/\s*\|\s*/g, " · ");
 }
 
-export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
-  const [activeTab, setActiveTab] = useState("materials");
+export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps) {
+  const [activeTab, setActiveTab] = useState(initialTab ?? "materials");
   const {
     courses,
     allResources,
@@ -826,8 +830,11 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                   </div>
                 )}
                 {(() => {
-                  const displayed = assessments.length > 0 ? assessments : courseAssignments;
-                  if (displayed.length === 0) {
+                  const source = assessments.length > 0 ? assessments : courseAssignments;
+                  const grade = buildCourseGrade(source);
+                  // Category rows ("1. Quiz / Test 9%") feed the breakdown, not the task list.
+                  const displayed = source.filter((a) => !a.isCategory);
+                  if (displayed.length === 0 && grade.outcome === "no-data") {
                     return (
                       <div className="text-center py-12 text-muted-foreground">
                         <Calendar className="w-12 h-12 mx-auto mb-4" />
@@ -835,7 +842,10 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                       </div>
                     );
                   }
-                  return displayed.map((assignment, index) => (
+                  return (
+                    <>
+                    <GradeBreakdownPanel grade={grade} />
+                    {displayed.map((assignment, index) => (
                     <motion.div
                       key={assignment.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -908,7 +918,9 @@ export function CourseDetail({ courseId, onBack }: CourseDetailProps) {
                         </CardContent>
                       </Card>
                     </motion.div>
-                  ));
+                  ))}
+                    </>
+                  );
                 })()}
                   </>
                 )}
