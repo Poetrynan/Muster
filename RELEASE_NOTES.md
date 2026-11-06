@@ -1,3 +1,28 @@
+# Muster v0.4.0
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.4.0_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/Muster_0.4.0_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.4.0_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/Muster_0.4.0_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.4.0_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/Muster_0.4.0_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.4.0_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/Muster_0.4.0_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.4.0_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/Muster_0.4.0_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.4.0_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.4.0/muster_0.4.0_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.4.0/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **One Monash sign-in.** The student portal and Moodle now share a single SSO window, which stays hidden unless Monash asks for your password or MFA.
+- **Exams from the student portal.** The exam timetable now comes from home.student.monash and is checked automatically. A portal data problem shows in the exam section instead of blocking sign-in.
+- **Grade breakdown.** Each unit's marks are grouped by assessment category, with the mark earned so far and what you still need to reach 50%. Home shows one row per unit; open it for the full breakdown.
+- **Fixes.** Grade progress counts only your current units, and exam times display correctly.
+
+---
+
 # Muster v0.3.2
 
 ## Download
