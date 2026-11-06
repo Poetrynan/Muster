@@ -1,3 +1,27 @@
+# Muster v0.4.1
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.4.1_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/Muster_0.4.1_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.4.1_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/Muster_0.4.1_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.4.1_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/Muster_0.4.1_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.4.1_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/Muster_0.4.1_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.4.1_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/Muster_0.4.1_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.4.1_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.4.1/muster_0.4.1_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.4.1/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Accurate grade breakdown.** The first sync after updating now re-reads every unit, so grade progress uses the new assessment data. Categories with the same name (e.g. two "Artefact" rows) stay separate, unused duplicate structures no longer inflate the total, and a weight written in an item's name (e.g. "(15%)") is used.
+- **Grades released in the gradebook are picked up** on the next sync, along with the maximum mark needed to turn a raw score into a percentage.
+- **Colour legend** for the grade bars, and units with the same name show their term.
+
+---
+
 # Muster v0.4.0
 
 ## Download
