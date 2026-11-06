@@ -230,10 +230,10 @@ export async function loginWithCookies(cookies: CookieData[]): Promise<LoginResp
 
 /// Load saved session from disk. Returns restore info so the caller can set
 /// both `isLoggedIn` and the `user` object (fixes placeholder user on restart).
-export async function loadSavedSession(): Promise<SessionRestoreInfo> {
+export async function loadSavedSession(hasExamCache = false): Promise<SessionRestoreInfo> {
   const invoke = getInvoke();
   if (invoke) {
-    return invoke<SessionRestoreInfo>("load_saved_session");
+    return invoke<SessionRestoreInfo>("load_saved_session", { hasExamCache });
   }
   // Mock fallback for browser dev — no persisted session.
   return { loggedIn: false, user: null };
@@ -518,8 +518,11 @@ export interface GradeEntry {
   url?: string | null;
 }
 
-/** Exam schedule entry from my-timetable.monash.edu. */
+/** Exam schedule entry from home.student.monash. */
 export interface ExamSchedule {
+  startAt?: string;
+  endAt?: string;
+  timezone?: string;
   id: string;
   courseId?: number;
   courseName: string;
@@ -571,12 +574,12 @@ export async function fetchUnitDashboard(courseId: number): Promise<UnitDashboar
   return invoke<UnitDashboard>("fetch_course_unit_dashboard", { courseId });
 }
 
-/// Fetch exam schedule from my-timetable.monash.edu.
+/// Fetch exam schedule from the authenticated Monash student portal.
 /// Returns all exams for the current semester.
-export async function fetchExams(): Promise<ExamSchedule[]> {
+export async function fetchExams(hasCache = false): Promise<ExamSchedule[] | null> {
   const invoke = getInvoke();
   if (invoke) {
-    return invoke<ExamSchedule[]>("fetch_exams");
+    return invoke<ExamSchedule[] | null>("fetch_exams", { hasCache });
   }
   return [];
 }

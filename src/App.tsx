@@ -79,15 +79,15 @@ function App() {
 
   // Check for saved session silently in background without blocking UI
   useEffect(() => {
-    loadSavedSession()
+    loadSavedSession(useAppStore.getState().examsFetched)
       .then((result) => {
+        if (result.user) setUser(result.user);
         if (result.loggedIn) {
           setLoggedIn(true);
-          if (result.user) {
-            setUser(result.user);
-          }
         } else {
-          reset();
+          const cached = useAppStore.getState();
+          if (cached.cacheOwnerEmail) cached.requireReauthentication("moodle");
+          else reset();
         }
       })
       .catch((err) => {
@@ -102,7 +102,7 @@ function App() {
   useEffect(() => {
     const unlistenPromise = onSessionExpired(() => {
       console.log("Session expired event received, resetting app store");
-      reset();
+      useAppStore.getState().requireReauthentication("moodle");
     });
 
     return () => {

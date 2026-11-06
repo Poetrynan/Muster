@@ -12,6 +12,7 @@ export interface CourseMaterial {
   courseId: number;
   title: string;
   body: string;
+  url?: string;
   weekNum?: number;
 }
 
@@ -21,6 +22,7 @@ export interface SearchHit {
   title: string;
   snippet: string;
   score: number;
+  url?: string;
   /** Which course the hit came from (needed for cross-course QA source badges). */
   courseId: number;
 }
@@ -135,7 +137,7 @@ const QA_CONTEXT_MAX_CHARS = 6000;
  * Scoring: title hits weigh 3x body hits; synonym-expansion tokens count 1x.
  * Returns at most 8 hits with 1-based sequential sourceIds, best first.
  */
-export function searchCourseMaterials(query: string, materials: CourseMaterial[]): SearchHit[] {
+export function searchCourseMaterials(query: string, materials: CourseMaterial[], perCourseLimit = Infinity): SearchHit[] {
   const tokens = expandTokens(query);
   if (tokens.length === 0) return [];
 
@@ -148,9 +150,16 @@ export function searchCourseMaterials(query: string, materials: CourseMaterial[]
     return { m, score };
   });
 
+  const counts = new Map<number, number>();
   const hits = scored
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score)
+    .filter(({ m }) => {
+      const count = counts.get(m.courseId) ?? 0;
+      if (count >= perCourseLimit) return false;
+      counts.set(m.courseId, count + 1);
+      return true;
+    })
     .slice(0, QA_MAX_HITS)
     .map((s, i) => ({
       sourceId: i + 1,
@@ -159,6 +168,7 @@ export function searchCourseMaterials(query: string, materials: CourseMaterial[]
       courseId: s.m.courseId,
       snippet: makeSnippet(`${s.m.body}`, tokens) || s.m.title,
       score: s.score,
+      url: s.m.url,
     }));
 
   return hits;

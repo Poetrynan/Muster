@@ -10,6 +10,8 @@ import { buildCourseAiContext, buildPlanContext, buildPrioritiesContext } from "
 import { extractMusterJson, stripPartialAppendix, type AiPriority } from "../lib/aiStructured";
 import { computeCourseDataHash, computeDeadlineHash } from "../lib/summaryFreshness";
 import { searchCourseMaterials, buildQaContext, type CourseMaterial, type SearchHit } from "../lib/courseSearch";
+import { mergePlanProgress } from "../lib/aiProgress";
+import { openQaSource, resolveQaSources, safeSourceUrl } from "../lib/qaSources";
 import { humanizeAiError } from "../lib/aiError";
 import { fetchCourseGradebook, generateSummaryStream } from "../services/api";
 import type { GradeEntry } from "../services/api";
@@ -88,19 +90,19 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
     for (const c of aiEligibleCourses) {
       const cid = c.id;
       const code = c.shortName || c.fullName;
-      const push = (kind: CourseMaterial["kind"], title: string, body: string, weekNum?: number) =>
-        mats.push({ sourceId: 0, kind, courseId: cid, title: code ? `${code} · ${title}` : title, body, weekNum });
+      const push = (kind: CourseMaterial["kind"], title: string, body: string, weekNum?: number, url?: string) =>
+        mats.push({ sourceId: 0, kind, courseId: cid, title: code ? `${code} · ${title}` : title, body, weekNum, url });
       const res = courseResourcesMap[cid]?.length ? courseResourcesMap[cid] : allResources.filter((r) => r.courseId === cid);
-      for (const r of res) push("resource", r.name, r.section ?? "", r.weekNum);
+      for (const r of res) push("resource", r.name, r.section ?? "", r.weekNum, r.url);
       for (const a of assignments.filter((a) => a.courseId === cid)) {
-        push("assignment", a.name, a.dueDateIso ? `Due ${a.dueDateIso}. Weight ${a.weight ?? "?"}%. Status ${a.status}.` : `Status ${a.status}.`);
+        push("assignment", a.name, a.dueDateIso ? `Due ${a.dueDateIso}. Weight ${a.weight ?? "?"}%. Status ${a.status}.` : `Status ${a.status}.`, undefined, a.url);
       }
       for (const a of announcements.filter((a) => a.courseId === cid)) {
-        push("announcement", a.title, `${a.author} (${a.date}): ${a.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}`);
+        push("announcement", a.title, `${a.author} (${a.date}): ${a.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}`, undefined, a.url);
       }
-      for (const s of schedules[cid]?.items ?? []) push("schedule", s.title, s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
-      for (const s of unitInfos[cid]?.sections ?? []) push("unitinfo", s.title, s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
-      for (const r of recordings[cid] ?? []) push("recording", r.title, "");
+      for (const s of schedules[cid]?.items ?? []) push("schedule", s.title, s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(), undefined, `https://learning.monash.edu/course/view.php?id=${cid}&section=2`);
+      for (const s of unitInfos[cid]?.sections ?? []) push("unitinfo", s.title, s.contentHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(), undefined, `https://learning.monash.edu/course/view.php?id=${cid}&section=1`);
+      for (const r of recordings[cid] ?? []) push("recording", r.title, "", undefined, r.url);
     }
     return mats;
   }, [aiEligibleCourses, courseResourcesMap, allResources, assignments, announcements, schedules, unitInfos, recordings]);
@@ -139,14 +141,13 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   const [thinkingActive, setThinkingActive] = useState(false);
   const streamRef = useRef("");
   const gradeBookRef = useRef<Map<number, GradeEntry[]>>(new Map());
-  const [doneActions, setDoneActions] = useState<Set<string>>(new Set());
-  const toggleAction = (key: string) => {
-    setDoneActions((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const doneActions = new Set(savedSummary?.completedActions ?? []);
+  const toggleAction = (title: string) => {
+    if (courseId == null || !savedSummary) return;
+    const next = new Set(savedSummary.completedActions ?? []);
+    if (next.has(title)) next.delete(title);
+    else next.add(title);
+    useAppStore.getState().addSummary(courseId, { ...savedSummary, completedActions: [...next] });
   };
 
   const currentCourseDataHash = useMemo(
@@ -267,12 +268,12 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
         onDone: () => {
           const { json } = extractMusterJson(acc);
           if (json?.days?.length) {
-            setCoursePlan(courseId, {
+            setCoursePlan(courseId, mergePlanProgress(useAppStore.getState().aiInsights.plans[courseId], {
               days: json.days.map((d) => ({ ...d, tasks: d.tasks.map((t2) => ({ ...t2, done: false })) })),
               weeklyFocus: json.weeklyFocus,
               generatedAt: new Date().toISOString(),
               dataHash: planDataHash,
-            });
+            }));
           } else {
             setPlanError(t("course.ai.error.generic"));
           }
@@ -304,8 +305,22 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
   const [askThinkingActive, setAskThinkingActive] = useState(false);
   const [askSources, setAskSources] = useState<SearchHit[]>([]);
   const [askConfidence, setAskConfidence] = useState<"high" | "medium" | "low" | null>(null);
+  const [askEvidenceInsufficient, setAskEvidenceInsufficient] = useState(false);
   const [askThinkingExpanded, setAskThinkingExpanded] = useState(false);
   const askStreamRef = useRef("");
+  const askRequest = useRef(0);
+  useEffect(() => {
+    askRequest.current++;
+    setAskAnswer("");
+    setAskSources([]);
+    setAskConfidence(null);
+    setAskEvidenceInsufficient(false);
+    setAskError(null);
+    setAskThinking("");
+    setAskThinkingActive(false);
+    setAskLoading(false);
+    return () => { askRequest.current++; };
+  }, [scope]);
 
   const handleAsk = useCallback(async () => {
     const q = askQuestion.trim();
@@ -317,43 +332,39 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
     setAskThinkingActive(false);
     setAskSources([]);
     setAskConfidence(null);
+    setAskEvidenceInsufficient(false);
     askStreamRef.current = "";
+    const request = ++askRequest.current;
     try {
       const pool = courseId == null ? allMaterials : courseMaterials;
       // Cross-course sampling: cap per-course hits before global ranking so one
       // chatty course can't drown out the rest (design §7.5 safeguard).
-      const hits =
-        courseId == null
-          ? (() => {
-              const perCourse = new Map<number, SearchHit[]>();
-              for (const h of searchCourseMaterials(q, pool)) {
-                const arr = perCourse.get(h.courseId) ?? [];
-                if (arr.length < 3) arr.push(h);
-                perCourse.set(h.courseId, arr);
-              }
-              return [...perCourse.values()].flat().sort((a, b) => b.score - a.score);
-            })()
-          : searchCourseMaterials(q, pool);
+      const hits = searchCourseMaterials(q, pool, courseId == null ? 3 : Infinity);
       const ctx = buildQaContext(hits, q, new Date().toLocaleDateString("en-CA"), langInstruction(settings.language));
       const fullAiUrl = buildAiUrl(settings.aiBaseUrl || "", settings.aiFormat ?? splitAiUrl(settings.aiBaseUrl || "").format);
       await generateSummaryStream(ctx, settings.aiApiKey, fullAiUrl, settings.aiModel, "qa", {
         onChunk: (text, thinking) => {
+          if (request !== askRequest.current) return;
           if (thinking) { setAskThinkingActive(true); setAskThinking((p) => p + text); return; }
           setAskThinkingActive(false);
           askStreamRef.current += text;
           setAskAnswer(askStreamRef.current);
         },
         onDone: () => {
+          if (request !== askRequest.current) return;
           setAskThinkingActive(false);
           const { json, clean } = extractMusterJson(askStreamRef.current);
           setAskAnswer(clean);
-          setAskSources(hits.slice(0, json?.sources?.length ?? 0));
-          setAskConfidence(json?.confidence ?? null);
+          const evidence = resolveQaSources(clean, hits);
+          setAskSources(evidence.sources);
+          setAskEvidenceInsufficient(evidence.insufficient || json?.confidence === "low");
+          setAskConfidence(evidence.insufficient ? "low" : json?.confidence ?? null);
           setAskLoading(false);
         },
-        onError: (err) => { setAskThinkingActive(false); setAskError(err); setAskLoading(false); },
+        onError: (err) => { if (request !== askRequest.current) return; setAskThinkingActive(false); setAskError(err); setAskLoading(false); },
       });
     } catch (err) {
+      if (request !== askRequest.current) return;
       setAskError(err instanceof Error ? err.message : t("course.ai.error.generic"));
       setAskLoading(false);
     }
@@ -423,6 +434,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
     setAskThinking("");
     setAskSources([]);
     setAskConfidence(null);
+    setAskEvidenceInsufficient(false);
   }, [scope]);
 
   // ---------- no key: onboarding card ----------
@@ -587,7 +599,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
                   thinking={askThinking} thinkingActive={askThinkingActive}
                   thinkingExpanded={askThinkingExpanded} setThinkingExpanded={setAskThinkingExpanded}
                   answer={askAnswer} loading={askLoading}
-                  sources={askSources} confidence={askConfidence}
+                  sources={askSources} confidence={askConfidence} insufficient={askEvidenceInsufficient}
                 />
               )}
             </CardContent>
@@ -679,8 +691,8 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
                       <ul className="space-y-1.5">
                         {savedSummary.structured.actions.map((a, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm">
-                            <input type="checkbox" checked={doneActions.has(`${courseId}:${i}`)} onChange={() => toggleAction(`${courseId}:${i}`)} className="mt-0.5" />
-                            <span className={doneActions.has(`${courseId}:${i}`) ? "line-through text-muted-foreground" : ""}>
+                            <input type="checkbox" checked={doneActions.has(a.title)} onChange={() => toggleAction(a.title)} className="mt-0.5" />
+                            <span className={doneActions.has(a.title) ? "line-through text-muted-foreground" : ""}>
                               {a.title}
                               {a.dueAt ? <span className="text-muted-foreground"> · {a.dueAt}</span> : null}
                             </span>
@@ -784,7 +796,7 @@ export function AIHubPage({ initialCourseId, onBack }: { initialCourseId?: numbe
                   thinking={askThinking} thinkingActive={askThinkingActive}
                   thinkingExpanded={askThinkingExpanded} setThinkingExpanded={setAskThinkingExpanded}
                   answer={askAnswer} loading={askLoading}
-                  sources={askSources} confidence={askConfidence}
+                  sources={askSources} confidence={askConfidence} insufficient={askEvidenceInsufficient}
                 />
               )}
             </CardContent>
@@ -824,7 +836,7 @@ function QaInput({
 }
 
 function AnswerBlock({
-  thinking, thinkingActive, thinkingExpanded, setThinkingExpanded, answer, loading, sources, confidence,
+  thinking, thinkingActive, thinkingExpanded, setThinkingExpanded, answer, loading, sources, confidence, insufficient,
 }: {
   thinking: string;
   thinkingActive: boolean;
@@ -834,8 +846,11 @@ function AnswerBlock({
   loading: boolean;
   sources: SearchHit[];
   confidence: "high" | "medium" | "low" | null;
+  insufficient: boolean;
 }) {
   const { t } = useTranslation();
+  const [sourceError, setSourceError] = useState(false);
+  useEffect(() => setSourceError(false), [answer]);
   return (
     <div className="mt-4 p-5 rounded-2xl bg-card border shadow-sm">
       {thinking && (
@@ -858,14 +873,18 @@ function AnswerBlock({
       )}
       <MarkdownRenderer content={loading ? stripPartialAppendix(answer) : answer} />
       {loading && <span className="ai-stream-cursor" aria-hidden="true">▍</span>}
+      {!loading && insufficient && <p role="status" className="mt-3 text-sm text-amber-600 dark:text-amber-400">{t("course.ai.evidenceInsufficient")}</p>}
+      {sourceError && <p role="alert" className="mt-2 text-sm text-destructive">{t("course.ai.sourceOpenFailed")}</p>}
       {!loading && sources.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border/50">
           <p className="text-xs font-medium text-muted-foreground mb-1.5">{t("course.ai.sources")}</p>
           <div className="flex flex-wrap gap-1.5">
             {sources.map((s) => (
-              <span key={s.sourceId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-secondary text-muted-foreground border">
+              <button type="button" key={s.sourceId} disabled={!safeSourceUrl(s.url)} title={s.title}
+                onClick={() => { setSourceError(false); void openQaSource(s).catch(() => setSourceError(true)); }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-secondary text-muted-foreground border hover:text-primary disabled:opacity-60 disabled:cursor-default">
                 [{s.sourceId}] {s.title.slice(0, 50)}
-              </span>
+              </button>
             ))}
             {confidence && (
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${

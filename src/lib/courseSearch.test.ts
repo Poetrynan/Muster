@@ -19,6 +19,16 @@ describe("DOMAIN_CONCEPTS", () => {
 });
 
 describe("searchCourseMaterials", () => {
+  it("caps courses before the global top-eight cutoff and renumbers evidence", () => {
+    const pool: CourseMaterial[] = [
+      ...Array.from({ length: 10 }, () => ({ sourceId: 0 as const, kind: "resource" as const, courseId: 1, title: "regression regression", body: "" })),
+      { sourceId: 0, kind: "resource", courseId: 2, title: "regression", body: "" },
+    ];
+    const hits = searchCourseMaterials("regression", pool, 3);
+    expect(hits.filter(h => h.courseId === 1)).toHaveLength(3);
+    expect(hits.some(h => h.courseId === 2)).toBe(true);
+    expect(hits.map(h => h.sourceId)).toEqual([1, 2, 3, 4]);
+  });
   it("ranks title hits above body hits for english queries", () => {
     const hits = searchCourseMaterials("regression lecture", materials);
     expect(hits[0].title).toBe("Lecture 6 - Linear regression");

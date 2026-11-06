@@ -14,9 +14,9 @@ export function ExamCard({ exam, compact = false }: ExamCardProps) {
   const { t, lang } = useTranslation();
 
   // Parse the exam date for countdown calculation
-  const examDate = new Date(exam.date);
+  const examDate = new Date(exam.startAt || exam.date);
   const diff = getCalendarDayDiff(examDate.getTime());
-  const isPast = examDate.getTime() < Date.now();
+  const isPast = new Date(exam.endAt || exam.startAt || `${exam.date}T23:59:59`).getTime() < Date.now();
 
   const badge = isPast || diff === null || diff < 0 ? (
     <Badge variant="secondary">{t("dashboard.examPassed")}</Badge>
@@ -34,6 +34,7 @@ export function ExamCard({ exam, compact = false }: ExamCardProps) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: exam.timezone || "UTC",
   });
 
   const timeStr = exam.startTime && exam.startTime !== "TBD"
@@ -90,7 +91,7 @@ export function ExamCard({ exam, compact = false }: ExamCardProps) {
             {timeStr && (
               <span className="text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                {timeStr}
+                {timeStr}{exam.timezone ? ` (${exam.timezone})` : ""}
               </span>
             )}
           </div>

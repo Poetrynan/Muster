@@ -4,15 +4,16 @@
 #![allow(dead_code)]
 
 pub mod moodle;
-pub mod timetable;
+mod student_portal;
+mod student_portal_session;
+#[cfg(test)]
+mod student_portal_tests;
 mod server;
 
-use moodle::auth::{MoodleAuth, CookieData, SessionInfo, SessionData};
+use moodle::auth::{MoodleAuth, CookieData, SessionInfo};
 use moodle::scraper::MoodleScraper;
 use moodle::scraper::DownloadResult;
 use moodle::models::{LoginResponse, SyncStatus, Course, Resource, Assignment, Announcement, CalendarEvent, Quiz, CourseContact, GradeEntry, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, SubmissionStatus, Recording, SyncOptions, SyncResult, ExamSchedule};
-use timetable::auth::TimetableAuth;
-use timetable::scraper::TimetableScraper;
 use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
@@ -24,16 +25,18 @@ pub struct AiConfig {
     pub model: String,
 }
 
+type PendingExamResult = (String, Result<Option<Vec<ExamSchedule>>, String>);
+
 /// Application state holding authentication, scraper, and AI config instances
 pub struct AppState {
     auth: Arc<MoodleAuth>,
+    portal_account: Arc<Mutex<Option<String>>>,
+    pending_exam_result: Arc<Mutex<Option<PendingExamResult>>>,
+    exam_check_lock: Arc<Mutex<()>>,
     scraper: Arc<Mutex<Option<MoodleScraper>>>,
     ai_config: Arc<Mutex<Option<AiConfig>>>,
     /// Minimize to tray instead of closing the window (synced from the frontend settings, on by default)
     close_to_tray: std::sync::atomic::AtomicBool,
-    /// Timetable (my-timetable.monash.edu) auth + scraper for exam data
-    timetable_auth: Arc<Mutex<Option<TimetableAuth>>>,
-    timetable_scraper: Arc<Mutex<Option<TimetableScraper>>>,
 }
 
 impl AppState {
@@ -41,11 +44,12 @@ impl AppState {
         let auth = Arc::new(MoodleAuth::new());
         Self {
             auth,
+            portal_account: Arc::new(Mutex::new(None)),
+            pending_exam_result: Arc::new(Mutex::new(None)),
+            exam_check_lock: Arc::new(Mutex::new(())),
             scraper: Arc::new(Mutex::new(None)),
             ai_config: Arc::new(Mutex::new(None)),
             close_to_tray: std::sync::atomic::AtomicBool::new(true),
-            timetable_auth: Arc::new(Mutex::new(None)),
-            timetable_scraper: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -74,6 +78,7 @@ async fn login(
     let response = state.auth.login(&username, &password).await?;
 
     if response.success {
+        *state.portal_account.lock().await = response.user.as_ref().map(|u| u.email.clone());
         let mut scraper_guard = state.scraper.lock().await;
         *scraper_guard = Some(MoodleScraper::new(state.auth.clone()));
     }
@@ -90,6 +95,7 @@ async fn login_with_cookies(
     let response = state.auth.login_with_cookies(cookies).await?;
 
     if response.success {
+        *state.portal_account.lock().await = response.user.as_ref().map(|u| u.email.clone());
         let mut scraper_guard = state.scraper.lock().await;
         *scraper_guard = Some(MoodleScraper::new(state.auth.clone()));
     }
@@ -104,13 +110,34 @@ async fn login_with_cookies(
 async fn load_saved_session(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
+    has_exam_cache: Option<bool>,
 ) -> Result<SessionInfo, String> {
-    state.auth.load_saved_session(app_handle, state.scraper.clone()).await
+    let session = state.auth.load_saved_session(app_handle, state.scraper.clone()).await?;
+    *state.portal_account.lock().await = session.user.as_ref().map(|u| u.email.clone());
+    if session.logged_in {
+        if let Some(account) = session.user.as_ref().map(|u| u.email.clone()).filter(|s| !s.is_empty()) {
+            let _check = state.exam_check_lock.lock().await;
+            if state.pending_exam_result.lock().await.as_ref().is_some_and(|(owner, _)| owner.eq_ignore_ascii_case(&account)) {
+                return Ok(session);
+            }
+            let check = tokio::time::timeout(std::time::Duration::from_secs(10), student_portal::fetch_exams(&account, has_exam_cache.unwrap_or(false))).await
+                .unwrap_or_else(|_| Err("PORTAL_NETWORK_ERROR".into()));
+            if check.as_ref().err().is_some_and(|error| error == "PORTAL_LOGIN_REQUIRED" || error == "PORTAL_ACCOUNT_MISMATCH") {
+                return Ok(SessionInfo { logged_in: false, user: session.user });
+            }
+            *state.pending_exam_result.lock().await = Some((account, check));
+        }
+    }
+    Ok(session)
 }
 
 /// Logout from Moodle
 #[tauri::command]
-async fn logout(state: State<'_, AppState>) -> Result<(), String> {
+async fn logout(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(window) = app_handle.get_webview_window("student-portal-exams") { let _ = window.close(); }
+    if let Some(account) = state.portal_account.lock().await.take() { student_portal_session::clear(&account); }
+    *state.pending_exam_result.lock().await = None;
     state.auth.logout().await?;
 
     let mut scraper_guard = state.scraper.lock().await;
@@ -510,11 +537,11 @@ async fn start_sso_login(
 /// SSO login via an embedded Tauri WebView window.
 ///
 /// Flow:
-/// 1. Open a WebView window pointing at the Moodle login page.
+/// 1. Complete Student Portal authentication, then Moodle in the same WebView.
 /// 2. Let the user complete Monash SSO + 2FA inside it (navigations to
 ///    okta/google are allowed — `on_navigation` always returns true).
 /// 3. When the WebView lands on `learning.monash.edu/my/...` (no `login` in the
-///    path), the SSO is complete.
+///    path), both realms are authenticated.
 /// 4. Read the WebView's cookies (incl. HttpOnly `MoodleSession`) via the
 ///    WebView2 cookie manager and hand them to `reqwest`.
 /// 5. Close the window and finish the login as if it were a cookie login.
@@ -568,7 +595,8 @@ async fn start_sso_login_webview_inner(
         true
     };
 
-    let login_url: Url = LOGIN_URL
+    *state.pending_exam_result.lock().await = None;
+    let login_url: Url = "https://home.student.monash/"
         .parse()
         .map_err(|e| format!("invalid login URL: {}", e))?;
 
@@ -581,9 +609,13 @@ async fn start_sso_login_webview_inner(
     .inner_size(1000.0, 720.0)
     .min_inner_size(640.0, 480.0)
     .center()
+    .visible(false)
     .on_navigation(on_nav)
+    .initialization_script(include_str!("student_portal_capture.js"))
     .build()
     .map_err(|e| format!("Failed to open login window: {}", e))?;
+    // Silent SSO (existing school session) completes without ever showing a window.
+    student_portal::reveal_when_interactive(webview_window.clone());
 
     let success_tx_close = success_tx.clone();
     webview_window.on_window_event(move |event| {
@@ -594,6 +626,21 @@ async fn start_sso_login_webview_inner(
             }
         }
     });
+
+    // Authenticate the stricter Portal realm FIRST, in the one visible login window.
+    // Home remains gated until both this leg and Moodle are ready.
+    let portal_capture = match student_portal::begin_sso(&webview_window).await {
+        Ok(capture) => capture,
+        Err(error) => {
+            student_portal::diagnostic(&format!("sign-in: portal leg failed: {error}"));
+            let _ = webview_window.close();
+            return Err(error);
+        }
+    };
+    if webview_window.navigate(LOGIN_URL.parse().unwrap()).is_err() {
+        let _ = webview_window.close();
+        return Err("PORTAL_WEBVIEW_ERROR".into());
+    }
 
     // Wait (up to 5 min) for the user to complete SSO and land on /my/.
     let _success_url = match tokio::time::timeout(
@@ -661,207 +708,43 @@ async fn start_sso_login_webview_inner(
     let response = state.auth.login_with_cookies(cookies).await?;
 
     if response.success {
+        *state.portal_account.lock().await = response.user.as_ref().map(|u| u.email.clone());
         let mut scraper_guard = state.scraper.lock().await;
         *scraper_guard = Some(MoodleScraper::new(state.auth.clone()));
         drop(scraper_guard);
-
-        // Navigate the SAME WebView to the timetable page. The SSO cookies
-        // from the Moodle login will auto-complete the SSO flow for the
-        // timetable domain — no second login needed.
-        let tt_url = "https://my-timetable.monash.edu/even/student";
-        println!("[timetable] Navigating to {}...", tt_url);
-        let _ = webview_window.navigate(tt_url.parse().unwrap());
-
-        // Wait for SSO redirect chain to complete (up to 15 seconds)
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-
-        // Extract timetable cookies from the same WebView
-        #[cfg(windows)]
-        let tt_cookies = {
-            let (tx, rx) = std::sync::mpsc::channel::<Vec<CookieData>>();
-            let webview_for_extract = webview_window.clone();
-            let nav_result = webview_for_extract.with_webview(move |pw| {
-                let cookies = moodle::webview_cookies::extract_cookies_for_url(
-                    &pw,
-                    "https://my-timetable.monash.edu",
-                ).unwrap_or_default();
-                let _ = tx.send(cookies);
-            });
-            if nav_result.is_err() {
-                println!("[timetable] with_webview failed, trying parent cookies only");
-                vec![]
-            } else {
-                rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap_or_default()
-            }
-        };
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        let tt_cookies = moodle::webview_cookies::extract_cookies_for_url_webkit(
-            &webview_window,
-            "https://my-timetable.monash.edu",
-        ).unwrap_or_default();
-
-        println!("[timetable] Got {} cookies from WebView", tt_cookies.len());
-
-        // Close the WebView after extracting timetable cookies
-        let _ = webview_window.close();
-
-        if !tt_cookies.is_empty() {
-            let tt_session = SessionData {
-                cookies: tt_cookies,
-                user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
-                timestamp: chrono::Local::now().to_rfc3339(),
-            };
-            match TimetableAuth::new(&tt_session) {
-                Ok(tt_auth) => {
-                    match tt_auth.initialize().await {
-                        Ok(_) => {
-                            let mut tt_scraper_guard = state.timetable_scraper.lock().await;
-                            *tt_scraper_guard = Some(TimetableScraper::new(Arc::new(tt_auth.clone())));
-                            let mut tt_auth_guard = state.timetable_auth.lock().await;
-                            *tt_auth_guard = Some(tt_auth);
-                            println!("Timetable auth initialized successfully");
-                        }
-                        Err(e) => {
-                            println!("Timetable auth init failed (non-fatal): {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    println!("Timetable auth creation failed (non-fatal): {}", e);
-                }
-            }
-        } else {
-            println!("Timetable WebView returned no cookies (non-fatal)");
+        let account = response.user.as_ref().map(|u| u.email.as_str()).unwrap_or("");
+        let bound = student_portal_session::bind_owner(portal_capture.session, account)
+            .and_then(|session| student_portal_session::save_guarded(account, &session, student_portal_session::epoch()));
+        if let Err(error) = bound {
+            student_portal::diagnostic(&format!("sign-in: portal credential not saved: {error}"));
+            let _ = state.auth.logout().await;
+            *state.portal_account.lock().await = None;
+            let _ = webview_window.close();
+            return Err(error);
         }
+        // Exam data errors surface in the exam section, never as a login failure.
+        *state.pending_exam_result.lock().await = Some((account.into(), portal_capture.exams.map(Some)));
     }
+    let _ = webview_window.close();
 
     Ok(response)
 }
 
-/// Open a second WebView pointing at my-timetable.monash.edu to complete
-/// the SSO flow for the timetable domain. The existing SSO session from
-/// the Moodle login will auto-redirect and set the timetable-specific cookies.
-async fn init_timetable_webview(
-    app_handle: &tauri::AppHandle,
-) -> Result<Vec<CookieData>, String> {
-    use std::sync::Arc;
-    use tauri::WebviewUrl;
-    use tauri::webview::WebviewWindowBuilder;
-    use tauri::Manager;
-    use url::Url;
-
-    const TT_URL: &str = "https://my-timetable.monash.edu/even/student";
-    const TT_WINDOW_LABEL: &str = "sso-timetable";
-
-    // Close any stale window
-    if let Some(existing) = app_handle.get_webview_window(TT_WINDOW_LABEL) {
-        let _ = existing.close();
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
-
-    // Signal when the WebView lands on the timetable page (not SSO)
-    let success_tx: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Url>>>> =
-        Arc::new(std::sync::Mutex::new(None));
-    let (tx, rx) = tokio::sync::oneshot::channel::<Url>();
-    *success_tx.lock().unwrap() = Some(tx);
-
-    let success_tx_clone = success_tx.clone();
-    let on_nav = move |url: &Url| -> bool {
-        let host = url.host_str().unwrap_or("");
-        if host.contains("my-timetable.monash.edu") {
-            if let Some(sender) = success_tx_clone.lock().unwrap().take() {
-                let _ = sender.send(url.clone());
-            }
-        }
-        true
-    };
-
-    let tt_url: Url = TT_URL.parse().map_err(|e| format!("invalid timetable URL: {}", e))?;
-
-    let webview_window = WebviewWindowBuilder::new(
-        app_handle,
-        TT_WINDOW_LABEL,
-        WebviewUrl::External(tt_url),
-    )
-    .title("Timetable SSO")
-    .inner_size(1000.0, 700.0)
-    .min_inner_size(640.0, 480.0)
-    .center()
-    .on_navigation(on_nav)
-    .build()
-    .map_err(|e| format!("Failed to open timetable window: {}", e))?;
-
-    // Wait up to 60 seconds for SSO to complete
-    let _success_url = match tokio::time::timeout(std::time::Duration::from_secs(60), rx).await {
-        Ok(Ok(url)) => url,
-        Ok(Err(_)) => {
-            let _ = webview_window.close();
-            return Err("Timetable SSO window closed.".to_string());
-        }
-        Err(_) => {
-            let _ = webview_window.close();
-            return Err("Timetable SSO timed out (60s).".to_string());
-        }
-    };
-
-    // Give cookies time to commit
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-
-    // Extract cookies
-    #[cfg(windows)]
-    {
-        let (cookies_tx, cookies_rx) = std::sync::mpsc::channel::<Result<Vec<CookieData>, String>>();
-        let webview_for_extract = webview_window.clone();
-        webview_for_extract
-            .with_webview(move |pw| {
-                // Extract cookies for the timetable domain specifically
-                let result = moodle::webview_cookies::extract_cookies_for_url(
-                    &pw,
-                    "https://my-timetable.monash.edu",
-                );
-                let _ = cookies_tx.send(result);
-            })
-            .map_err(|e| format!("Failed to access WebView for cookie extraction: {}", e))?;
-
-        let cookies = cookies_rx
-            .recv_timeout(std::time::Duration::from_secs(15))
-            .map_err(|e| format!("Timetable cookie extraction timed out: {}", e))??;
-
-        let _ = webview_window.close();
-        Ok(cookies)
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        let cookies = moodle::webview_cookies::extract_cookies_for_url_webkit(
-            &webview_window,
-            "https://my-timetable.monash.edu",
-        )?;
-        let _ = webview_window.close();
-        Ok(cookies)
-    }
-
-    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    {
-        let _ = webview_window.close();
-        Err("Timetable cookie extraction is only supported on Windows, macOS, and Linux.".to_string())
-    }
-}
-
-/// Fetch exam schedule from my-timetable.monash.edu.
+/// Fetch exams from the authenticated Monash student portal.
 #[tauri::command]
-async fn fetch_exams(state: State<'_, AppState>) -> Result<Vec<ExamSchedule>, String> {
-    let scraper_guard = state.timetable_scraper.lock().await;
-    let scraper = scraper_guard.as_ref().ok_or("Timetable not authenticated")?;
-    scraper.fetch_exams().await
-}
-
-/// Verify the timetable session is still valid.
-#[tauri::command]
-async fn verify_timetable_session(state: State<'_, AppState>) -> Result<bool, String> {
-    let auth_guard = state.timetable_auth.lock().await;
-    let auth = auth_guard.as_ref().ok_or("Timetable not authenticated")?;
-    auth.verify_session().await
+async fn fetch_exams(state: State<'_, AppState>, has_cache: Option<bool>) -> Result<Option<Vec<ExamSchedule>>, String> {
+    let _check = state.exam_check_lock.lock().await;
+    let account = match state.portal_account.lock().await.clone() {
+        Some(account) => account,
+        // Moodle permits offline restoration even if profile lookup fails. Do not
+        // turn an unavailable identity into a false authentication-expired event.
+        None if state.auth.is_logged_in().await => return Err("PORTAL_IDENTITY_UNAVAILABLE".into()),
+        None => return Err("PORTAL_LOGIN_REQUIRED".into()),
+    };
+    if let Some((owner, result)) = state.pending_exam_result.lock().await.take() {
+        if owner.eq_ignore_ascii_case(&account) { return result; }
+    }
+    student_portal::fetch_exams(&account, has_cache.unwrap_or(false)).await
 }
 
 /// Open a Moodle URL in an in-app WebView window.
@@ -1282,7 +1165,6 @@ pub fn run() {
             fetch_course_unit_dashboard,
             fetch_grade_overview,
             fetch_exams,
-            verify_timetable_session,
             set_close_to_tray,
             get_target_arch,
             get_system_info,

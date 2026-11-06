@@ -107,6 +107,8 @@ export interface AiPlan {
   dataHash?: string;
 }
 export interface Summary {
+  /** Completed action titles, retained across regeneration and restarts. */
+  completedActions?: string[];
   id: string;
   courseId: number;
   courseName: string;
@@ -145,8 +147,11 @@ export interface SessionData {
   user?: User;
 }
 
-// Exam schedule from my-timetable.monash.edu
+// Exam schedule from home.student.monash.
 export interface ExamSchedule {
+  startAt?: string;
+  endAt?: string;
+  timezone?: string;
   id: string;
   courseId?: number;
   courseName: string;

@@ -9,6 +9,8 @@ interface AppState {
   // User state
   user: User | null;
   isLoggedIn: boolean;
+  reauthReason: "portal" | "moodle" | null;
+  cacheOwnerEmail?: string;
   
   // Course state
   courses: Course[];
@@ -36,10 +38,16 @@ interface AppState {
   // Cross-course grade overview (/grade/report/overview)
   gradeOverview: GradeOverviewRow[];
 
-  // Exam schedule from my-timetable.monash.edu
-  // Exams are immutable — once fetched, permanently cached (examsFetched flag).
+  // Exam schedule from the student portal. Request state is never persisted.
   exams: ExamSchedule[];
   examsFetched: boolean;
+  examsFetchedAt?: string;
+  examsCheckedAt?: string;
+  // Runtime throttle applies to failed requests as well as successful checks.
+  examsAttemptedAt?: number;
+  examsSemester?: string;
+  examLoadStatus: "idle" | "loading" | "success" | "error";
+  examError: string | null;
 
   // Per-course tab data from the full sync. unitInfos / schedules / contacts are semester-fixed
   // (persisted cache — fetched once, reused on later launches); unitDashboards / recordings are
@@ -75,6 +83,8 @@ interface AppState {
   // Actions
   setUser: (user: User | null) => void;
   setLoggedIn: (loggedIn: boolean) => void;
+  requireReauthentication: (reason: "portal" | "moodle") => void;
+  completeLogin: (user: User) => void;
   setCourses: (courses: Course[]) => void;
   setCurrentCourse: (course: Course | null) => void;
   setCourseResources: (courseId: number, resources: Resource[]) => void;
@@ -175,10 +185,11 @@ const defaultSyncStatus: SyncStatus = {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
   // Initial state
   user: null,
   isLoggedIn: false,
+  reauthReason: null,
   courses: [],
   currentCourse: null,
   courseResources: {},
@@ -192,6 +203,8 @@ export const useAppStore = create<AppState>()(
   gradeOverview: [],
   exams: [],
   examsFetched: false,
+  examLoadStatus: "idle",
+  examError: null,
   unitDashboards: {},
   unitInfos: {},
   schedules: {},
@@ -204,8 +217,19 @@ export const useAppStore = create<AppState>()(
   aiInsights: defaultAiInsights,
 
   // Actions
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    const owner = get().cacheOwnerEmail;
+    if (user && (!owner || owner.trim().toLowerCase() !== user.email.trim().toLowerCase())) get().reset();
+    set((state) => ({ user, cacheOwnerEmail: user?.email || state.cacheOwnerEmail }));
+  },
   setLoggedIn: (isLoggedIn) => set({ isLoggedIn }),
+  requireReauthentication: (reauthReason) => set({ isLoggedIn: false, reauthReason }),
+  completeLogin: (user) => {
+    const state = get();
+    const owner = state.cacheOwnerEmail || state.user?.email;
+    if (!owner || owner.trim().toLowerCase() !== user.email.trim().toLowerCase()) get().reset();
+    set({ user, isLoggedIn: true, reauthReason: null, cacheOwnerEmail: user.email, examsAttemptedAt: undefined, examLoadStatus: "idle", examError: null });
+  },
   setCourses: (courses) => set({ courses }),
   setCurrentCourse: (currentCourse) => set({ currentCourse }),
   setCourseResources: (courseId, resources) =>
@@ -215,7 +239,10 @@ export const useAppStore = create<AppState>()(
   setAllResources: (allResources) => set({ allResources }),
   addSummary: (courseId, summary) =>
     set((state) => ({
-      summaries: { ...state.summaries, [courseId]: summary },
+      summaries: { ...state.summaries, [courseId]: {
+        ...summary,
+        completedActions: summary.completedActions ?? state.summaries[courseId]?.completedActions ?? [],
+      } },
     })),
   setAssignments: (assignments) => set({ assignments }),
   setAnnouncements: (announcements) => set({ announcements }),
@@ -238,8 +265,8 @@ export const useAppStore = create<AppState>()(
     })),
   setCalendarEvents: (calendarEvents) => set({ calendarEvents }),
   setGradeOverview: (gradeOverview) => set({ gradeOverview }),
-  setExams: (exams) => set({ exams, examsFetched: true }),
-  resetExams: () => set({ exams: [], examsFetched: false }),
+  setExams: (exams) => set((state) => ({ exams, examsFetched: true, examsFetchedAt: new Date().toISOString(), examsCheckedAt: new Date().toISOString(), examsSemester: state.courses.length ? inferActiveSemesterKey(state.courses) : undefined, examLoadStatus: "success", examError: null })),
+  resetExams: () => set({ exams: [], examsFetched: false, examsFetchedAt: undefined, examsCheckedAt: undefined, examsSemester: undefined, examLoadStatus: "idle", examError: null }),
   setCourseTabData: (tabs) =>
     set((state) => {
       const unitDashboards = { ...state.unitDashboards };
@@ -476,6 +503,8 @@ export const useAppStore = create<AppState>()(
     set({
       user: null,
       isLoggedIn: false,
+      reauthReason: null,
+      cacheOwnerEmail: undefined,
       courses: [],
       currentCourse: null,
       courseResources: {},
@@ -499,7 +528,14 @@ export const useAppStore = create<AppState>()(
       gradeOverview: [],
       exams: [],
       examsFetched: false,
+      examsFetchedAt: undefined,
+      examsCheckedAt: undefined,
+      examsAttemptedAt: undefined,
+      examsSemester: undefined,
+      examLoadStatus: "idle",
+      examError: null,
       downloads: [],
+      aiInsights: { priorities: null, plans: {}, prioritiesRunning: false },
     }),
     }),
     {
@@ -531,9 +567,13 @@ export const useAppStore = create<AppState>()(
         courseResources: state.courseResources,
         calendarEvents: state.calendarEvents,
         gradeOverview: state.gradeOverview,
-        // Exams are immutable — once fetched, permanently cached.
+        // Keep the last successful portal result while refreshing in the background.
         exams: state.exams,
         examsFetched: state.examsFetched,
+        examsFetchedAt: state.examsFetchedAt,
+        examsCheckedAt: state.examsCheckedAt,
+        examsSemester: state.examsSemester,
+        cacheOwnerEmail: state.cacheOwnerEmail,
         // Semester-fixed tabs (unit info / schedule / contacts) are cached: fetch once,
         // reuse across launches. The dynamic tabs (dashboard / recordings) are NOT
         // persisted — they are re-fetched live on every login.
@@ -542,13 +582,17 @@ export const useAppStore = create<AppState>()(
         contacts: state.contacts,
         courseFingerprints: state.courseFingerprints,
         summaries: state.summaries,
+        aiInsights: { ...state.aiInsights, prioritiesRunning: false },
         settings: state.settings,
       }),
       // Users on older versions don't have the newly added settings fields (e.g. accentColor) in localStorage,
       // and zustand's default shallow merge would replace the whole settings object with the old one, leaving new fields undefined.
       // Merge settings explicitly here so new fields always get their default value.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<AppState>;
+        const saved = (persisted ?? {}) as Partial<AppState>;
+        // Legacy caches cannot be safely assigned to whichever student logs in next.
+        // Preserve preferences, but require a fresh sync for unowned account data.
+        const p = saved.cacheOwnerEmail?.trim() ? saved : { settings: saved.settings };
         // Older builds persisted user / isLoggedIn. Strip them on restore so a stale
         // "logged in" flag can never survive a restart; auth is re-derived from the
         // Rust keyring session via loadSavedSession(). Without this, the merge below
@@ -561,7 +605,19 @@ export const useAppStore = create<AppState>()(
           ...rest,
           user: null,
           isLoggedIn: false,
+          reauthReason: null,
+          examsAttemptedAt: undefined,
           settings: { ...defaultSettings, ...(p.settings ?? {}) },
+          // Pre-portal caches came from the old source and must be revalidated.
+          exams: p.examsFetchedAt ? p.exams ?? [] : [],
+          examsFetched: !!p.examsFetchedAt && !!p.examsFetched,
+          examLoadStatus: "idle",
+          examError: null,
+          aiInsights: {
+            ...defaultAiInsights,
+            ...(p.aiInsights ?? {}),
+            prioritiesRunning: false,
+          },
         };
       },
     },

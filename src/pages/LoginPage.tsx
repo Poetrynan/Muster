@@ -49,7 +49,7 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { setLoggedIn, setUser } = useAppStore();
+  const { completeLogin, reauthReason } = useAppStore();
   const { t, lang } = useTranslation();
 
   // Footer version comes from the runtime (tauri.conf.json) — never hardcoded,
@@ -73,7 +73,7 @@ export function LoginPage() {
     user?: any;
   }) => {
     if (response.success) {
-      setUser(
+      completeLogin(
         response.user || {
           id: 1,
           username: "student",
@@ -82,7 +82,6 @@ export function LoginPage() {
           profileImage: "",
         }
       );
-      setLoggedIn(true);
     } else {
       setError(response.message || t("login.errorConnection"));
     }
@@ -98,7 +97,9 @@ export function LoginPage() {
       console.error("SSO login error:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (!errorMessage.includes("窗口已关闭") && !errorMessage.includes("取消")) {
-        setError(errorMessage || t("login.errorConnection"));
+        // Keep the friendly text, but expose the code so a failure can be diagnosed.
+        const code = errorMessage.match(/PORTAL_[A-Z_]+/)?.[0];
+        setError(code ? `${t("login.unifiedIncomplete")} (${code})` : errorMessage || t("login.errorConnection"));
       }
     } finally {
       setIsLoading(false);
@@ -348,6 +349,7 @@ export function LoginPage() {
             </div>
 
             {/* Error message: role=alert + aria-live so screen readers announce it */}
+            {reauthReason && <p role="status" className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm">{t("login.reauthRequired")}</p>}
             {error && (
               <motion.div
                 role="alert"

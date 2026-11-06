@@ -1,3 +1,4 @@
+import { refreshExamSchedule, examErrorKey } from "../services/examSchedule";
 import {
   BookOpen,
   Calendar,
@@ -48,7 +49,7 @@ import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
-import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress, fetchExams } from "../services/api";
+import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
 import { ExamCard } from "../components/ExamCard";
 import { batchDownload } from "../services/batchDownload";
 // Reopening the app within this window after the last auto sync renders from local
@@ -274,13 +275,34 @@ export function Dashboard() {
     setGradeOverview,
     exams,
     examsFetched,
-    setExams,
+    examsFetchedAt,
+    examsCheckedAt,
+    examLoadStatus,
+    examError,
     hideCourse,
     unhideCourse,
     togglePinCourse,
   } = useAppStore();
 
   const { t, lang } = useTranslation();
+  const examSemesterKey = Array.isArray(rawCourses) && rawCourses.length ? inferActiveSemesterKey(rawCourses) : undefined;
+  const examRetryAttempt = useRef(0);
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    void refreshExamSchedule();
+    const onFocus = () => void refreshExamSchedule();
+    window.addEventListener("focus", onFocus);
+    const timer = setInterval(() => void refreshExamSchedule(), 6 * 60 * 60 * 1000);
+    return () => { clearInterval(timer); window.removeEventListener("focus", onFocus); };
+  }, [isLoggedIn, examSemesterKey]);
+  useEffect(() => {
+    if (examLoadStatus === "success") { examRetryAttempt.current = 0; return; }
+    if (!isLoggedIn || examLoadStatus !== "error") return;
+    const delay = Math.min(300_000 * 2 ** examRetryAttempt.current++, 15 * 60_000);
+    const timer = setTimeout(() => void refreshExamSchedule(), delay);
+    return () => clearTimeout(timer);
+  }, [isLoggedIn, examLoadStatus, examError]);
+
 
   // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
   // The event may carry a `detail` field with the target settings section (e.g. "ai").
@@ -759,27 +781,13 @@ export function Dashboard() {
       // meant a failed manual sync would suppress the next launch auto-sync for an hour.
       useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
       // Calendar events + grade overview (parallel; failures never block the main flow)
-      const [cal, grades, examResult] = await Promise.all([
+      void refreshExamSchedule();
+      const [cal, grades] = await Promise.all([
         fetchCalendarEvents().catch(() => [] as CalendarEvent[]),
         fetchGradeOverview().catch(() => [] as GradeOverviewRow[]),
-        // Exams are immutable — only fetch once (examsFetched flag).
-        prevState.examsFetched
-          ? Promise.resolve(null)
-          : fetchExams().then(
-              (data) => ({ success: true as const, data }),
-              (err) => {
-                console.warn("Exam fetch failed:", err);
-                return { success: false as const, error: String(err) };
-              }
-            ),
       ]);
       setCalendarEvents(cal);
       setGradeOverview(grades);
-      if (examResult && examResult.success) {
-        setExams(examResult.data);
-      } else if (examResult && !examResult.success) {
-        console.warn("Exam fetch failed:", examResult.error);
-      }
       // Grade-release reminder: diff against pre-sync overview
       try {
         const stG = prevState.settings;
@@ -1234,9 +1242,9 @@ export function Dashboard() {
       });
     });
 
-    // 3. Exams from my-timetable.monash.edu (immutable, permanently cached).
+    // 3. Student portal exams, using their exact start instant.
     (exams || []).forEach((exam) => {
-      const examDate = new Date(exam.date);
+      const examDate = new Date(exam.startAt || exam.date);
       const t = examDate.getTime();
       if (Number.isNaN(t) || t <= 0) return;
       items.push({
@@ -2183,12 +2191,21 @@ export function Dashboard() {
               {/* Exam timetable */}
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-foreground">{t("dashboard.examsTitle")}</h3>
-                <span className="text-xs text-muted-foreground">{t("dashboard.examsSubtitle")}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">{t("dashboard.examsSubtitle")}</span>
+                  <span className="text-xs text-muted-foreground">{t("dashboard.examsAutomatic")}</span>
+                </div>
               </div>
+              {examLoadStatus === "error" && (
+                <p role="alert" className="mb-3 text-sm text-destructive">
+                  {t(examErrorKey(examError))}
+                </p>
+              )}
+              {(examsCheckedAt || examsFetchedAt) && <p className="mb-3 text-xs text-muted-foreground">{t("dashboard.examsCheckedAt")}: {new Date(examsCheckedAt || examsFetchedAt!).toLocaleString(lang)}</p>}
               {exams.length === 0 ? (
                 <div className="mb-6 p-6 rounded-2xl bg-card border border-border text-center">
                   <p className="text-sm text-muted-foreground">
-                    {examsFetched ? t("dashboard.examsEmpty") : t("dashboard.examsLoading")}
+                    {examLoadStatus === "loading" ? t("dashboard.examsLoading") : examsFetched && examLoadStatus !== "error" ? t("dashboard.examsEmpty") : t("dashboard.examsNotLoaded")}
                   </p>
                 </div>
               ) : (

@@ -347,12 +347,18 @@ pub struct GradeOverviewRow {
     pub grade: String,
 }
 
-/// Exam schedule entry from my-timetable.monash.edu.
-/// Exams are immutable — once fetched, they are permanently cached and never re-scraped.
+/// Exam schedule entry from home.student.monash.
+/// Exam data from the student portal; refreshes can change dates and locations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExamSchedule {
     pub id: String,
+    #[serde(default)]
+    pub start_at: Option<String>,
+    #[serde(default)]
+    pub end_at: Option<String>,
+    #[serde(default)]
+    pub timezone: Option<String>,
     pub course_id: Option<u64>,
     pub course_name: String,
     pub course_code: String,
