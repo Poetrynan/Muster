@@ -1,4 +1,5 @@
 import { refreshExamSchedule, examErrorKey } from "../services/examSchedule";
+import { gradesForCourses } from "../lib/gradeOverview";
 import {
   BookOpen,
   Calendar,
@@ -1275,7 +1276,6 @@ export function Dashboard() {
     const diff = getCalendarDayDiff(d.ts);
     return d.ts >= Date.now() && diff !== null && diff >= 0 && diff <= 7;
   }).length;
-  const gradedCount = (gradeOverview || []).filter((g) => g.grade !== "-").length;
 
   const renderDeadlineCard = (item: { key: string; courseId: number | null; kind: "quiz" | "assign" | "exam"; title: string; ts: number }) => {
     const diff = getCalendarDayDiff(item.ts);
@@ -1380,6 +1380,14 @@ export function Dashboard() {
       return b.semesterInfo.sortWeight - a.semesterInfo.sortWeight || a.name.localeCompare(b.name);
     });
   }, [courses, settings.courseSortBy, selectedSemesterTab, currentSemesterKey, hiddenCourseIds, pinnedCourseIds]);
+
+  // Grade progress counts only the courses shown under "My Courses", not every
+  // enrolment the Moodle overview lists (past terms, school hubs, portals).
+  const visibleGrades = useMemo(() => {
+    const shown = new Set(displayCourses.map((c) => c.id));
+    return gradesForCourses(gradeOverview, (courses || []).filter((c) => shown.has(c.id)));
+  }, [gradeOverview, courses, displayCourses]);
+  const gradedCount = visibleGrades.filter((g) => g.grade !== "-").length;
 
   // Stats are computed from active non-hidden data.
   const quickStats = [
@@ -2220,10 +2228,10 @@ export function Dashboard() {
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-foreground">{t("dashboard.gradesProgress")}</h3>
                 <span className="text-sm text-muted-foreground">
-                  {t("dashboard.gradedOf", { graded: gradedCount, total: (gradeOverview || []).length })}
+                  {t("dashboard.gradedOf", { graded: gradedCount, total: visibleGrades.length })}
                 </span>
               </div>
-              {(gradeOverview || []).length === 0 ? (
+              {visibleGrades.length === 0 ? (
                 <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
                   <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
@@ -2240,7 +2248,7 @@ export function Dashboard() {
               ) : (
                 <div className="mb-8 p-4 rounded-2xl bg-card border border-border">
                   <div className="flex flex-wrap gap-2">
-                    {(gradeOverview || []).slice(0, 12).map((g) => (
+                    {visibleGrades.slice(0, 12).map((g) => (
                       <span
                         key={g.unit}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${

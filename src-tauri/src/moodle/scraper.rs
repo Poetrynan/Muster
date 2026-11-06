@@ -2752,17 +2752,26 @@ impl MoodleScraper {
             .text()
             .await
             .map_err(|e| format!("Failed to read grade overview: {}", e))?;
+        Ok(Self::parse_grade_overview(&html))
+    }
 
+    /// Parse `/grade/report/overview/index.php`. Each row links to
+    /// `course/user.php?mode=grade&id=<course id>`; that id is kept so the UI can
+    /// match rows to the courses it displays.
+    pub(crate) fn parse_grade_overview(html: &str) -> Vec<GradeOverviewRow> {
         let row_re = regex::Regex::new(r#"<tr[^>]*>(?s).*?</tr>"#).unwrap();
+        let id_re = regex::Regex::new(r#"[?&](?:amp;)?id=(\d+)"#).unwrap();
         let cell_re = regex::Regex::new(r#"<t[dh][^>]*>(.*?)</t[dh]>"#).unwrap();
         let strip_re = regex::Regex::new(r#"<[^>]+>"#).unwrap();
 
         let mut rows = Vec::new();
-        for row in row_re.captures_iter(&html) {
+        for row in row_re.captures_iter(html) {
             let row_html = row.get(0).unwrap().as_str();
             if row_html.contains("<th") {
                 continue;
             }
+            let first_cell = cell_re.captures(row_html).and_then(|c| c.get(1)).map(|m| m.as_str()).unwrap_or("");
+            let course_id = id_re.captures(first_cell).and_then(|c| c[1].parse::<u64>().ok());
             let cells: Vec<String> = cell_re
                 .captures_iter(row_html)
                 .map(|c| {
@@ -2792,9 +2801,10 @@ impl MoodleScraper {
             rows.push(GradeOverviewRow {
                 unit: cells[0].clone(),
                 grade,
+                course_id,
             });
         }
-        Ok(rows)
+        rows
     }
 
     /// Fetch the tabs of one course in parallel — Unit Dashboard (section=0), Unit Info
@@ -5729,6 +5739,21 @@ fn sanitize_filename(raw: &str) -> String {
 // ============================================================================
 #[cfg(test)]
 mod tests {
+    // Shape mirrors the live overview (samples/explore_20260814/grade_overview.html):
+    // units plus non-unit hub/portal sites, each linked by course id.
+    #[test]
+    fn grade_overview_rows_keep_course_ids() {
+        let html = r#"<table><tr><th>Course name</th><th>Grade</th></tr>
+            <tr><td class="cell c0"><a href="https://learning.monash.edu/course/user.php?mode=grade&amp;id=46961&amp;user=7">FIT5201 Machine learning - S2 2026</a></td><td class="cell c1">-</td></tr>
+            <tr><td class="cell c0"><a href="https://learning.monash.edu/course/user.php?mode=grade&amp;id=9680&amp;user=7">IT Student Portal</a></td><td class="cell c1">HD</td></tr>
+            <tr><td class="cell c0"></td><td></td></tr></table>"#;
+        let rows = super::MoodleScraper::parse_grade_overview(html);
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].course_id, rows[0].grade.as_str()), (Some(46961), "-"));
+        assert_eq!(rows[1].course_id, Some(9680), "user=7 must not be mistaken for the course id");
+        assert_eq!(rows[1].unit, "IT Student Portal");
+    }
+
     #[test]
     fn test_ai_system_prompt_summary_has_contract_and_guard() {
         let p = MoodleScraper::ai_system_prompt("summary");

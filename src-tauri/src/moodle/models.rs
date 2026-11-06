@@ -345,6 +345,11 @@ pub struct GradeOverviewRow {
     pub unit: String,
     /// Raw grade text; "-" when not yet graded.
     pub grade: String,
+    /// Moodle course id from the row link (`course/user.php?mode=grade&id=…`).
+    /// The overview lists every enrolment (past terms, hubs, portals), so the UI
+    /// uses this to count only the courses it actually shows.
+    #[serde(default)]
+    pub course_id: Option<u64>,
 }
 
 /// Exam schedule entry from home.student.monash.

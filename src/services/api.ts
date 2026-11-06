@@ -507,6 +507,8 @@ export interface GradeOverviewRow {
   unit: string;
   /** Raw grade text; "-" when not yet graded. */
   grade: string;
+  /** Moodle course id; absent in data cached by older versions. */
+  courseId?: number;
 }
 
 export interface GradeEntry {
