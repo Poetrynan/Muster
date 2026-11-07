@@ -39,7 +39,13 @@ Muster 是一款面向学生的桌面应用，把散落在 Moodle 各处的课�
 把所有课程的作业、测验、考试截止时间汇总到一条时间线，按 **今天 / 未来 7 天 / 本月** 分组展示。再也不用挨个课程翻 Moodle 找截止日期。
 > 举个例子：扫一眼就知道——Quiz 1 还有 3 天，AT3 还有 2 周。
 
-<p align="center"><img src="assets/preview/dashboard.svg" alt="Muster 仪表盘：所有课程的截止时间按紧急度汇总" width="840"></p>
+<p align="center"><img src="assets/preview/dashboard.svg" alt="Muster 仪表盘：截止时间汇总、考试时间表与成绩进度" width="840"></p>
+
+### 🎓 考试时间表与成绩拆分
+考试安排直接来自 Monash 学生门户：日期、时间、考场、座位号，还有倒计时，并且自动检查更新。成绩按考核类别拆开，显示已经拿到多少分，以及剩下的考核还需要拿多少才能到 50% 及格。
+> 举个例子：「还差 8.5%：剩余 47.5% 平均需拿到 17.9%」——进度条每种颜色都有图例说明。
+
+<p align="center"><img src="assets/preview/grade-breakdown.svg" alt="Muster 成绩拆分：按考核类别显示已得分与及格还差多少" width="840"></p>
 
 ### 🔔 智能提醒
 截止前系统通知；新资料同步、新公告发布、成绩发布都会提醒。提前几天提醒由你定（1 / 3 / 7 天）。

@@ -39,7 +39,13 @@ Muster is a desktop app for students. It aggregates everything scattered across 
 Every assignment, quiz and exam deadline from all your courses is merged into one timeline, grouped by **today / next 7 days / this month**. No more digging through each course page to find out what is due.
 > For example: one glance tells you — Quiz 1 is due in 3 days, AT3 in 2 weeks.
 
-<p align="center"><img src="assets/preview/dashboard.svg" alt="Muster dashboard showing merged deadlines grouped by urgency" width="840"></p>
+<p align="center"><img src="assets/preview/dashboard.svg" alt="Muster dashboard with merged deadlines, exam timetable and grade progress" width="840"></p>
+
+### 🎓 Exam Timetable & Grade Breakdown
+Your official exam schedule comes straight from the Monash student portal — date, time, room and seat, with a countdown — and is checked automatically. Grades are split by assessment category, showing what you have earned so far and what you still need on the remaining work to reach 50%.
+> For example: "Need 8.5% more: average 17.9% on the remaining 47.5%" — with a colour legend for every part of the bar.
+
+<p align="center"><img src="assets/preview/grade-breakdown.svg" alt="Muster grade breakdown by assessment category with the mark still needed to pass" width="840"></p>
 
 ### 🔔 Smart Reminders
 System notifications fire before a deadline, when new materials are synced, when a course posts a new announcement, and when grades are released. You pick how early to be reminded (1 / 3 / 7 days).
