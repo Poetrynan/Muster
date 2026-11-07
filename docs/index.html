@@ -66,6 +66,10 @@ header.scrolled{border-bottom-color:rgba(0,0,0,.08)}
      padding:12px 24px;border-radius:980px;transition:background .2s}
 .btn:hover{background:#0077ed;text-decoration:none}
 .btn svg{width:17px;height:17px}
+.btn-ghost{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.btn-ghost:hover{background:rgba(0,113,227,.07)}
+.hero .btns{gap:12px}
+.hero .link-more{margin-left:10px}
 .link-more{font-size:17px;display:inline-flex;align-items:center;gap:4px}
 .link-more::after{content:"\203A";font-size:22px;line-height:1;transform:translateY(-1px)}
 .link-more svg{width:17px;height:17px;margin-right:2px}
@@ -119,13 +123,13 @@ section{padding:120px 0}
 .tile-icon{width:64px;height:64px;margin:34px 34px 0;color:#0071e3}
 
 /* Privacy (dark) */
-.dark-sec{background:var(--black);color:#f5f5f7}
-.dark-sec .eyebrow,.dark-sec .lede{color:#a1a1a6}
+.priv-sec{background:var(--bg)}
+
 .priv{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:64px}
-.priv div{background:#1d1d1f;border-radius:var(--radius);padding:34px}
-.priv svg{width:34px;height:34px;color:#2997ff;margin-bottom:22px}
+.priv div{background:var(--bg-alt);border-radius:var(--radius);padding:34px}
+.priv svg{width:34px;height:34px;color:#0071e3;margin-bottom:22px}
 .priv h3{font-size:21px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
-.priv p{color:#a1a1a6;font-size:16px;margin-top:8px}
+.priv p{color:var(--ink-2);font-size:16px;margin-top:8px}
 
 /* Steps */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:48px;margin-top:64px;counter-reset:s}
@@ -150,7 +154,7 @@ section{padding:120px 0}
 .cta .btns{margin-top:34px;gap:14px}
 
 /* Footer */
-footer{background:var(--bg-alt);color:var(--ink-2);font-size:12px;line-height:1.6;padding:28px 0 40px}
+footer{background:var(--bg-alt);border-top:1px solid var(--line);color:var(--ink-2);font-size:12px;line-height:1.6;padding:28px 0 40px}
 footer p{margin-bottom:12px;max-width:900px}
 footer strong{color:var(--ink)}
 .foot-row{display:flex;flex-wrap:wrap;gap:6px 18px;border-top:1px solid var(--line);padding-top:14px;margin-top:6px}
@@ -160,10 +164,38 @@ footer strong{color:var(--ink)}
 /* CJK headings: break at phrase boundaries where supported */
 :lang(ja) .h2,:lang(ja) .hero-tag,:lang(ja) .tile h3,:lang(ja) .priv h3{word-break:auto-phrase}
 
-/* Motion */
-.js .reveal{opacity:0;transform:translateY(28px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+/* Motion: reveal on enter, staggered by --d */
+.js .reveal{opacity:0;transform:translateY(32px);transition:opacity 1s cubic-bezier(.2,.7,.2,1),transform 1s cubic-bezier(.2,.7,.2,1);
+            transition-delay:calc(var(--d,0) * 110ms)}
 .js .reveal.in{opacity:1;transform:none}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.js .reveal{opacity:1;transform:none;transition:none}}
+
+/* Hero entrance on load */
+@keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+.js .hero .narrow > *{animation:rise 1.1s cubic-bezier(.2,.7,.2,1) both}
+.js .hero .narrow > :nth-child(2){animation-delay:.12s}
+.js .hero .narrow > :nth-child(3){animation-delay:.24s}
+.js .hero .narrow > :nth-child(4){animation-delay:.36s}
+.js .hero .narrow > :nth-child(5){animation-delay:.46s}
+
+/* Scroll-linked: JS writes --p (0 → 1) on every [data-scroll] element */
+.hero-shot{perspective:1600px}
+.hero-shot .frame{transform-origin:50% 0;will-change:transform;
+  transform:rotateX(calc((1 - var(--p,1)) * 24deg)) scale(calc(.86 + .14 * var(--p,1))) translateY(calc((1 - var(--p,1)) * 40px))}
+.grow .frame,.grow .crop{will-change:transform,opacity;
+  transform:scale(calc(.88 + .12 * var(--p,1)));opacity:calc(.35 + .65 * var(--p,1))}
+.tile{--ty:calc((1 - var(--p,1)) * 90px)}
+.tile-media img{transform:translateY(var(--ty))}
+.tile-media.tile-content img{transform:translateX(-21%) translateY(var(--ty))}
+.words .w{color:#d2d2d7;transition:color .35s ease}
+.words .w.lit{color:var(--ink)}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .js .reveal{opacity:1;transform:none;transition:none}
+  .js .hero .narrow > *{animation:none}
+  [data-scroll]{--p:1 !important}
+  .words .w{color:var(--ink);transition:none}
+}
 
 /* Responsive */
 @media (max-width:980px){
@@ -216,48 +248,50 @@ footer strong{color:var(--ink)}
       <p class="hero-tag" data-i18n="hero.tag">All of Moodle. One window.</p>
       <p class="hero-lead" data-i18n="hero.lead">Sign in once with your Monash account. Deadlines, exams, grades, slides and announcements from every unit arrive in one place — and stay on your computer.</p>
       <div class="btns">
-        <a class="btn" id="dlPrimary" href="https://github.com/Poetrynan/Muster/releases/latest"><span id="dlIcon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.45 9.75 2.1v9.45H0zM10.95 2.1 24 0v11.4H10.95zM0 12.6h9.75v9.45L0 20.7zM10.95 12.6H24V24l-13.05-1.8z"/></svg></span><span id="dlLabel" data-i18n="hero.dlWin">Download for Windows</span></a>
+        <a class="btn" data-os="Win" href="https://github.com/Poetrynan/Muster/releases/latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.45 9.75 2.1v9.45H0zM10.95 2.1 24 0v11.4H10.95zM0 12.6h9.75v9.45L0 20.7zM10.95 12.6H24V24l-13.05-1.8z"/></svg><span data-i18n="hero.dlWin">Download for Windows</span></a>
+        <a class="btn btn-ghost" data-os="Mac" href="https://github.com/Poetrynan/Muster/releases/latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8.92-2.85-.9.04-1.99.6-2.63 1.35-.57.65-.97 1.72-.84 2.74 1.01.08 2.03-.5 2.55-1.24z"/></svg><span data-i18n="hero.dlMac">Download for macOS</span></a>
+        <a class="btn btn-ghost" data-os="Linux" href="https://github.com/Poetrynan/Muster/releases/latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M7 8l3 2-3 2M12 12h4"/></svg><span data-i18n="hero.dlLinux">Download for Linux</span></a>
         <a class="link-more" href="https://github.com/Poetrynan/Muster" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2C6.48 2 2 6.48 2 12.02c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03A9.56 9.56 0 0 1 12 6.84c.85 0 1.71.12 2.5.34 1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86l-.01 2.75c0 .27.18.58.69.48A10.02 10.02 0 0 0 22 12.02C22 6.48 17.52 2 12 2z"/></svg><span data-i18n="hero.gh">View on GitHub</span></a>
       </div>
       <p class="note" data-i18n="hero.plat">Windows 10 / 11 · macOS 12+ · Linux (AppImage, .deb, AUR) · No sign-up required</p>
     </div>
-    <div class="hero-shot reveal">
+    <div class="hero-shot" data-scroll="0.9">
       <div class="frame"><img src="preview/dashboard.svg" width="1200" height="1000" alt="Muster home: deadlines, exam timetable and grade progress for every unit" /></div>
     </div>
     <div class="wrap">
       <div class="facts">
-        <div class="fact"><b data-i18n="fact.1v">Free</b><span data-i18n="fact.1l">No sign-up, no subscription</span></div>
-        <div class="fact"><b data-i18n="fact.2v">Local</b><span data-i18n="fact.2l">Your data never leaves your computer</span></div>
-        <div class="fact"><b data-i18n="fact.3v">Source-available</b><span data-i18n="fact.3l">Every line is on GitHub</span></div>
-        <div class="fact"><b data-i18n="fact.4v">3 platforms</b><span data-i18n="fact.4l">Windows, macOS and Linux</span></div>
+        <div class="fact reveal"><b data-i18n="fact.1v">Free</b><span data-i18n="fact.1l">No sign-up, no subscription</span></div>
+        <div class="fact reveal" style="--d:1"><b data-i18n="fact.2v">Local</b><span data-i18n="fact.2l">Your data never leaves your computer</span></div>
+        <div class="fact reveal" style="--d:2"><b data-i18n="fact.3v">Source-available</b><span data-i18n="fact.3l">Every line is on GitHub</span></div>
+        <div class="fact reveal" style="--d:3"><b data-i18n="fact.4v">3 platforms</b><span data-i18n="fact.4l">Windows, macOS and Linux</span></div>
       </div>
     </div>
   </section>
 
   <section class="alt center" id="features">
     <div class="wrap">
-      <span class="eyebrow" data-i18n="grade.k">Grade breakdown</span>
-      <h2 class="h2" data-i18n="grade.h">Know exactly what you need to pass.</h2>
-      <p class="lede" data-i18n="grade.p">Muster groups every unit's marks by assessment category, adds up what you've earned, and tells you the average you need on what's left to reach 50%.</p>
-      <div class="screen reveal"><div class="frame"><img src="preview/grade-breakdown.svg" width="1200" height="856" loading="lazy" alt="Grade breakdown by assessment category with the average still needed to reach 50%" /></div></div>
+      <span class="eyebrow reveal" data-i18n="grade.k">Grade breakdown</span>
+      <h2 class="h2 reveal" data-i18n="grade.h" style="--d:1">Know exactly what you need to pass.</h2>
+      <p class="lede reveal" data-i18n="grade.p" style="--d:2">Muster groups every unit's marks by assessment category, adds up what you've earned, and tells you the average you need on what's left to reach 50%.</p>
+      <div class="screen grow" data-scroll="0.8"><div class="frame"><img src="preview/grade-breakdown.svg" width="1200" height="856" loading="lazy" alt="Grade breakdown by assessment category with the average still needed to reach 50%" /></div></div>
       <p class="fine" data-i18n="grade.n">Illustrative data. Hurdle requirements aren't included — check your Unit Information.</p>
     </div>
   </section>
 
   <section class="center">
     <div class="wrap">
-      <span class="eyebrow" data-i18n="exam.k">Exam timetable</span>
-      <h2 class="h2" data-i18n="exam.h">Your exams. Already on the calendar.</h2>
-      <p class="lede" data-i18n="exam.p">Muster reads your official exam schedule from the Monash student portal — date, time, room and seat — and checks for changes automatically.</p>
-      <div class="screen reveal"><div class="crop"><img src="preview/dashboard.svg" width="1200" height="1000" loading="lazy" alt="Exam timetable cards with date, time, room, seat and a countdown" /></div></div>
+      <span class="eyebrow reveal" data-i18n="exam.k">Exam timetable</span>
+      <h2 class="h2 reveal" data-i18n="exam.h" style="--d:1">Your exams. Already on the calendar.</h2>
+      <p class="lede reveal" data-i18n="exam.p" style="--d:2">Muster reads your official exam schedule from the Monash student portal — date, time, room and seat — and checks for changes automatically.</p>
+      <div class="screen grow" data-scroll="0.7"><div class="crop"><img src="preview/dashboard.svg" width="1200" height="1000" loading="lazy" alt="Exam timetable cards with date, time, room, seat and a countdown" /></div></div>
     </div>
   </section>
 
   <section class="alt">
     <div class="wrap">
       <div class="center">
-        <span class="eyebrow" data-i18n="bento.k">And the rest</span>
-        <h2 class="h2" data-i18n="bento.h">Everything else, handled.</h2>
+        <span class="eyebrow reveal" data-i18n="bento.k">And the rest</span>
+        <h2 class="h2 reveal" data-i18n="bento.h" style="--d:1">Everything else, handled.</h2>
       </div>
       <div class="bento">
         <article class="tile s4 reveal"><div class="tile-copy"><h3 data-i18n="b1.h">Real submission status.</h3><p data-i18n="b1.p">Submitted, graded or still due — straight from Moodle, sorted by date.</p></div><div class="tile-media tile-wide"><img src="preview/assignments.svg" width="1200" height="752" loading="lazy" alt="" /></div></article>
@@ -270,33 +304,33 @@ footer strong{color:var(--ink)}
     </div>
   </section>
 
-  <section class="dark-sec center" id="privacy">
+  <section class="priv-sec center" id="privacy">
     <div class="wrap">
-      <span class="eyebrow" data-i18n="priv.k">Privacy</span>
-      <h2 class="h2" data-i18n="priv.h">Your data stays on your computer.</h2>
-      <p class="lede" data-i18n="priv.p">Muster has no servers. You sign in on Monash's own page, and everything it collects is stored only on your device.</p>
+      <span class="eyebrow reveal" data-i18n="priv.k">Privacy</span>
+      <h2 class="h2 words" data-i18n="priv.h" data-scroll="0.65">Your data stays on your computer.</h2>
+      <p class="lede reveal" data-i18n="priv.p" style="--d:1">Muster has no servers. You sign in on Monash's own page, and everything it collects is stored only on your device.</p>
       <div class="priv" style="text-align:left">
         <div class="reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><h3 data-i18n="priv.1h">No password ever touches Muster.</h3><p data-i18n="priv.1p">You sign in on Monash's official page, MFA included.</p></div>
-        <div class="reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M3 3l18 18"/></svg><h3 data-i18n="priv.2h">No servers. No tracking.</h3><p data-i18n="priv.2p">Courses, files and grades are stored only on your computer.</p></div>
-        <div class="reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M17 6l3 3M14 9l2 2"/></svg><h3 data-i18n="priv.3h">Credentials in your OS keychain.</h3><p data-i18n="priv.3p">Session tokens live in the system credential store, bound to your account.</p></div>
+        <div class="reveal" style="--d:1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M3 3l18 18"/></svg><h3 data-i18n="priv.2h">No servers. No tracking.</h3><p data-i18n="priv.2p">Courses, files and grades are stored only on your computer.</p></div>
+        <div class="reveal" style="--d:2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M17 6l3 3M14 9l2 2"/></svg><h3 data-i18n="priv.3h">Credentials in your OS keychain.</h3><p data-i18n="priv.3p">Session tokens live in the system credential store, bound to your account.</p></div>
       </div>
     </div>
   </section>
 
-  <section>
+  <section class="alt">
     <div class="wrap">
-      <div class="center"><h2 class="h2" data-i18n="how.h">Up and running in three steps.</h2></div>
+      <div class="center"><h2 class="h2 reveal" data-i18n="how.h">Up and running in three steps.</h2></div>
       <div class="steps">
         <div class="step reveal"><h3 data-i18n="how.1h">Download</h3><p data-i18n="how.1p">Install for your platform. If Windows or macOS shows a routine warning, allow it to run.</p></div>
-        <div class="step reveal"><h3 data-i18n="how.2h">Sign in with Monash</h3><p data-i18n="how.2p">The same official login you use for Moodle, MFA included.</p></div>
-        <div class="step reveal"><h3 data-i18n="how.3h">That's it</h3><p data-i18n="how.3p">Your units, deadlines, exams and grades are ready — and stay up to date on their own.</p></div>
+        <div class="step reveal" style="--d:1"><h3 data-i18n="how.2h">Sign in with Monash</h3><p data-i18n="how.2p">The same official login you use for Moodle, MFA included.</p></div>
+        <div class="step reveal" style="--d:2"><h3 data-i18n="how.3h">That's it</h3><p data-i18n="how.3p">Your units, deadlines, exams and grades are ready — and stay up to date on their own.</p></div>
       </div>
     </div>
   </section>
 
-  <section class="alt" id="faq">
+  <section id="faq">
     <div class="narrow">
-      <div class="center"><h2 class="h2" data-i18n="faq.h">Questions? Answers.</h2></div>
+      <div class="center"><h2 class="h2 reveal" data-i18n="faq.h">Questions? Answers.</h2></div>
       <div class="faqs">
 <details class="faq reveal"><summary><span data-i18n="q1.q">Is it safe if Windows SmartScreen or macOS Gatekeeper displays a warning?</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="faq-body" data-i18n="q1.a">Completely safe. As an independent student open-source project, Muster does not carry an expensive enterprise code-signing certificate, triggering standard OS warnings. On Windows, click “More info” → “Run anyway”. On macOS, grant permission under System Settings → Privacy & Security. On Linux, simply make the .AppImage executable (chmod +x) or install the .deb package.</div></details>
 <details class="faq reveal"><summary><span data-i18n="q2.q">Does using Muster comply with university and faculty IT policies?</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="faq-body" data-i18n="q2.a">Muster authenticates via standard browser-level SSO and retrieves only the units and files your account is legitimately authorized to access. It incorporates an internal leaky-bucket rate limiter that restricts request frequency well below manual web browsing, causing zero server strain. Please observe your faculty's IT guidelines and copyright rules.</div></details>
@@ -307,10 +341,10 @@ footer strong{color:var(--ink)}
     </div>
   </section>
 
-  <section class="cta">
+  <section class="cta alt">
     <div class="narrow">
-      <h2 class="h2" data-i18n="cta.h">Get Muster.</h2>
-      <p class="lede" data-i18n="cta.p">Free for Monash students. Windows, macOS and Linux.</p>
+      <h2 class="h2 reveal" data-i18n="cta.h">Get Muster.</h2>
+      <p class="lede reveal" data-i18n="cta.p" style="--d:1">Free for Monash students. Windows, macOS and Linux.</p>
       <div class="btns">
         <a class="btn" href="https://github.com/Poetrynan/Muster/releases/latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.45 9.75 2.1v9.45H0zM10.95 2.1 24 0v11.4H10.95zM0 12.6h9.75v9.45L0 20.7zM10.95 12.6H24V24l-13.05-1.8z"/></svg><span data-i18n="cta.dlWin">Download for Windows</span></a>
         <a class="btn" href="https://github.com/Poetrynan/Muster/releases/latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8.92-2.85-.9.04-1.99.6-2.63 1.35-.57.65-.97 1.72-.84 2.74 1.01.08 2.03-.5 2.55-1.24z"/></svg><span data-i18n="cta.dlMac">Download for macOS</span></a>
@@ -699,17 +733,60 @@ footer strong{color:var(--ink)}
       var r = el.getBoundingClientRect();
       if (r.top < window.innerHeight && r.bottom > 0) el.classList.add("in"); else io.observe(el);
     });
-    // Safety net: never leave content invisible if the observer doesn't fire.
-    setTimeout(function () { els.forEach(function (el) { el.classList.add("in"); }); }, 4000);
   })();
 
-  // Primary download button follows the visitor's OS.
+  // Scroll-linked effects: write --p (0 → 1) on each [data-scroll] element as it travels
+  // from the bottom of the viewport upwards by data-scroll × viewport height.
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var items = Array.prototype.slice.call(document.querySelectorAll("[data-scroll]"));
+    var words = Array.prototype.slice.call(document.querySelectorAll(".words"));
+
+    // Split headline text into word (Latin) or character (CJK) spans for the light-up effect.
+    function split(el) {
+      var text = el.textContent;
+      var parts = /[぀-ヿ㐀-鿿가-힯]/.test(text) ? Array.from(text) : text.split(/(\s+)/);
+      el.innerHTML = "";
+      parts.forEach(function (part) {
+        if (/^\s+$/.test(part)) { el.appendChild(document.createTextNode(part)); return; }
+        var s = document.createElement("span"); s.className = "w"; s.textContent = part; el.appendChild(s);
+      });
+    }
+    function splitAll() { words.forEach(split); tick(); }
+
+    var ticking = false;
+    function tick() {
+      ticking = false;
+      var vh = window.innerHeight;
+      items.forEach(function (el) {
+        var span = parseFloat(el.getAttribute("data-scroll")) || 0.8;
+        var p = reduce ? 1 : (vh - el.getBoundingClientRect().top) / (vh * span);
+        p = Math.max(0, Math.min(1, p));
+        el.style.setProperty("--p", p.toFixed(3));
+        if (el.classList.contains("words")) {
+          var ws = el.querySelectorAll(".w"), lit = Math.round(p * ws.length);
+          for (var i = 0; i < ws.length; i++) ws[i].classList.toggle("lit", i < lit);
+        }
+      });
+    }
+    function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(tick); } }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    document.addEventListener("i18n", splitAll);
+    splitAll();
+  })();
+
+  // All three platforms stay visible; the visitor's OS becomes the filled primary button, first in line.
   (function () {
     var ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
     var os = /mac/i.test(ua) ? "Mac" : /linux|x11/i.test(ua) && !/android/i.test(ua) ? "Linux" : "Win";
-    var icons = { Win: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M0 3.45 9.75 2.1v9.45H0zM10.95 2.1 24 0v11.4H10.95zM0 12.6h9.75v9.45L0 20.7zM10.95 12.6H24V24l-13.05-1.8z\"/></svg>", Mac: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8.92-2.85-.9.04-1.99.6-2.63 1.35-.57.65-.97 1.72-.84 2.74 1.01.08 2.03-.5 2.55-1.24z\"/></svg>", Linux: "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M8 21h8M12 17v4M7 8l3 2-3 2M12 12h4\"/></svg>" };
-    document.getElementById("dlIcon").innerHTML = icons[os];
-    document.getElementById("dlLabel").setAttribute("data-i18n", "hero.dl" + os);
+    var btns = document.querySelectorAll(".hero [data-os]");
+    var first = btns[0].parentNode.firstElementChild;
+    btns.forEach(function (b) {
+      var mine = b.getAttribute("data-os") === os;
+      b.classList.toggle("btn-ghost", !mine);
+      if (mine) b.parentNode.insertBefore(b, first);
+    });
   })();
 
   // Language switching (same storage key as before, so returning visitors keep their choice).
@@ -732,6 +809,7 @@ footer strong{color:var(--ink)}
       label.textContent = NAMES[lang];
       opts.forEach(function (o) { o.setAttribute("aria-selected", String(o.getAttribute("data-lang") === lang)); });
       try { localStorage.setItem("mi-lang", lang); } catch (e) {}
+      document.dispatchEvent(new Event("i18n"));
     }
     var saved = "en";
     try { saved = new URLSearchParams(location.search).get("lang") || localStorage.getItem("mi-lang") || "en"; } catch (e) {}
