@@ -1,3 +1,32 @@
+# Muster v0.5.0
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.0_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/Muster_0.5.0_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.0_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/Muster_0.5.0_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.0_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/Muster_0.5.0_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.0_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/Muster_0.5.0_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.0_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/Muster_0.5.0_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.0_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.0/muster_0.5.0_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.0/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Faster sign-in sync.** Your unit list appears first, and each unit fills in as soon as it finishes. You no longer wait for the slowest one. Dashboard, Unit Info, schedule, recordings and contacts are all filled in the background, so opening a tab no longer starts its own download.
+- **Only what changed is downloaded.** Units that have not changed since the last sync are checked with a single request and served from your local copy. Only announcements, recordings and ungraded submission states are refreshed live. Pages shared between sections are downloaded once per sync.
+- **More parallel, still polite.** More units and pages load at the same time, with a fixed pace towards Monash servers. If the server is busy, Muster backs off and waits. Opening units and downloading files no longer waits for a running sync.
+- **AI study guide.** The AI section is now a course and week guide built from your synced deadlines, statuses and materials, with sources you can open. Facts and urgency work without an API key. A failed generation keeps your last complete guide.
+- **Sign out asks first** and keeps this computer's data by default. Signing out also stops a sync that is still running.
+- **Loading states instead of empty states.** While data is still syncing, the home page shows placeholders instead of "no deadlines".
+- **Report a problem in one click.** The feedback form can attach a diagnostic report that contains no personal data.
+- The submission dialog now scrolls properly in small windows.
+
+---
+
 # Muster v0.4.1
 
 ## Download
