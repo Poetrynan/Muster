@@ -12,6 +12,13 @@ interface DialogProps {
 }
 
 export function Dialog({ open, onClose, children, className }: DialogProps) {
+  // Escape closes the dialog, like any modal.
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   return (
     <AnimatePresence>
       {open && (
@@ -37,6 +44,8 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
               className
             )}
             style={{ pointerEvents: open ? "auto" : "none" }}
+            role="dialog"
+            aria-modal="true"
           >
             {children}
           </motion.div>

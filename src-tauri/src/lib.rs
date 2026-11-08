@@ -35,6 +35,8 @@ pub struct AppState {
     exam_check_lock: Arc<Mutex<()>>,
     scraper: Arc<Mutex<Option<MoodleScraper>>>,
     ai_config: Arc<Mutex<Option<AiConfig>>>,
+    /// Running background syncs by frontend run id, so logout / cancel_sync can abort them.
+    syncs: Arc<std::sync::Mutex<std::collections::HashMap<String, tokio::task::AbortHandle>>>,
     /// Minimize to tray instead of closing the window (synced from the frontend settings, on by default)
     close_to_tray: std::sync::atomic::AtomicBool,
 }
@@ -49,6 +51,7 @@ impl AppState {
             exam_check_lock: Arc::new(Mutex::new(())),
             scraper: Arc::new(Mutex::new(None)),
             ai_config: Arc::new(Mutex::new(None)),
+            syncs: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             close_to_tray: std::sync::atomic::AtomicBool::new(true),
         }
     }
@@ -138,6 +141,7 @@ async fn logout(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Res
     if let Some(window) = app_handle.get_webview_window("student-portal-exams") { let _ = window.close(); }
     if let Some(account) = state.portal_account.lock().await.take() { student_portal_session::clear(&account); }
     *state.pending_exam_result.lock().await = None;
+    abort_all_syncs(&state);
     state.auth.logout().await?;
 
     let mut scraper_guard = state.scraper.lock().await;
@@ -264,28 +268,85 @@ async fn fetch_course_recordings(
     scraper.fetch_course_recordings(course_id).await
 }
 
-/// Sync all data from Moodle
+/// Abort every running background sync (logout / account switch).
+fn abort_all_syncs(state: &AppState) {
+    let handles: Vec<_> = state.syncs.lock().unwrap().drain().map(|(_, h)| h).collect();
+    for handle in handles {
+        handle.abort();
+    }
+}
+
+/// Sync all data from Moodle.
+///
+/// The scraper is cloned out of the mutex so other commands (opening a course,
+/// downloads) are not blocked for the whole sync. With a `run_id`, progress goes to
+/// `sync-progress-{runId}` and per-course batches to `sync-data-{runId}` while the
+/// sync is still running; the sync can be aborted with `cancel_sync(runId)`.
 #[tauri::command]
 async fn sync_all(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
     options: Option<SyncOptions>,
     #[allow(unused)] include_fixed_tabs: Option<bool>,
+    run_id: Option<String>,
 ) -> Result<SyncResult, String> {
-    let scraper_guard = state.scraper.lock().await;
-    let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
+    let scraper = {
+        let scraper_guard = state.scraper.lock().await;
+        scraper_guard.as_ref().ok_or("Not logged in")?.clone()
+    };
+    let run_id = run_id.filter(|id| {
+        !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    });
+    let progress_handle = app_handle.clone();
+    let progress_run = run_id.clone();
     let progress: Option<std::sync::Arc<dyn Fn(usize, usize, &str) + Send + Sync>> =
         Some(std::sync::Arc::new(move |done, total, phase| {
-            let _ = app_handle.emit(
-                "sync-progress",
-                serde_json::json!({ "done": done, "total": total, "phase": phase }),
-            );
+            let payload = serde_json::json!({ "done": done, "total": total, "phase": phase });
+            let _ = progress_handle.emit("sync-progress", payload.clone());
+            if let Some(id) = &progress_run {
+                let _ = progress_handle.emit(&format!("sync-progress-{}", id), payload);
+            }
         }));
+    let on_patch: Option<std::sync::Arc<dyn Fn(moodle::models::SyncPatch) + Send + Sync>> = run_id.clone().map(|id| {
+        let handle = app_handle.clone();
+        let event = format!("sync-data-{}", id);
+        std::sync::Arc::new(move |patch: moodle::models::SyncPatch| {
+            let _ = handle.emit(&event, patch);
+        }) as std::sync::Arc<dyn Fn(moodle::models::SyncPatch) + Send + Sync>
+    });
     let mut opts = options.unwrap_or_default();
     if let Some(ift) = include_fixed_tabs {
         opts.include_fixed_tabs = ift;
     }
-    scraper.fetch_all_data(progress, opts).await
+
+    let task = tokio::spawn(async move { scraper.fetch_all_data(progress, on_patch, opts).await });
+    let key = run_id.unwrap_or_else(|| {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("anon-{}", nanos)
+    });
+    state.syncs.lock().unwrap().insert(key.clone(), task.abort_handle());
+    let outcome = task.await;
+    state.syncs.lock().unwrap().remove(&key);
+    match outcome {
+        Ok(result) => result,
+        Err(e) if e.is_cancelled() => Err("SYNC_CANCELLED".into()),
+        Err(e) => Err(format!("sync task failed: {}", e)),
+    }
+}
+
+/// Abort a background sync started with `sync_all(runId)`. Unknown ids are a no-op.
+#[tauri::command]
+fn cancel_sync(run_id: String, state: State<'_, AppState>) -> bool {
+    match state.syncs.lock().unwrap().remove(&run_id) {
+        Some(handle) => {
+            handle.abort();
+            true
+        }
+        None => false,
+    }
 }
 
 /// Remove all files inside the configured download folder (user-initiated, from the clear-data modal).
@@ -448,8 +509,96 @@ async fn save_ai_config(
     Ok(())
 }
 
-/// Stream an AI summary: starts the LLM stream request and forwards chunks
-/// via the `summary-{streamId}` Tauri event. Returns the stream id.
+// Reserve before dispatching generation so cancel-before-start needs no
+// tombstones. An absent reservation can never recreate a cancelled request.
+#[derive(Default)]
+struct SummaryStreamRegistry {
+    jobs: std::sync::Mutex<std::collections::HashMap<String, Arc<SummaryStreamJob>>>,
+}
+
+struct SummaryStreamJob {
+    cancel: tokio::sync::watch::Sender<bool>,
+    started: std::sync::atomic::AtomicBool,
+}
+
+struct SummaryStreamGuard<'a> {
+    registry: &'a SummaryStreamRegistry,
+    stream_id: String,
+    job: Arc<SummaryStreamJob>,
+}
+
+impl Drop for SummaryStreamGuard<'_> {
+    fn drop(&mut self) {
+        let mut jobs = self.registry.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        if jobs.get(&self.stream_id).is_some_and(|job| Arc::ptr_eq(job, &self.job)) {
+            jobs.remove(&self.stream_id);
+        }
+    }
+}
+
+impl SummaryStreamRegistry {
+    fn reserve(&self, stream_id: &str) -> Result<(), String> {
+        let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        if jobs.contains_key(stream_id) {
+            return Err("Summary stream ID already registered".into());
+        }
+        let (cancel, _) = tokio::sync::watch::channel(false);
+        jobs.insert(stream_id.into(), Arc::new(SummaryStreamJob {
+            cancel, started: std::sync::atomic::AtomicBool::new(false),
+        }));
+        Ok(())
+    }
+
+    fn cancel(&self, stream_id: &str) {
+        if let Some(job) = self.jobs.lock().unwrap_or_else(|e| e.into_inner()).remove(stream_id) {
+            // send_replace retains the state even if cancellation beats subscribe.
+            job.cancel.send_replace(true);
+        }
+    }
+
+    async fn run<F>(&self, stream_id: &str, generation: F) -> Result<(), String>
+    where F: std::future::Future<Output = Result<(), String>> {
+        let job = {
+            let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            let job = jobs.get(stream_id).ok_or("Summary stream cancelled or not registered")?.clone();
+            if job.started.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return Err("Summary stream already started".into());
+            }
+            job
+        };
+        let guard = SummaryStreamGuard { registry: self, stream_id: stream_id.into(), job };
+        let mut cancellation = guard.job.cancel.subscribe();
+        // Drop the losing generation future, including reqwest/SSE and any
+        // scraper/config lock wait. The guard removes this job only.
+        tokio::select! {
+            biased;
+            _ = async {
+                loop {
+                    if *cancellation.borrow_and_update() { break; }
+                    if cancellation.changed().await.is_err() { break; }
+                }
+            } => Err("Summary stream cancelled".into()),
+            result = generation => result,
+        }
+    }
+}
+
+fn summary_streams() -> &'static SummaryStreamRegistry {
+    static STREAMS: std::sync::OnceLock<SummaryStreamRegistry> = std::sync::OnceLock::new();
+    STREAMS.get_or_init(SummaryStreamRegistry::default)
+}
+
+#[tauri::command]
+fn register_summary_stream(stream_id: String) -> Result<(), String> {
+    summary_streams().reserve(&stream_id)
+}
+
+#[tauri::command]
+fn cancel_summary_stream(stream_id: String) {
+    summary_streams().cancel(&stream_id);
+}
+
+/// Stream an AI summary through a previously reserved, cancellable job.
 #[tauri::command]
 async fn generate_summary_stream(
     content: String,
@@ -461,27 +610,29 @@ async fn generate_summary_stream(
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let scraper_guard = state.scraper.lock().await;
-    let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
+    summary_streams().run(&stream_id, async {
+        let scraper_guard = state.scraper.lock().await;
+        let scraper = scraper_guard.as_ref().ok_or("Not logged in")?;
 
-    let ai_guard = state.ai_config.lock().await;
-    let key = api_key
-        .filter(|k| !k.trim().is_empty())
-        .or_else(|| ai_guard.as_ref().map(|c| c.api_key.clone()))
-        .ok_or_else(|| "AI API Key is missing. Please configure it in Settings.".to_string())?;
-    let url = api_url
-        .filter(|u| !u.trim().is_empty())
-        .or_else(|| ai_guard.as_ref().map(|c| c.api_url.clone()))
-        .unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string());
-    let md = model
-        .filter(|m| !m.trim().is_empty())
-        .or_else(|| ai_guard.as_ref().map(|c| c.model.clone()))
-        .unwrap_or_else(|| "gpt-4o-mini".to_string());
-    drop(ai_guard);
+        let ai_guard = state.ai_config.lock().await;
+        let key = api_key
+            .filter(|k| !k.trim().is_empty())
+            .or_else(|| ai_guard.as_ref().map(|c| c.api_key.clone()))
+            .ok_or_else(|| "AI API Key is missing. Please configure it in Settings.".to_string())?;
+        let url = api_url
+            .filter(|u| !u.trim().is_empty())
+            .or_else(|| ai_guard.as_ref().map(|c| c.api_url.clone()))
+            .unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string());
+        let md = model
+            .filter(|m| !m.trim().is_empty())
+            .or_else(|| ai_guard.as_ref().map(|c| c.model.clone()))
+            .unwrap_or_else(|| "gpt-4o-mini".to_string());
+        drop(ai_guard);
 
-    scraper
-        .generate_summary_stream(&content, &key, &url, &md, mode.as_deref().unwrap_or("summary"), Some(&app_handle), &stream_id)
-        .await
+        scraper
+            .generate_summary_stream(&content, &key, &url, &md, mode.as_deref().unwrap_or("summary"), Some(&app_handle), &stream_id)
+            .await
+    }).await
 }
 
 /// Generate an AI summary of course content
@@ -728,6 +879,13 @@ async fn start_sso_login_webview_inner(
     let _ = webview_window.close();
 
     Ok(response)
+}
+
+/// Recent lines of the redacted portal diagnostics log (error codes and field types only),
+/// attached to in-app problem reports when the user opts in.
+#[tauri::command]
+fn read_portal_diagnostics() -> String {
+    student_portal::diagnostics_tail(40)
 }
 
 /// Fetch exams from the authenticated Monash student portal.
@@ -1165,16 +1323,20 @@ pub fn run() {
             fetch_course_unit_dashboard,
             fetch_grade_overview,
             fetch_exams,
+            read_portal_diagnostics,
             set_close_to_tray,
             get_target_arch,
             get_system_info,
             sync_all,
+            cancel_sync,
             get_sync_status,
             download_file,
             clear_downloads,
             save_ai_config,
             generate_summary,
             generate_summary_stream,
+            register_summary_stream,
+            cancel_summary_stream,
             test_ai_connection,
             start_sso_login,
             start_sso_login_webview,
@@ -1188,6 +1350,124 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::detect_os_version;
+
+    #[tokio::test]
+    async fn summary_stream_cancellation_before_start_never_polls_generation() {
+        let registry = super::SummaryStreamRegistry::default();
+        registry.reserve("early").unwrap();
+        registry.cancel("early");
+        let mut polled = false;
+        let result = registry.run("early", async { polled = true; Ok(()) }).await;
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert!(!polled);
+        // Cancellation of an absent/finished ID never creates a future job.
+        registry.cancel("unknown");
+        assert!(registry.run("unknown", async { Ok(()) }).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn summary_stream_cancellation_drops_running_future_and_spares_other_job() {
+        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+        struct OnDrop(Arc<AtomicBool>);
+        impl Drop for OnDrop { fn drop(&mut self) { self.0.store(true, Ordering::SeqCst); } }
+        let registry = Arc::new(super::SummaryStreamRegistry::default());
+        registry.reserve("first").unwrap(); registry.reserve("other").unwrap();
+        let dropped = Arc::new(AtomicBool::new(false));
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish_other, other_finished) = tokio::sync::oneshot::channel();
+        let first = {
+            let registry = registry.clone(); let dropped = dropped.clone();
+            tokio::spawn(async move { registry.run("first", async {
+                let _guard = OnDrop(dropped); let _ = started.send(());
+                std::future::pending::<Result<(), String>>().await
+            }).await })
+        };
+        let other = {
+            let registry = registry.clone();
+            tokio::spawn(async move { registry.run("other", async { other_finished.await.unwrap(); Ok(()) }).await })
+        };
+        ready.await.unwrap(); registry.cancel("first");
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), first).await.expect("cancel did not stop future").unwrap();
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert!(dropped.load(Ordering::SeqCst)); assert!(!other.is_finished());
+        finish_other.send(()).unwrap(); assert!(other.await.unwrap().is_ok());
+        assert!(registry.run("other", async { Ok(()) }).await.is_err(), "completed jobs must be removed");
+    }
+
+    #[tokio::test]
+    async fn summary_stream_cancellation_works_while_waiting_for_scraper_lock() {
+        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+        let registry = Arc::new(super::SummaryStreamRegistry::default());
+        registry.reserve("waiting").unwrap();
+        let scraper_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let held = scraper_lock.lock().await;
+        let entered = Arc::new(AtomicBool::new(false));
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let job = {
+            let registry = registry.clone(); let scraper_lock = scraper_lock.clone(); let entered = entered.clone();
+            tokio::spawn(async move { registry.run("waiting", async {
+                let _ = started.send(());
+                let _guard = scraper_lock.lock().await;
+                entered.store(true, Ordering::SeqCst); Ok(())
+            }).await })
+        };
+        ready.await.unwrap(); registry.cancel("waiting");
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), job).await.expect("cancel blocked on scraper lock").unwrap();
+        assert!(result.is_err()); drop(held); assert!(!entered.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn summary_stream_cancellation_registry_cleans_success_and_error() {
+        let registry = super::SummaryStreamRegistry::default();
+        for result in [Ok(()), Err("provider failed".to_string())] {
+            registry.reserve("job").unwrap();
+            assert!(registry.reserve("job").is_err(), "duplicate IDs must not replace a live job");
+            assert_eq!(registry.run("job", async { result.clone() }).await, result);
+            assert!(registry.run("job", async { Ok(()) }).await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn summary_stream_cancellation_closes_http_response_body() {
+        use std::sync::Arc;
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/chat/completions", listener.local_addr().unwrap());
+        let (sent, receiving) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut socket = tokio::io::BufReader::new(socket);
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                assert!(socket.read_line(&mut line).await.unwrap() > 0);
+                if line == "\r\n" { break; }
+                if let Some((key, value)) = line.split_once(':') {
+                    if key.eq_ignore_ascii_case("content-length") { length = value.trim().parse::<usize>().unwrap(); }
+                }
+            }
+            socket.read_exact(&mut vec![0; length]).await.unwrap();
+            // Leave a real SSE response open. Cancelling must drop reqwest's
+            // response body and close the socket, rather than merely stop UI events.
+            socket.get_mut().write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: 100000\r\n\r\ndata: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\n").await.unwrap();
+            sent.send(()).unwrap();
+            let mut byte = [0];
+            socket.read(&mut byte).await.unwrap()
+        });
+        let registry = Arc::new(super::SummaryStreamRegistry::default());
+        registry.reserve("http").unwrap();
+        let job = {
+            let registry = registry.clone();
+            tokio::spawn(async move {
+                let scraper = super::MoodleScraper::new(Arc::new(super::MoodleAuth::new()));
+                registry.run("http", scraper.generate_summary_stream("fictional fixture", "fake-key", &url, "fixture-model", "guide", None, "http")).await
+            })
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(2), receiving).await.unwrap().unwrap();
+        registry.cancel("http");
+        assert!(tokio::time::timeout(std::time::Duration::from_secs(2), job).await.unwrap().unwrap().unwrap_err().contains("cancelled"));
+        assert_eq!(tokio::time::timeout(std::time::Duration::from_secs(2), server).await.expect("HTTP transport stayed open after cancellation").unwrap(), 0);
+    }
 
     #[test]
     fn os_version_is_never_empty() {

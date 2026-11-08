@@ -414,6 +414,37 @@ pub struct CourseTabData {
     pub recordings: Vec<Recording>,
     #[serde(default)]
     pub contacts: Vec<CourseContact>,
+    /// Tabs that were fetched successfully in this batch ("dashboard", "unitInfo",
+    /// "schedule", "recordings", "contacts"). Lets the client tell "fetched, empty"
+    /// (replace the cache) from "skipped/failed" (keep the cache).
+    #[serde(default)]
+    pub loaded_parts: Vec<String>,
+}
+
+/// One streamed batch of an in-progress sync (`sync-data-{runId}` event). Course
+/// list first, then one batch per finished course. Never finishes the sync on the
+/// client: only the final `SyncResult` does.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub courses: Option<Vec<Course>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<Resource>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub assignments: Vec<Assignment>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub announcements: Vec<Announcement>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tabs: Vec<CourseTabData>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub status_updates: Vec<Assignment>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unchanged_course_ids: Vec<u64>,
+    /// courseId -> parts fetched successfully in this batch ("resources", "assignments",
+    /// "announcements", plus tab names). An empty list for a part means "not fetched".
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub completed: HashMap<u64, Vec<String>>,
 }
 
 fn default_true() -> bool {
@@ -455,6 +486,11 @@ pub struct SyncOptions {
     /// trackable (has URL) items are sent; the backend re-probes their detail pages.
     #[serde(default)]
     pub status_recheck: Vec<Assignment>,
+    /// Courses missing a semester-fixed tab (unit info / schedule / contacts) in the
+    /// client cache. Their fixed tabs are fetched even when `include_fixed_tabs` is
+    /// false, so one cached course never hides another course's missing tabs.
+    #[serde(default)]
+    pub fixed_tab_course_ids: Vec<u64>,
 }
 
 impl Default for SyncOptions {
@@ -467,6 +503,7 @@ impl Default for SyncOptions {
             target_course_ids: None,
             fingerprints: HashMap::new(),
             status_recheck: Vec::new(),
+            fixed_tab_course_ids: Vec::new(),
         }
     }
 }

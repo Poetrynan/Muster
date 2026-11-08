@@ -349,7 +349,7 @@ export function LoginPage() {
             </div>
 
             {/* Error message: role=alert + aria-live so screen readers announce it */}
-            {reauthReason && <p role="status" className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm">{t("login.reauthRequired")}</p>}
+            {reauthReason && <p role="status" className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm">{t(reauthReason === "signedOut" ? "login.signedOut" : "login.reauthRequired")}</p>}
             {error && (
               <motion.div
                 role="alert"

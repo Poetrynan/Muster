@@ -3,12 +3,14 @@ import React from "react";
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** Guide prose must not create citations outside the verified source map. */
+  allowLinks?: boolean;
 }
 
 /**
  * Format inline Markdown elements: **bold**, *italic*, `code`, [link](url), etc.
  */
-function renderInline(text: string): React.ReactNode[] {
+function renderInline(text: string, allowLinks = true): React.ReactNode[] {
   const elements: React.ReactNode[] = [];
   // Match inline code `...`, bold **...**, italic *...*, link [...](...)
   const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
@@ -54,7 +56,7 @@ function renderInline(text: string): React.ReactNode[] {
       if (linkMatch) {
         const linkText = linkMatch[1];
         const linkHref = linkMatch[2];
-        elements.push(
+        if (!allowLinks) { elements.push(<span key={key}>{linkText}</span>); } else elements.push(
           <a
             key={key}
             href={linkHref}
@@ -97,7 +99,7 @@ function renderInline(text: string): React.ReactNode[] {
 /**
  * Production-grade lightweight Markdown renderer with rich styling for headings, lists, code blocks, blockquotes, bold, etc.
  */
-export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className = "", allowLinks = true }: MarkdownRendererProps) {
   if (!content) return null;
 
   const lines = content.split("\n");
@@ -204,7 +206,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
               key={`h1-${i}`}
               className="text-base font-bold text-foreground mt-4 mb-2 pb-1 border-b border-border/50 flex items-center gap-2"
             >
-              {renderInline(text)}
+              {renderInline(text, allowLinks)}
             </h3>
           );
         } else if (level === 2) {
@@ -213,7 +215,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
               key={`h2-${i}`}
               className="text-sm font-semibold text-foreground mt-3.5 mb-1.5 flex items-center gap-1.5"
             >
-              {renderInline(text)}
+              {renderInline(text, allowLinks)}
             </h4>
           );
         } else {
@@ -222,7 +224,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
               key={`h3-${i}`}
               className="text-xs font-semibold text-foreground/90 uppercase tracking-wide mt-2.5 mb-1"
             >
-              {renderInline(text)}
+              {renderInline(text, allowLinks)}
             </h5>
           );
         }
@@ -258,7 +260,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
                       className="px-3 py-2 text-left font-semibold text-foreground border-b border-border/60"
                       style={{ textAlign: aligns[hi] as "left" | "center" | "right" | undefined }}
                     >
-                      {renderInline(hcell)}
+                      {renderInline(hcell, allowLinks)}
                     </th>
                   ))}
                 </tr>
@@ -272,7 +274,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
                         className="px-3 py-1.5 text-foreground/90 border-b border-border/30"
                         style={{ textAlign: aligns[ci] as "left" | "center" | "right" | undefined }}
                       >
-                        {renderInline(cell)}
+                        {renderInline(cell, allowLinks)}
                       </td>
                     ))}
                   </tr>
@@ -295,7 +297,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
           key={`quote-${i}`}
           className="my-2.5 pl-3.5 py-1.5 border-l-3 border-primary/70 bg-primary/5 rounded-r-lg text-xs italic text-muted-foreground leading-relaxed"
         >
-          {renderInline(quoteText)}
+          {renderInline(quoteText, allowLinks)}
         </div>
       );
       continue;
@@ -311,7 +313,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
       }
       listItems.push(
         <li key={`li-${i}`} className="pl-1">
-          {renderInline(bulletMatch[1])}
+          {renderInline(bulletMatch[1], allowLinks)}
         </li>
       );
       continue;
@@ -327,7 +329,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
       }
       listItems.push(
         <li key={`oli-${i}`} className="pl-1">
-          {renderInline(orderedMatch[2])}
+          {renderInline(orderedMatch[2], allowLinks)}
         </li>
       );
       continue;
@@ -337,7 +339,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
     flushList(i);
     blocks.push(
       <p key={`p-${i}`} className="my-1.5 text-foreground/90 leading-relaxed">
-        {renderInline(trimmed)}
+        {renderInline(trimmed, allowLinks)}
       </p>
     );
   }

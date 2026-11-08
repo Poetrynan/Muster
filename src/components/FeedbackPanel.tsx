@@ -9,6 +9,8 @@ import { useAppStore } from "../stores/useAppStore";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentAppVersion } from "../services/updater";
 import { Dialog } from "./ui/dialog";
+import { buildDiagnosticReport } from "../lib/diagnostics";
+import { takeFeedbackContext } from "../lib/feedbackDraft";
 
 // Public submit-only endpoint. It carries no credential and grants no read access,
 // so shipping it in an open-source client leaks nothing that isn't already public.
@@ -130,7 +132,15 @@ function extractImagesFromClipboard(e: React.ClipboardEvent | React.DragEvent): 
 
 export function FeedbackPanel() {
   const { t } = useTranslation();
-  const { settings, user, courses } = useAppStore();
+  const { settings, user, courses, assignments, allResources, announcements, syncStatus, exams, examLoadStatus, examError, examsCheckedAt } = useAppStore();
+
+  // Set when the user arrived from a "Report this problem" link (e.g. the exam error).
+  const [context] = useState<string | null>(() => takeFeedbackContext());
+  const [attachDiag, setAttachDiag] = useState(true);
+  const [portalLog, setPortalLog] = useState("");
+  useEffect(() => {
+    invoke<string>("read_portal_diagnostics").then(setPortalLog).catch(() => {});
+  }, []);
 
   const [kind, setKind] = useState<FeedbackKind>("bug");
   const [message, setMessage] = useState("");
@@ -200,6 +210,26 @@ export function FeedbackPanel() {
       platform: systemInfo ? JSON.stringify(systemInfo) : "unknown",
     }),
     [settings.language, appVersion, systemInfo]
+  );
+
+  // Structure-only report; the preview below renders this exact string, so what the user
+  // reviews is what gets sent.
+  const diagnostics = useMemo(
+    () =>
+      buildDiagnosticReport({
+        appVersion: meta.version,
+        language: meta.language,
+        platform: systemInfo ? `${systemInfo.os} ${systemInfo.osVersion} ${systemInfo.arch}` : "unknown",
+        courses,
+        assignments,
+        resourceCount: allResources.length,
+        announcementCount: announcements.length,
+        sync: { isRunning: syncStatus.isRunning, lastSync: syncStatus.lastSync, errors: syncStatus.errors },
+        exams: { status: examLoadStatus, error: examError, count: exams.length, checkedAt: examsCheckedAt },
+        portalLog,
+        context: context ?? undefined,
+      }),
+    [meta, systemInfo, courses, assignments, allResources.length, announcements.length, syncStatus, examLoadStatus, examError, exams.length, examsCheckedAt, portalLog, context]
   );
 
   // Total compressed payload — kept below Formspree's 10 MB ceiling. Base64 inflates
@@ -315,6 +345,8 @@ export function FeedbackPanel() {
           imageCount: images.length,
           images: images.map((img) => img.dataUrl),
           imagesTotalSize: formatBytes(imagesTotalBytes),
+          context: context ?? undefined,
+          diagnostics: attachDiag ? diagnostics : undefined,
         }),
       });
       if (!res.ok) {
@@ -395,6 +427,12 @@ export function FeedbackPanel() {
                     </button>
                   ))}
                 </div>
+
+                {context && (
+                  <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
+                    {t("feedback.contextLabel", { context })}
+                  </p>
+                )}
 
                 {/* Message textarea — accepts paste + drag-drop of images */}
                 <div onDrop={handleDrop}>
@@ -555,6 +593,21 @@ export function FeedbackPanel() {
                   <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
                     {t("feedback.attachedNote")}
                   </p>
+                  <label className="mt-3 flex items-start gap-2 text-[11px] text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+                      checked={attachDiag}
+                      onChange={(e) => setAttachDiag(e.target.checked)}
+                    />
+                    <span>{t("feedback.diagAttach")}</span>
+                  </label>
+                  {attachDiag && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[11px] font-medium text-primary">{t("feedback.diagPreview")}</summary>
+                      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background p-2.5 text-[10.5px] leading-relaxed text-muted-foreground">{diagnostics}</pre>
+                    </details>
+                  )}
                 </div>
 
                 {state === "error" && (

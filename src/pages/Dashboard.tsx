@@ -1,6 +1,8 @@
 import { refreshExamSchedule, examErrorKey } from "../services/examSchedule";
 import { buildCourseGrade } from "../lib/gradeBreakdown";
 import { CourseGradeRow, GradeLegend } from "../components/GradeBreakdown";
+import { LogoutDialog } from "../components/LogoutDialog";
+import { setFeedbackContext } from "../lib/feedbackDraft";
 import {
   BookOpen,
   Calendar,
@@ -44,14 +46,15 @@ import { EmptyBox } from "../components/ui/empty-box";
 import { GradeEmptyIllustration } from "../components/ui/grade-empty-illustration";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
-import { useAppStore, getSyncOptions } from "../stores/useAppStore";
-import { computeCourseDataHash } from "../lib/summaryFreshness";
+import { useAppStore } from "../stores/useAppStore";
+import { startBackgroundSync, isSyncCancelled } from "../services/backgroundSync";
+import { StudyGuideOverview } from '../components/StudyGuideOverview';
 import { checkForAppUpdates, getCurrentAppVersion, installUpdateInAppWithRetry, relaunchApp, type ReleaseInfo } from "../services/updater";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { showToast } from "../components/ui/toast";
 import { LanguageSelect } from "../components/LanguageSelect";
-import { fetchCourses, syncAll, downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
+import { downloadFile, onDownloadProgress, fetchCalendarEvents, fetchGradeOverview, onSyncProgress } from "../services/api";
 import { ExamCard } from "../components/ExamCard";
 import { batchDownload } from "../services/batchDownload";
 // Reopening the app within this window after the last auto sync renders from local
@@ -258,7 +261,6 @@ export function Dashboard() {
     settings,
     updateSettings,
     courses: rawCourses = [],
-    setCourses: setStoreCourses,
     allResources: rawResources = [],
     assignments: rawAssignments = [],
     announcements: rawAnnouncements = [],
@@ -266,11 +268,8 @@ export function Dashboard() {
     markAnnouncementRead,
     markAllAnnouncementsRead,
     syncStatus,
-    setSyncStatus,
-    updateAllSyncedData,
     reminderBanner,
     setReminderBanner,
-    reset,
     downloads,
     upsertDownload,
     calendarEvents,
@@ -309,6 +308,17 @@ export function Dashboard() {
 
   // AI hub entry: dot indicator (stale/never-generated) + jump-to-settings event.
   // The event may carry a `detail` field with the target settings section (e.g. "ai").
+  const [guideCourseId, setGuideCourseId] = useState<number | null>(null);
+  useEffect(() => {
+    const openGuide = (event: Event) => {
+      const id = Number((event as CustomEvent).detail);
+      setGuideCourseId(Number.isFinite(id) ? id : null);
+      setSelectedCourseId(null);
+      setActiveTab("ai");
+    };
+    window.addEventListener("muster:open-study-guide", openGuide);
+    return () => window.removeEventListener("muster:open-study-guide", openGuide);
+  }, []);
   const [initialSettingsSection, setInitialSettingsSection] = useState<string | undefined>(undefined);
   const onOpenSettings = useCallback((e: Event) => {
     const section = (e as CustomEvent).detail as string | undefined;
@@ -404,28 +414,6 @@ export function Dashboard() {
   // Portal/hub courses are excluded from stats and resource aggregation
   const realCourses = useMemo(() => courses.filter((c: any) => !c.isPortal), [courses]);
 
-  // AI entry dot: ONLY when already-generated AI content is stale (data changed since
-  // generation). "Never generated" must NOT nag the user - discovery is the AI
-  // page's own job, not the sidebar's.
-  const aiSummaries = useAppStore((st) => st.summaries);
-  const aiInsightsPriorities = useAppStore((st) => st.aiInsights.priorities);
-  const courseResourcesMap = useAppStore((st) => st.courseResources);
-  const aiDot = useMemo(() => {
-    if (!settings.aiApiKey) return false;
-    const unitInfos = useAppStore.getState().unitInfos;
-    for (const course of realCourses) {
-      const s = aiSummaries[course.id];
-      if (!s?.dataHash) continue; // no summary or legacy summary: never nag
-      const hash = computeCourseDataHash({
-        resources: (courseResourcesMap[course.id]?.length ? courseResourcesMap[course.id] : rawResources.filter((r) => r.courseId === course.id)) as never,
-        assignments: rawAssignments.filter((a) => a.courseId === course.id) as never,
-        announcements: rawAnnouncements.filter((a) => a.courseId === course.id) as never,
-        unitInfoTitles: unitInfos[course.id]?.sections?.map((sec) => sec.title),
-      });
-      if (hash !== s.dataHash) return true;
-    }
-    return false;
-  }, [aiSummaries, aiInsightsPriorities, settings.aiApiKey, realCourses, courseResourcesMap, rawResources, rawAssignments, rawAnnouncements]);
   const activeRealCourses = useMemo(
     () => realCourses.filter((c: any) => !hiddenCourseIds.includes(c.id)),
     [realCourses, hiddenCourseIds]
@@ -734,8 +722,16 @@ export function Dashboard() {
   };
   // Stats counts are defined below after courses/assignments are declared (L268)
 
-  const handleLogout = () => {
-    reset();
+  // Sign-out goes through a confirmation that ends the session but keeps local data by default.
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const handleLogout = () => setLogoutOpen(true);
+
+  // "Report this problem": open the feedback form with the error as context and the
+  // structure-only diagnostic report attached by default.
+  const reportProblem = (context: string) => {
+    setFeedbackContext(context);
+    setInitialSettingsSection("feedback");
+    setActiveTab("settings");
   };
 
   // P1: request de-duplication — prevents StrictMode or rapid interactions from triggering multiple syncs
@@ -756,33 +752,13 @@ export function Dashboard() {
 
   const syncAllData = useCallback(async (fullRefresh = false) => {
     if (syncStatus.isRunning) return;
-    setSyncStatus({ isRunning: true });
     setSyncProgress(null);
     setLoadError(null);
     try {
       const prevState = useAppStore.getState();
-      const options = getSyncOptions(prevState, fullRefresh);
-      const data = await syncAll(options);
-      // P0 baseline metric (ChangeSignature design): how many Moodle requests did
-      // this sync actually consume, and how many courses were fingerprint-skipped.
-      console.info(
-        `[Muster][sync] requests=${data.requestsUsed} unchanged=${data.unchangedCourseIds.length}/${data.courses.length}`
-      );
-      updateAllSyncedData({
-        courses: data.courses,
-        resources: data.resources,
-        assignments: data.assignments,
-        announcements: data.announcements,
-        tabs: data.tabs,
-        unchangedCourseIds: data.unchangedCourseIds,
-        newFingerprints: data.fingerprints,
-        requestsUsed: data.requestsUsed,
-        statusUpdates: data.statusUpdates,
-        fullRefresh,
-      });
-      // Stamp the cooldown timestamp only after a successful sync — writing it before
-      // meant a failed manual sync would suppress the next launch auto-sync for an hour.
-      useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
+      // The coordinator streams each finished course into the store, applies the final
+      // result and stamps lastAutoSyncAt only on success (see backgroundSync.ts).
+      const data = await startBackgroundSync(fullRefresh);
       // Calendar events + grade overview (parallel; failures never block the main flow)
       void refreshExamSchedule();
       const [cal, grades] = await Promise.all([
@@ -851,13 +827,13 @@ export function Dashboard() {
       // The hourly poll (above) handles the "app left open" case; this handles "just synced".
       runDueCheck(t, setReminderBanner);
     } catch (err) {
+      if (isSyncCancelled(err)) return;
       console.error("Failed to sync data:", err);
       setLoadError(errMsg(err, "dashboard.syncFailed"));
     } finally {
-      setSyncStatus({ isRunning: false });
       setSyncProgress(null);
     }
-  }, [syncStatus.isRunning, setSyncStatus, updateAllSyncedData, t]);
+  }, [syncStatus.isRunning, t]);
 
   // Manual refresh: debounce (skip while running/cooldown) + rate limit (60s window).
   const handleManualSync = useCallback(() => {
@@ -942,7 +918,7 @@ export function Dashboard() {
   };
 
   // P0-4: zero-blocking first screen — on mount, render immediately from Zustand's persisted cache (interactive at 0ms),
-  // and defer network-heavy work like fetchCourses + syncAll to an idle frame so scraping doesn't
+  // and defer the network-heavy background sync to the next tick so scraping doesn't
   // slow down the first paint. Data flow and error handling are unchanged.
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -955,13 +931,7 @@ export function Dashboard() {
       }
       setLoadError(null);
 
-      // Whether this run raised the sync-running flag itself — declared outside the try so
-      // the finally below can see it: only the run that raised the flag may lower it again.
-      let startedSyncHere = false;
-
       try {
-        // Fire fetchCourses + syncAll in parallel to cut total wait time.
-        //
         // Skip the automatic full sync in dev mode (npm run tauri dev): syncAll concurrently scrapes
         // resources/assignments/announcements + every weekly section for each course, hundreds of requests in total, and
         // unoptimized debug parsing is slow on top of that, dragging "open the app" into the minutes range. During debugging, render
@@ -979,60 +949,23 @@ export function Dashboard() {
           !Number.isNaN(lastAutoSyncTs) &&
           lastAutoSyncTs > 0 &&
           Date.now() - lastAutoSyncTs < LAUNCH_SYNC_COOLDOWN_MS;
-        const shouldAutoSync = !import.meta.env.DEV && !withinCooldown && !syncAlreadyRunning;
-        startedSyncHere = shouldAutoSync;
-        // Incremental sync skips historical weeks and cached semester-fixed tabs automatically.
+        // A never-synced account (empty cache) always syncs, even inside the cooldown.
+        const neverSynced = st.courses.length === 0;
+        const shouldAutoSync = !import.meta.env.DEV && (!withinCooldown || neverSynced) && !syncAlreadyRunning;
+        // The background coordinator owns the running flag, streams the course list first
+        // (clears the course skeleton) and then each course as it finishes, and back-fills
+        // every tab (dashboard / unit info / schedule / recordings / contacts) without the
+        // user opening it. One sync_all call replaces the old fetchCourses + syncAll pair,
+        // so the course list is not downloaded twice.
         if (shouldAutoSync) {
-          // Mark the startup sync as running so the progress banner shows and manual
-          // syncs are de-duplicated; skipped entirely when the cooldown applies.
-          setSyncStatus({ isRunning: true });
-          // NOTE: the cooldown timestamp (lastAutoSyncAt) is intentionally NOT written
-          // here. It is stamped only after a successful sync below — writing it before
-          // meant a failed auto-sync polluted the timestamp and suppressed every
-          // subsequent launch auto-sync for the next hour (fresh users saw a blank
-          // Dashboard until they hit manual sync).
+          try {
+            await startBackgroundSync(false);
+          } catch (err) {
+            if (!isSyncCancelled(err) && isMounted) setLoadError(errMsg(err, "dashboard.syncFailed"));
+          }
+          if (isMounted) setIsLoadingCourses(false);
         }
-        const [fetched, synced] = await Promise.allSettled([
-          shouldAutoSync && courses.length === 0 ? fetchCourses() : Promise.resolve(null),
-          shouldAutoSync
-            ? syncAll(getSyncOptions(useAppStore.getState(), false))
-            : Promise.resolve(null),
-        ]);
-
         if (!isMounted) return;
-
-        // Handle the fetchCourses result
-        if (fetched.status === "fulfilled" && fetched.value) {
-          setStoreCourses(fetched.value);
-          setIsLoadingCourses(false);
-        }
-
-        // Handle the syncAll result (includes courses/resources/assignments/announcements)
-        // In dev mode shouldAutoSync=false, so synced.value is null and we simply skip
-        if (synced.status === "fulfilled" && synced.value) {
-          const d = synced.value;
-          console.info(
-            `[Muster][sync] requests=${d.requestsUsed} unchanged=${d.unchangedCourseIds.length}/${d.courses.length}`
-          );
-          updateAllSyncedData({
-            courses: d.courses,
-            resources: d.resources,
-            assignments: d.assignments,
-            announcements: d.announcements,
-            tabs: d.tabs,
-            unchangedCourseIds: d.unchangedCourseIds,
-            newFingerprints: d.fingerprints,
-            requestsUsed: d.requestsUsed,
-            statusUpdates: d.statusUpdates,
-            fullRefresh: false,
-          });
-          setIsLoadingCourses(false);
-          // Stamp the cooldown timestamp ONLY after a successful sync. A failed auto-sync
-          // must not suppress the next launch's auto-sync (see note above).
-          useAppStore.getState().updateSettings({ lastAutoSyncAt: new Date().toISOString() });
-        } else if (synced.status === "rejected") {
-          setLoadError(errMsg(synced.reason, "dashboard.syncFailed"));
-        }
 
         // Calendar events + grade overview ride along with the launch sync (the
         // manual sync already does this). Without it, a re-login (which clears
@@ -1056,13 +989,7 @@ export function Dashboard() {
         if (isMounted) {
           setIsLoadingCourses(false);
           setSyncProgress(null);
-          // Only lower the flag this run raised. When the periodic auto-sync already had a
-          // sync in flight, clearing here made the sync banner vanish within a second of
-          // login while the scrape was still running — a fresh user saw an empty dashboard
-          // that looked like sync never started.
-          if (startedSyncHere) {
-            setSyncStatus({ isRunning: false });
-          }
+          // The running flag belongs to the background coordinator, never to this effect.
         }
       }
     };
@@ -1679,7 +1606,7 @@ export function Dashboard() {
   if (activeTab === "ai") {
     return (
       <Suspense fallback={<PageLoading />}>
-        <AIHubPage onBack={() => setActiveTab("home")} />
+        <AIHubPage initialCourseId={guideCourseId} onBack={() => setActiveTab("home")} />
       </Suspense>
     );
   }
@@ -1766,11 +1693,6 @@ export function Dashboard() {
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span className="font-medium flex-1 text-left">{t(item.labelKey)}</span>
-                {/* AI hub dot: data is stale or AI never used */}
-                {item.id === "ai" && aiDot && !activeTab.startsWith("ai") && (
-                  <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" aria-hidden="true" />
-                )}
-
                 {/* Dynamic Badge for notifications */}
                 {badgeCount !== undefined && badgeCount > 0 && (
                   <span 
@@ -1815,6 +1737,7 @@ export function Dashboard() {
           </div>
         </div>
       </aside>
+      <LogoutDialog open={logoutOpen} onClose={() => setLogoutOpen(false)} />
 
       {/* Main content area */}
       <main 
@@ -2130,6 +2053,7 @@ export function Dashboard() {
               </div>
 
 
+              <StudyGuideOverview />
               {/* Stat cards - with proper hierarchy */}
               <div
                 className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8"
@@ -2185,7 +2109,18 @@ export function Dashboard() {
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
-              {dueSoonCount === 0 ? (
+              {dueSoonCount === 0 && (isLoadingCourses || syncStatus.isRunning) && assignments.length === 0 ? (
+                // Still syncing with nothing cached: "nothing due" would be a false negative.
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6" aria-busy="true" aria-label={t("dashboard.syncingData")}>
+                  {[0, 1].map((i) => (
+                    <div key={i} className="rounded-2xl border border-border bg-card p-4 flex items-center gap-3">
+                      <Skeleton className="h-9 w-9 rounded-xl" />
+                      <div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div>
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : dueSoonCount === 0 ? (
                 <div className="mb-6">
                   <p className="text-sm text-muted-foreground">{t("dashboard.upcomingEmpty")}</p>
                 </div>
@@ -2211,7 +2146,10 @@ export function Dashboard() {
               </div>
               {examLoadStatus === "error" && (
                 <p role="alert" className="mb-3 text-sm text-destructive">
-                  {t(examErrorKey(examError))}
+                  {t(examErrorKey(examError))}{" "}
+                  <button type="button" className="underline underline-offset-2 font-medium hover:opacity-80" onClick={() => reportProblem(`Exam timetable: ${examError ?? "unknown error"}`)}>
+                    {t("feedback.reportThis")}
+                  </button>
                 </p>
               )}
               {(examsCheckedAt || examsFetchedAt) && <p className="mb-3 text-xs text-muted-foreground">{t("dashboard.examsCheckedAt")}: {new Date(examsCheckedAt || examsFetchedAt!).toLocaleString(lang)}</p>}
@@ -2234,7 +2172,17 @@ export function Dashboard() {
                 <h3 className="text-lg font-semibold text-foreground">{t("dashboard.gradesProgress")}</h3>
               </div>
               {courseGrades.length > 0 && <GradeLegend className="mb-3" />}
-              {courseGrades.length === 0 ? (
+              {courseGrades.length === 0 && (isLoadingCourses || syncStatus.isRunning) ? (
+                <div className="mb-8 p-2 rounded-2xl bg-card border border-border divide-y divide-border" aria-busy="true" aria-label={t("dashboard.syncingData")}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="px-4 py-3 space-y-2">
+                      <div className="flex justify-between gap-4"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-24" /></div>
+                      <Skeleton className="h-2 w-full rounded-full" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : courseGrades.length === 0 ? (
                 <div className="mb-8 p-6 rounded-2xl bg-card border border-border text-center">
                   <GradeEmptyIllustration className="w-28 h-28 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
@@ -2273,7 +2221,10 @@ export function Dashboard() {
 
               {loadError && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                  {loadError}
+                  {loadError}{" "}
+                  <button type="button" className="underline underline-offset-2 font-medium hover:opacity-80" onClick={() => reportProblem(`Course loading: ${loadError}`)}>
+                    {t("feedback.reportThis")}
+                  </button>
                 </div>
               )}
 
@@ -2439,7 +2390,10 @@ export function Dashboard() {
 
               {loadError && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                  {loadError}
+                  {loadError}{" "}
+                  <button type="button" className="underline underline-offset-2 font-medium hover:opacity-80" onClick={() => reportProblem(`Course loading: ${loadError}`)}>
+                    {t("feedback.reportThis")}
+                  </button>
                 </div>
               )}
 

@@ -481,6 +481,9 @@ export interface CourseTabData {
   schedule: Schedule | null;
   recordings: Recording[];
   contacts: CourseContact[];
+  /** Tab parts actually fetched by this sync (dashboard / unitInfo / schedule / recordings /
+   *  contacts). Absent on legacy results; with it an empty list is a real "nothing there". */
+  loadedParts?: string[];
 }
 
 export interface CalendarEvent {
@@ -616,6 +619,43 @@ export interface SyncOptions {
    *  this a submission made after the last sync stays frozen at "pending". Only send
    *  trackable (has URL) not-yet-graded items — the list shrinks as items settle. */
   statusRecheck?: Assignment[];
+  /** Courses that should fetch Unit Info / Schedule / Contacts this sync even though
+   *  includeFixedTabs is off (they are missing from the client cache). */
+  fixedTabCourseIds?: number[];
+}
+
+/** A batch streamed by a running sync (event `sync-data-{runId}`): the course list first,
+ *  then one batch per finished course. Merge-only — never a full replacement. */
+export interface SyncPatch {
+  courses?: Course[];
+  resources?: Resource[];
+  assignments?: Assignment[];
+  announcements?: Announcement[];
+  tabs?: CourseTabData[];
+  statusUpdates?: Assignment[];
+  unchangedCourseIds?: number[];
+  /** Parts fetched per course in this batch. */
+  completed?: Record<number, string[]>;
+}
+
+export interface SyncProgress {
+  done: number;
+  total: number;
+  phase: string;
+}
+
+export interface SyncCallbacks {
+  /** Correlates this call's events; generated when omitted. */
+  runId?: string;
+  /** Aborting cancels the backend sync (cancel_sync) and rejects with SYNC_CANCELLED. */
+  signal?: AbortSignal;
+  onData?: (patch: SyncPatch) => void;
+  onProgress?: (progress: SyncProgress) => void;
+}
+
+function newRunId(): string {
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `sync-${Date.now().toString(36)}-${rand}`;
 }
 
 /** Result of sync_all — carries the fetched data plus fingerprint bookkeeping. */
@@ -642,7 +682,10 @@ export interface SyncResult {
  *    to drop sync requests and latency dramatically.
  *  - Supports full force refresh when user explicitly requests it.
  */
-export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean = true): Promise<SyncResult> {
+export async function syncAll(
+  optionsOrIncludeFixedTabs: SyncOptions | boolean = true,
+  callbacks: SyncCallbacks = {}
+): Promise<SyncResult> {
   const options: SyncOptions =
     typeof optionsOrIncludeFixedTabs === "boolean"
       ? { includeFixedTabs: optionsOrIncludeFixedTabs }
@@ -650,14 +693,41 @@ export async function syncAll(optionsOrIncludeFixedTabs: SyncOptions | boolean =
 
   const invoke = getInvoke();
   if (invoke) {
-    const result = invoke<SyncResult>(
-      "sync_all",
-      {
+    if (callbacks.signal?.aborted) throw new Error("SYNC_CANCELLED");
+    const runId = callbacks.runId ?? newRunId();
+    const unlisten: UnlistenFn[] = [];
+    let onAbort: (() => void) | undefined;
+    try {
+      // Listeners are registered before the command starts so the first batch
+      // (the course list) cannot be missed.
+      if (callbacks.onData) {
+        const onData = callbacks.onData;
+        unlisten.push(await tauriListen<SyncPatch>(`sync-data-${runId}`, (e) => onData(e.payload)));
+      }
+      if (callbacks.onProgress) {
+        const onProgress = callbacks.onProgress;
+        unlisten.push(await tauriListen<SyncProgress>(`sync-progress-${runId}`, (e) => onProgress(e.payload)));
+      }
+      const pending = invoke<SyncResult>("sync_all", {
         options,
         includeFixedTabs: options.includeFixedTabs ?? true,
-      }
-    );
-    return await result;
+        runId,
+      });
+      if (!callbacks.signal) return await pending;
+      const signal = callbacks.signal;
+      const cancelled = new Promise<never>((_, reject) => {
+        onAbort = () => {
+          invoke("cancel_sync", { runId }).catch(() => undefined);
+          reject(new Error("SYNC_CANCELLED"));
+        };
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      });
+      return await Promise.race([pending, cancelled]);
+    } finally {
+      if (onAbort) callbacks.signal?.removeEventListener("abort", onAbort);
+      for (const stop of unlisten) stop();
+    }
   }
   
   // P2: parallelized mock — all 3 resource kinds for every course are requested at once, cutting wait time by about 60%
@@ -826,45 +896,104 @@ export async function generateSummaryStream(
   model: string,
   mode: string,
   callbacks: {
+    /** Cancels this stream's backend request and detaches its frontend listener. */
+    signal?: AbortSignal;
     onChunk: (text: string, thinking?: boolean) => void;
     onDone: () => void;
     onError: (error: string) => void;
   }
 ): Promise<void> {
+  let settled = false;
+  const fail = (message: string) => {
+    if (settled) return;
+    settled = true;
+    callbacks.onError(message);
+  };
+  if (callbacks.signal?.aborted) {
+    fail("Stream cancelled");
+    return;
+  }
   if (!isTauri) {
     // Browser dev environment: no Tauri bridge, emit a one-shot mock output
     const mock =
       "This is a mock AI summary. Configure an API key and open the desktop app to use real streaming summaries.";
     callbacks.onChunk(mock);
-    callbacks.onDone();
+    if (callbacks.signal?.aborted) fail("Stream cancelled");
+    else { settled = true; callbacks.onDone(); }
     return;
   }
   const streamId =
     (crypto?.randomUUID?.() as string) ||
     `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const inv = getInvoke();
+  if (!inv) {
+    fail("Tauri bridge unavailable");
+    return;
+  }
   let unlisten: (() => void) | undefined;
-  unlisten = await tauriListen<SummaryStreamEvent>(`summary-${streamId}`, (e) => {
-    const p = e.payload;
-    if (p.type === "chunk" && p.text) {
-      callbacks.onChunk(p.text, p.thinking);
-    } else if (p.type === "done") {
-      unlisten?.();
-      callbacks.onDone();
-    } else if (p.type === "error") {
-      unlisten?.();
-      callbacks.onError(p.error || "Stream failed");
-    }
-  });
+  let registered = false;
+  let completed = false;
+  let cancellation: Promise<unknown> | undefined;
+  const cancelTransport = () => {
+    if (!registered || cancellation) return;
+    cancellation = inv("cancel_summary_stream", { streamId }).catch(() => undefined);
+  };
+  let closed = false;
+  let receivedDone = false;
+  let hasAnswer = false;
+  let stop!: () => void;
+  const stopped = new Promise<void>((resolve) => { stop = resolve; });
+  const abort = () => {
+    closed = true;
+    stop();
+    cancelTransport();
+    fail("Stream cancelled");
+  };
   try {
-    const inv = getInvoke();
-    if (!inv) {
-      callbacks.onError("Tauri bridge unavailable");
-      return;
-    }
-    await inv("generate_summary_stream", { content, apiKey, apiUrl, model, mode, streamId });
+    callbacks.signal?.addEventListener("abort", abort, { once: true });
+    unlisten = await tauriListen<SummaryStreamEvent>(`summary-${streamId}`, (e) => {
+      if (settled) return;
+      const p = e.payload;
+      if (p?.type === "error") {
+        closed = true;
+        stop();
+        fail(typeof p.error === "string" && p.error ? p.error : "Stream failed");
+        return;
+      }
+      if (closed) return;
+      if (p?.type === "chunk" && typeof p.text === "string" && p.text) {
+        if (!p.thinking && p.text.trim()) hasAnswer = true;
+        callbacks.onChunk(p.text, p.thinking);
+      } else if (p?.type === "done") {
+        closed = true;
+        receivedDone = true;
+      }
+    });
+    if (callbacks.signal?.aborted) abort();
+    if (settled) return;
+    // Await reservation before sending generation or cancellation. If abort
+    // beats this response, remove the reservation without starting transport.
+    await inv("register_summary_stream", { streamId });
+    registered = true;
+    if (callbacks.signal?.aborted) abort();
+    if (settled) return;
+    // A done event alone cannot confirm success: invoke may still reject.
+    await Promise.race([
+      inv("generate_summary_stream", { content, apiKey, apiUrl, model, mode, streamId }),
+      stopped,
+    ]);
+    if (settled) return;
+    if (!receivedDone) fail("Stream ended without a completion event. Please try again.");
+    else if (!hasAnswer) fail("The AI provider returned no readable answer. Please try again.");
+    else { completed = true; settled = true; callbacks.onDone(); }
   } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  } finally {
+    closed = true;
+    callbacks.signal?.removeEventListener("abort", abort);
     unlisten?.();
-    callbacks.onError(err instanceof Error ? err.message : String(err));
+    if (registered && !completed) cancelTransport();
+    await cancellation;
   }
 }
 

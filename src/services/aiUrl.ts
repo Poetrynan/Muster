@@ -26,5 +26,6 @@ export const buildAiUrl = (base: string, format: AiFormat | string): string => {
   const suffix = AI_FORMAT_SUFFIX[format as Exclude<AiFormat, "custom">];
   if (!suffix) return base.trim();
   if (!b) return suffix;
+  if (splitAiUrl(b).format !== "custom") return b;
   return b + suffix;
 };

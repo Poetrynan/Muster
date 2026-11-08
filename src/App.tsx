@@ -86,7 +86,7 @@ function App() {
           setLoggedIn(true);
         } else {
           const cached = useAppStore.getState();
-          if (cached.cacheOwnerEmail) cached.requireReauthentication("moodle");
+          if (cached.cacheOwnerEmail) cached.requireReauthentication(cached.signedOut ? "signedOut" : "moodle");
           else reset();
         }
       })

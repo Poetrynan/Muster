@@ -145,47 +145,89 @@ function normalizePayload(raw: unknown): SummaryActions | null {
 }
 
 /**
- * Locate the appendix marker (if any) and try to parse its JSON payload.
- * Returns the payload (null when absent/invalid) and the Markdown with the
- * appendix (and anything after the last marker) removed.
+ * Parse the last appendix as raw JSON, without mode-specific normalization.
+ * Returns null when absent/invalid; callers must validate their own schema.
  */
-export function extractMusterJson(text: string): { json: SummaryActions | null; clean: string } {
+export function extractMusterPayload(text: string): unknown | null {
   const source = String(text ?? "");
-  const markerIdx = source.lastIndexOf(MUSTER_JSON_MARKER);
-  if (markerIdx < 0) return { json: null, clean: source.trim() };
-
-  const before = source.slice(0, markerIdx).trim();
+  let markerIdx=-1;
+  let nextMarker=source.indexOf(MUSTER_JSON_MARKER);
+  while(nextMarker>=0){
+    markerIdx=nextMarker;
+    const boundary=appendixBoundary(source,nextMarker+MUSTER_JSON_MARKER.length);
+    nextMarker=source.indexOf(MUSTER_JSON_MARKER,boundary.next);
+  }
+  if (markerIdx < 0) return null;
   const tail = source.slice(markerIdx + MUSTER_JSON_MARKER.length);
 
-  const endIdx = tail.indexOf(MUSTER_JSON_END);
-  let inner = endIdx >= 0 ? tail.slice(0, endIdx) : tail;
+  const endIdx = appendixBoundary(tail, 0).end;
+  let inner = tail.slice(0, endIdx);
 
   // Tolerate a ```json fence wrapped around the payload.
   inner = inner.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
 
-  let json: SummaryActions | null = null;
-  if (inner) {
-    try {
-      json = normalizePayload(JSON.parse(inner));
-    } catch {
-      json = null;
+  try {
+    return JSON.parse(inner) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalize the last payload, hiding every appendix from the Markdown.
+ * JSON-only responses get readable fallback text, never an empty task claim.
+ */
+export function extractMusterJson(text: string): { json: SummaryActions | null; clean: string } {
+  const source = String(text ?? "");
+  const clean = stripPartialAppendix(source).trim();
+  const fallback = "The AI response did not include a readable explanation. Please regenerate to get an explanation.";
+  return {
+    json: normalizePayload(extractMusterPayload(source)),
+    clean: clean || (source.trim() ? fallback : ""),
+  };
+}
+
+/** Closing delimiters inside JSON strings are data, including escaped quotes. */
+function appendixBoundary(source: string, start: number): { end: number; next: number } {
+  let quoted = false;
+  let escaped = false;
+  for (let pos = start; pos < source.length; pos++) {
+    const char = source[pos];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (source.startsWith(MUSTER_JSON_END, pos)) {
+      return { end: pos, next: pos + MUSTER_JSON_END.length };
+    } else if (source.startsWith(MUSTER_JSON_MARKER, pos)) {
+      return { end: pos, next: pos };
     }
   }
-
-  return { json, clean: before };
+  return { end: source.length, next: source.length };
 }
 
 /**
  * Streaming guard: while chunks are still arriving the appendix may be partially
- * transmitted; hide the marker and any trailing fragment from live rendering.
- * A fully closed appendix stays (it is stripped at done-time by extractMusterJson).
+ * transmitted. Hide closed/open appendices and even a split marker prefix.
+ * Keep raw chunks separately so completion parsing still has the full payload.
  */
 export function stripPartialAppendix(streamingText: string): string {
-  const s = String(streamingText ?? "");
-  const markerIdx = s.lastIndexOf(MUSTER_JSON_MARKER);
-  if (markerIdx < 0) return s;
-
-  const tail = s.slice(markerIdx + MUSTER_JSON_MARKER.length);
-  if (tail.includes(MUSTER_JSON_END)) return s; // closed: let extraction handle it
-  return s.slice(0, markerIdx).trimEnd();
+  const source = String(streamingText ?? "");
+  let visible = "";
+  let cursor = 0;
+  let marker = source.indexOf(MUSTER_JSON_MARKER);
+  while (marker >= 0) {
+    visible += source.slice(cursor, marker);
+    cursor = appendixBoundary(source, marker + MUSTER_JSON_MARKER.length).next;
+    marker = source.indexOf(MUSTER_JSON_MARKER, cursor);
+  }
+  visible += source.slice(cursor);
+  for (let size = MUSTER_JSON_MARKER.length - 1; size > 0; size--) {
+    if (visible.endsWith(MUSTER_JSON_MARKER.slice(0, size))) {
+      visible = visible.slice(0, -size);
+      break;
+    }
+  }
+  return visible === source ? source : visible.trimEnd();
 }

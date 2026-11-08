@@ -1,3 +1,6 @@
+import { inferActiveSemesterKey,isCourseInSemester,parseSemester } from '../lib/courseHelpers';
+import { guideCopy } from '../lib/studyGuide/copy';
+import { resolveSubmissionState } from "../lib/submissionState";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
@@ -26,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Tabs } from "../components/ui/tabs";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAppStore } from "../stores/useAppStore";
+import { backgroundSyncCovers } from "../services/backgroundSync";
 import { DownloadCenter } from "../components/DownloadCenter";
 import { DownloadProgressRing } from "../components/ui/download-progress-ring";
 import { downloadFile } from "../services/api";
@@ -94,20 +98,26 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   const cachedSchedule = useAppStore((s) => s.schedules[courseId]);
   const cachedRecordings = useAppStore((s) => s.recordings[courseId]);
   const setCourseTabData = useAppStore((s) => s.setCourseTabData);
+  // While the background sync is running and will fetch this course, missing data is
+  // "on its way", not "absent": show the loading state and let the streamed batch fill it
+  // in instead of scraping the same pages a second time. When the sync ends without it
+  // (failure, or a course outside this run) the on-demand fetches below take over.
+  const syncRunning = useAppStore((s) => s.syncStatus.isRunning);
+  const awaitingSync = syncRunning && backgroundSyncCovers(courseId);
   const { t } = useTranslation();
-  const [loadingResources, setLoadingResources] = useState(false);
-  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [fetchingResources, setLoadingResources] = useState(false);
+  const [fetchingContacts, setLoadingContacts] = useState(false);
   const [contacts, setContacts] = useState<CourseContact[]>(cachedContacts ?? []);
   const [contactsError, setContactsError] = useState<string | null>(null);
 
   // Task #38 — Unit Info (handbook) + Schedule, fetching &section=1 / &section=2 of the same course in parallel
-  const [loadingUnitInfo, setLoadingUnitInfo] = useState(false);
+  const [fetchingUnitInfo, setLoadingUnitInfo] = useState(false);
   const [unitInfo, setUnitInfo] = useState<UnitInfo | null>(cachedUnitInfo ?? null);
   const [schedule, setSchedule] = useState<Schedule | null>(cachedSchedule ?? null);
   const [unitInfoError, setUnitInfoError] = useState<string | null>(null);
 
   // Task #40 — Lecture Recordings (Panopto block)
-  const [loadingRecordings, setLoadingRecordings] = useState(false);
+  const [fetchingRecordings, setLoadingRecordings] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>(cachedRecordings ?? []);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
   // Distinguish "fetched and empty" from "never fetched", so an empty cache isn't
@@ -116,8 +126,12 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   const [recordingsLoaded, setRecordingsLoaded] = useState(cachedRecordings !== undefined);
   // Unit Dashboard (unit overview, section=0)
   const [dashboardData, setDashboardData] = useState<UnitDashboard | null>(cachedDashboard ?? null);
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [fetchingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const loadingContacts = fetchingContacts || (awaitingSync && cachedContacts === undefined);
+  const loadingUnitInfo = fetchingUnitInfo || (awaitingSync && !unitInfo && !schedule);
+  const loadingRecordings = fetchingRecordings || (awaitingSync && !recordingsLoaded);
+  const loadingDashboard = fetchingDashboard || (awaitingSync && !dashboardData);
 
   // Task #37 — assessment overview (assignments + quizzes + weights + categories), from &section=56
   // Initial true: the first paint must show the skeleton, not flash the store fallback list.
@@ -170,9 +184,10 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   // Assignments come from the full sync (fetched live on every login): seed the local
   // state from it so the tab renders instantly. The skeleton only appears when the sync
   // hasn't covered this course yet and an on-demand fetch is actually running.
-  const [loadingAssessments, setLoadingAssessments] = useState(courseAssignments.length === 0);
+  const [fetchingAssessments, setLoadingAssessments] = useState(courseAssignments.length === 0);
   const [assessments, setAssessments] = useState<Assignment[]>(courseAssignments);
   const [assessmentsError, setAssessmentsError] = useState<string | null>(null);
+  const loadingAssessments = fetchingAssessments || (awaitingSync && assessments.length === 0);
   const courseAnnouncements = useMemo(
     () => announcements.filter((a) => a.courseId === courseId),
     [announcements, courseId]
@@ -193,6 +208,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
     () => displayedResources.filter((r) => r.url && isDownloadableUrl(r.url)).length,
     [displayedResources]
   );
+  const loadingResources = fetchingResources || (awaitingSync && displayedResources.length === 0);
 
   useEffect(() => {
     if (displayedResources.length === 0 && !loadingResources) {
@@ -207,7 +223,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
         .finally(() => setLoadingResources(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId]);
+  }, [courseId, awaitingSync]);
 
   const tabs = [
     { id: "dashboard", label: t("course.tab.dashboard") },
@@ -254,6 +270,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
       setLoadingContacts(false);
       return;
     }
+    if (awaitingSync) return;
     let ignore = false;
     setContacts([]);
     setContactsError(null);
@@ -268,7 +285,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
       .finally(() => { if (!ignore) setLoadingContacts(false); });
     return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, cachedContacts]);
+  }, [courseId, cachedContacts, awaitingSync]);
 
   // Task #38 — fetch the handbook (&section=1) and schedule (&section=2) in parallel
   const handleFetchUnitInfo = async () => {
@@ -326,21 +343,21 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
       handleFetchUnitInfo();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, awaitingSync]);
 
   useEffect(() => {
     if (activeTab === "recordings" && !recordingsLoaded && !loadingRecordings && !recordingsError) {
       handleFetchRecordings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, awaitingSync]);
 
   useEffect(() => {
     if (activeTab === "dashboard" && !dashboardData && !loadingDashboard && !dashboardError) {
       handleFetchDashboard();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, awaitingSync]);
 
   // When the full sync finishes while this course is already open, adopt the fresh data
   // so the tabs update without a reload (values are identical when nothing changed).
@@ -494,11 +511,11 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   // Assessments are pre-fetched by the full sync (login / launch). Only fetch on demand
   // when the store has no cached data for this course yet.
   useEffect(() => {
-    if (courseAssignments.length === 0) {
+    if (courseAssignments.length === 0 && !awaitingSync) {
       handleFetchAssessments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId]);
+  }, [courseId, awaitingSync]);
 
   // When the full sync finishes while this course is already open, adopt the fresh store
   // data — but only if the local state is still empty (a manually refreshed list is newer).
@@ -516,7 +533,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
     setSubmissionError(null);
     setSubmission(null);
     try {
-      const target = courseAssignments.find((a) => a.id === assignmentId);
+      const target = assessments.find((a) => a.id === assignmentId) ?? courseAssignments.find((a) => a.id === assignmentId);
       const res = await fetchAssignmentSubmission(courseId, assignmentId, target?.assessmentType);
       setSubmission(res);
     } catch (err) {
@@ -525,6 +542,9 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
       setSubmissionLoading(false);
     }
   };
+
+  const submissionAssessment = assessments.find((a) => a.id === submissionForId) ?? courseAssignments.find((a) => a.id === submissionForId);
+  const submissionState = submission ? resolveSubmissionState(submission, submissionAssessment) : null;
 
   const closeSubmission = () => {
     setSubmissionForId(null);
@@ -609,6 +629,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
               announcements: courseAnnouncements.length,
             })}
           </p>
+          {!course?.isPortal && parseSemester(course?.fullName || "").key !== "other" && isCourseInSemester(parseSemester(course?.fullName || ""), inferActiveSemesterKey(courses)) && <Button variant="outline" className="mt-4 w-full gap-2 sm:hidden" onClick={() => window.dispatchEvent(new CustomEvent("muster:open-study-guide", { detail: courseId }))}><BookOpen className="h-4 w-4" />{guideCopy(useAppStore.getState().settings.language).title}</Button>}
         </div>
 
       </motion.aside>
@@ -624,7 +645,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
           </div>
           {/* Same download manager as the Dashboard — users don't have to go back
               to the home page to check download progress. */}
-          <DownloadCenter autoCloseKey={courseId} />
+          <div className="flex items-center gap-2">{!course?.isPortal && parseSemester(course?.fullName || "").key !== "other" && isCourseInSemester(parseSemester(course?.fullName || ""), inferActiveSemesterKey(courses)) && <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => window.dispatchEvent(new CustomEvent("muster:open-study-guide", { detail: courseId }))}><BookOpen className="mr-2 h-4 w-4" />{guideCopy(useAppStore.getState().settings.language).title}</Button>}<DownloadCenter autoCloseKey={courseId} /></div>
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-auto p-6 relative">
@@ -1436,15 +1457,15 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
       {/* Submission status / feedback dialog (Task #39) */}
       {submissionForId !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="submission-title"
           onClick={closeSubmission}
         >
-          <Card className="w-full max-w-lg bg-card" onClick={(e) => e.stopPropagation()}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between gap-4 mb-4">
+          <Card className="flex max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-2xl overflow-hidden bg-card sm:max-h-[calc(100dvh-3rem)]" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="flex min-h-0 w-full flex-col p-0">
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border p-4 sm:px-6">
                 <h2 id="submission-title" className="text-lg font-bold flex items-center gap-2">
                   <ClipboardList className="w-5 h-5 text-primary" />
                   {t("assignments.submission.title")}
@@ -1460,6 +1481,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                 </Button>
               </div>
 
+              <div className="min-h-0 overflow-y-auto overscroll-contain p-4 [overflow-wrap:anywhere] sm:p-6">
               {submissionLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1470,7 +1492,12 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
               {submission && (
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center gap-2">
-                    {submission.submitted ? (
+                    {submissionState === "graded" ? (
+                      <Badge variant="success">
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                        {t("assignments.submission.graded")}
+                      </Badge>
+                    ) : submissionState === "submitted" ? (
                       <Badge variant="success">
                         <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                         {t("assignments.submission.submitted")}
@@ -1485,12 +1512,12 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                     </p>
                   )}
                   {(submission.grade ||
-                    courseAssignments.find((a) => a.id === submissionForId)?.grade) && (
+                    submissionAssessment?.grade) && (
                     <p className="font-medium text-green-600">
                       {t("assignments.submission.grade", {
                         grade:
                           submission.grade ||
-                          courseAssignments.find((a) => a.id === submissionForId)?.grade ||
+                          submissionAssessment?.grade ||
                           "",
                       })}
                     </p>
@@ -1505,7 +1532,8 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                 </div>
               )}
 
-              <div className="mt-6 flex justify-end">
+              </div>
+              <div className="flex shrink-0 justify-end border-t border-border p-3 sm:px-6">
                 <Button onClick={closeSubmission}>{t("assignments.submission.close")}</Button>
               </div>
             </CardContent>

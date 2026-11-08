@@ -33,10 +33,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/ui/input";
 import { Dialog } from "../components/ui/dialog";
 import { FeedbackPanel } from "../components/FeedbackPanel";
-import { useAppStore, getSyncOptions } from "../stores/useAppStore";
+import { useAppStore } from "../stores/useAppStore";
+import { startBackgroundSync, isSyncCancelled } from "../services/backgroundSync";
 import { useTranslation } from "../i18n/useTranslation";
 import type { TranslationKey } from "../i18n/translations";
-import { saveAiConfig, syncAll, logout, testAiConnection } from "../services/api";
+import { saveAiConfig, logout, testAiConnection } from "../services/api";
 import { showToast } from "../components/ui/toast";
 import { buildAiUrl, splitAiUrl } from "../services/aiUrl";
 import { requestNotificationPermission, clearReminded } from "../services/reminders";
@@ -90,7 +91,7 @@ export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(
     (initialSection as SettingsSection) || "account"
   );
-  const { user, settings, updateSettings, updateAllSyncedData, setSyncStatus, syncStatus, courses, unhideCourse } = useAppStore();
+  const { user, settings, updateSettings, syncStatus, courses, unhideCourse } = useAppStore();
   const { t } = useTranslation();
 
   // GitHub Release update check state
@@ -150,30 +151,13 @@ export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
   const handleSettingsSync = async (fullRefresh = false) => {
     if (syncStatus.isRunning) return;
     try {
-      setSyncStatus({ isRunning: true });
-      const state = useAppStore.getState();
-      const options = getSyncOptions(state, fullRefresh);
-      const data = await syncAll(options);
-      updateAllSyncedData({
-        courses: data.courses,
-        resources: data.resources,
-        assignments: data.assignments,
-        announcements: data.announcements,
-        tabs: data.tabs,
-        unchangedCourseIds: data.unchangedCourseIds,
-        newFingerprints: data.fingerprints,
-        requestsUsed: data.requestsUsed,
-        statusUpdates: data.statusUpdates,
-        fullRefresh,
-      });
-      // Stamp the cooldown timestamp only after a successful sync, so a failed one
-      // never suppresses the next launch auto-sync.
-      updateSettings({ lastAutoSyncAt: new Date().toISOString() });
-      setSyncStatus({ isRunning: false, lastSync: new Date().toISOString() });
+      // Same single-flight background coordinator as the Dashboard: streams batches,
+      // applies the final result, stamps lastSync / lastAutoSyncAt only on success.
+      await startBackgroundSync(fullRefresh);
       showToast(fullRefresh ? t("settings.sync.fullSyncSuccess") : t("dashboard.syncSuccess"));
     } catch (err) {
+      if (isSyncCancelled(err)) return;
       console.error("Settings sync failed:", err);
-      setSyncStatus({ isRunning: false });
       const detail = err instanceof Error ? err.message : String(err);
       showToast(detail ? `${t("dashboard.syncFailed")} (${detail})` : t("dashboard.syncFailed"));
     }
@@ -495,21 +479,7 @@ export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
                     ))}
                   </div>
 
-                  <div className="flex items-center justify-between py-2 mt-3 border-t border-border/60">
-                    <div>
-                      <p className="font-medium">{t("settings.ai.autoSummary")}</p>
-                      <p className="text-sm text-muted-foreground">{t("settings.ai.autoSummaryDesc")}</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.autoSummaryOnOpen}
-                        onChange={(e) => updateSettings({ autoSummaryOnOpen: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-secondary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                    </label>
-                  </div>
+
                 </CardContent>
               </Card>
 
@@ -855,7 +825,7 @@ export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
                         </button>
                       ))}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("settings.ai.formatDesc")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t(effectiveAiFormat === "custom" ? "settings.ai.customUrlHint" : "settings.ai.endpointHint")}</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t("settings.ai.baseUrl")}</label>
@@ -865,9 +835,22 @@ export function SettingsPage({ onBack, initialSection }: SettingsPageProps) {
                       onChange={(e) => updateSettings({ aiBaseUrl: e.target.value })}
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      {t("settings.ai.baseUrlDesc")}
+                      {t(effectiveAiFormat === "custom" ? "settings.ai.customUrlHint" : "settings.ai.endpointHint")}
                     </p>
                   </div>
+                  {settings.aiBaseUrl?.trim() && (
+                    <div className="space-y-2 text-xs">
+                      <p className="text-muted-foreground">
+                        {t("settings.ai.requestUrl")}<code className="mt-1 block break-all rounded-lg bg-muted/50 p-2">{buildAiUrl(settings.aiBaseUrl, effectiveAiFormat)}</code>
+                      </p>
+                      {effectiveAiFormat === "custom" && /\/v\d+\/?$/i.test(settings.aiBaseUrl.trim()) && (
+                        <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">{t("settings.ai.baseInCustom")}</p>
+                      )}
+                      {effectiveAiFormat !== "custom" && splitAiUrl(settings.aiBaseUrl.trim().replace(/\/+$/, "")).format !== "custom" && (
+                        <p role="status" className="text-muted-foreground">{t("settings.ai.fullUrlDetected")}</p>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t("settings.ai.apiKey")}</label>
                     <div className="relative">

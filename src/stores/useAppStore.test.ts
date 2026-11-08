@@ -49,6 +49,38 @@ describe("AI progress persistence", () => {
     expect(useAppStore.getState().aiInsights.plans).toEqual({});
   });
 
+  it("signing out keeps this account's data; the same account picks it up, another account resets", () => {
+    const user = { id: 1, username: "student", fullName: "Student", email: "student@monash.edu", profileImage: "" };
+    useAppStore.getState().completeLogin(user);
+    useAppStore.getState().setCourses([{ id: 9 } as never]);
+    useAppStore.getState().setCoursePlan(9, { days: [], generatedAt: "today" });
+    useAppStore.getState().signOut(false);
+    let s = useAppStore.getState();
+    expect(s.isLoggedIn).toBe(false);
+    expect(s.reauthReason).toBe("signedOut");
+    expect(s.signedOut).toBe(true);
+    expect(s.courses).toHaveLength(1);
+    // The flag survives a restart so the login page says "you signed out", not "session expired".
+    expect(useAppStore.persist.getOptions().partialize!(s)).toMatchObject({ signedOut: true, cacheOwnerEmail: "student@monash.edu" });
+    useAppStore.getState().completeLogin(user);
+    s = useAppStore.getState();
+    expect(s.signedOut).toBe(false);
+    expect(s.aiInsights.plans[9]).toBeDefined();
+    useAppStore.getState().signOut(false);
+    useAppStore.getState().completeLogin({ ...user, id: 2, email: "other@monash.edu" });
+    expect(useAppStore.getState().courses).toEqual([]);
+  });
+
+  it("signing out with data removal clears everything", () => {
+    useAppStore.getState().completeLogin({ id: 1, username: "s", fullName: "S", email: "student@monash.edu", profileImage: "" });
+    useAppStore.getState().setCoursePlan(9, { days: [], generatedAt: "today" });
+    useAppStore.getState().signOut(true);
+    const s = useAppStore.getState();
+    expect(s.cacheOwnerEmail).toBeUndefined();
+    expect(s.signedOut).toBe(false);
+    expect(s.aiInsights.plans).toEqual({});
+  });
+
   it("retains completed summary actions on regeneration and allows unchecking", () => {
     const summary = { id: "s", courseId: 1, courseName: "Course", createdAt: "today", content: "text" };
     useAppStore.getState().addSummary(1, { ...summary, completedActions: ["Read notes"] });

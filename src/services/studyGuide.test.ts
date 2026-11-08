@@ -1,0 +1,12 @@
+import { expect, it } from 'vitest';
+import { generateGuide } from './studyGuide';
+import { scope, snapshot } from '../lib/studyGuide/fixtures';
+import { selectGuideSources } from '../lib/studyGuide/sources';
+import { buildGuideFacts, buildGuideContext } from '../lib/studyGuide/facts';
+const selection = selectGuideSources(snapshot, scope), facts = buildGuideFacts(selection.included, scope), context = buildGuideContext(selection, facts, scope);
+const input = { scope, selection, facts, context, apiKey: 'test', apiUrl: 'https://example.test', model: 'test' };
+it('streams final prose only and retains readable text when JSON is malformed', async () => { const chunks: string[] = []; const result = await generateGuide(input, s => chunks.push(s), async (_a, _b, _c, _d, _e, cb) => { cb.onChunk('private reasoning', true); cb.onChunk('Useful plan\n<!--MUSTER_JSON {bad -->'); cb.onDone(); }); expect(chunks.join('')).not.toContain('private reasoning'); expect(chunks.join('')).not.toContain('MUSTER_JSON'); expect(result.artifact?.status).toBe('text-only'); });
+it.each(['HTTP 429', 'connection lost'])('does not return a replacement artifact on %s', async (error) => { const r = await generateGuide(input, () => { }, async (_a, _b, _c, _d, _e, cb) => { cb.onChunk('Partial plan'); cb.onError(error); }); expect(r.artifact).toBeUndefined(); expect(r.status).toBe('partial'); expect(r.markdown).toBe('Partial plan'); expect(r.error).toBe(error); });
+it('rejects empty/reasoning-only success', async () => { const r = await generateGuide(input, () => { }, async (_a, _b, _c, _d, _e, cb) => { cb.onChunk('reasoning', true); cb.onDone(); }); expect(r.status).toBe('failed'); expect(r.artifact).toBeUndefined(); });
+it('does not save aborted or unterminated responses', async () => { const controller = new AbortController(); const r = await generateGuide({ ...input, signal: controller.signal }, () => { }, async (_a, _b, _c, _d, _e, cb) => { cb.onChunk('old response'); controller.abort(); cb.onDone(); }); expect(r.artifact).toBeUndefined(); const noDone = await generateGuide(input, () => { }, async () => { }); expect(noDone.artifact).toBeUndefined(); });
+it('never replaces a good guide with a fabricated fallback sentence for broken JSON-only output', async () => { const r = await generateGuide(input, () => { }, async (_a, _b, _c, _d, _e, cb) => { cb.onChunk('<!--MUSTER_JSON {bad -->'); cb.onDone(); }); expect(r.artifact).toBeUndefined(); expect(r.status).toBe('failed'); });

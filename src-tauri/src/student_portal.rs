@@ -22,13 +22,24 @@ fn timezone(data: &Value) -> Result<Tz, String> {
 
 /// Append a redacted line to `%LOCALAPPDATA%/com.poetrynan.muster/logs/portal-diagnostics.log`.
 /// Callers pass only error codes and value-free shapes: never tokens, emails or exam data.
+fn diagnostics_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA").or_else(|| std::env::var_os("HOME"))?;
+    Some(std::path::PathBuf::from(base).join("com.poetrynan.muster").join("logs").join("portal-diagnostics.log"))
+}
+
+/// Last `max_lines` lines of the redacted diagnostics log, for the in-app problem report.
+pub fn diagnostics_tail(max_lines: usize) -> String {
+    let Some(path) = diagnostics_path() else { return String::new() };
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    lines[lines.len().saturating_sub(max_lines)..].join("\n")
+}
+
 pub fn diagnostic(message: &str) {
     use std::io::Write;
     eprintln!("[portal] {message}");
-    let Some(base) = std::env::var_os("LOCALAPPDATA").or_else(|| std::env::var_os("HOME")) else { return };
-    let dir = std::path::PathBuf::from(base).join("com.poetrynan.muster").join("logs");
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("portal-diagnostics.log");
+    let Some(path) = diagnostics_path() else { return };
+    if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); }
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 256 * 1024) { let _ = std::fs::remove_file(&path); }
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(file, "{} {message}", Utc::now().to_rfc3339());

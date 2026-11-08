@@ -715,15 +715,15 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
       {/* Submission status / feedback dialog (Task #39) */}
       {submissionForId !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="submission-title"
           onClick={closeSubmission}
         >
-          <Card className="w-full max-w-lg bg-card" onClick={(e) => e.stopPropagation()}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between gap-4 mb-4">
+          <Card className="flex max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-2xl overflow-hidden bg-card sm:max-h-[calc(100dvh-3rem)]" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="flex min-h-0 w-full flex-col p-0">
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border p-4 sm:px-6">
                 <h2 id="submission-title" className="text-lg font-bold flex items-center gap-2">
                   <ClipboardList className="w-5 h-5 text-primary" />
                   {t("assignments.submission.title")}
@@ -739,6 +739,7 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                 </Button>
               </div>
 
+              <div className="min-h-0 overflow-y-auto overscroll-contain p-4 [overflow-wrap:anywhere] sm:p-6">
               {submissionLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -802,7 +803,8 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                 </div>
               )}
 
-              <div className="mt-6 flex justify-end">
+              </div>
+              <div className="flex shrink-0 justify-end border-t border-border p-3 sm:px-6">
                 <Button onClick={closeSubmission}>{t("assignments.submission.close")}</Button>
               </div>
             </CardContent>

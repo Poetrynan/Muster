@@ -1,3 +1,6 @@
+import { restoreGuides,restoreProgress } from '../lib/studyGuide/cache';
+import type { GuideArtifact, GuideProgress } from '../lib/studyGuide/types';
+import { accountScope, guideKey } from '../lib/studyGuide/sources';
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { idbStorage } from "../services/idbStorage";
@@ -9,15 +12,24 @@ interface AppState {
   // User state
   user: User | null;
   isLoggedIn: boolean;
-  reauthReason: "portal" | "moodle" | null;
+  /** Why the login page is shown with cached data: expired session, or the user signed out. */
+  reauthReason: "portal" | "moodle" | "signedOut" | null;
   cacheOwnerEmail?: string;
-  
+  /** The user signed out but chose to keep this computer's data (persisted across restarts). */
+  signedOut?: boolean;
+
   // Course state
   courses: Course[];
   currentCourse: Course | null;
   courseResources: Record<number, Resource[]>;
   // Full resource set (from syncAll), filtered by courseId as a second step
   allResources: Resource[];
+
+  studyGuides: Record<string, GuideArtifact>;
+  guideFallbacks: Record<string, GuideArtifact>;
+  guideProgress: Record<string, Record<string, GuideProgress>>;
+  saveStudyGuide: (artifact: GuideArtifact) => boolean;
+  setGuideProgress: (key: string, id: string, progress: GuideProgress) => void;
 
   // Summary state
   summaries: Record<number, Summary>;
@@ -64,6 +76,13 @@ interface AppState {
   // course data fetching except announcements + recordings.
   courseFingerprints: Record<number, string>;
 
+  /** Per course, which parts a sync actually fetched (part -> ISO time). Distinguishes
+   *  "fetched, empty" from "never fetched" so the UI need not trigger its own scrape. */
+  courseSyncCoverage: Record<number, Record<string, string>>;
+  /** Runtime-only login generation; bumps on login, sign-out and reset so a sync started
+   *  for an earlier session can never write into the current one. */
+  sessionEpoch: number;
+
   // Download manager (not persisted)
   downloads: DownloadItem[];
 
@@ -83,8 +102,10 @@ interface AppState {
   // Actions
   setUser: (user: User | null) => void;
   setLoggedIn: (loggedIn: boolean) => void;
-  requireReauthentication: (reason: "portal" | "moodle") => void;
+  requireReauthentication: (reason: "portal" | "moodle" | "signedOut") => void;
   completeLogin: (user: User) => void;
+  /** Sign out locally. Keeps this account's cached data unless clearData is true. */
+  signOut: (clearData: boolean) => void;
   setCourses: (courses: Course[]) => void;
   setCurrentCourse: (course: Course | null) => void;
   setCourseResources: (courseId: number, resources: Resource[]) => void;
@@ -123,6 +144,11 @@ interface AppState {
     /** Live status/grade changes re-verified on fingerprint-hit courses; merged on top
      *  of the cached assignments (see SyncOptions.statusRecheck / SyncResult.statusUpdates). */
     statusUpdates?: Assignment[];
+    /** A streamed batch from a still-running sync: merge only, never finish the sync
+     *  or stamp lastSync, never treat as a full replacement. */
+    partial?: boolean;
+    /** Parts fetched per course in this batch (resources / assignments / announcements / tabs). */
+    completed?: Record<number, string[]>;
   }) => void;
   hideCourse: (courseId: number) => void;
   unhideCourse: (courseId: number) => void;
@@ -186,6 +212,24 @@ const defaultSyncStatus: SyncStatus = {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+  studyGuides: {},
+  guideFallbacks: {},
+  guideProgress: {},
+  saveStudyGuide: (artifact) => {
+    const state = get();
+    const owner = state.cacheOwnerEmail || state.user?.email;
+    if (!state.isLoggedIn || !owner || artifact.scope.accountScope !== accountScope(owner) || artifact.key !== guideKey(artifact.scope)) return false;
+    if(artifact.status==='text-only' && state.studyGuides[artifact.key]) {
+      set({ guideFallbacks: { ...state.guideFallbacks, [artifact.key]: artifact } });
+    } else {
+      const fallbacks={...state.guideFallbacks}; delete fallbacks[artifact.key];
+      set({ studyGuides: { ...state.studyGuides, [artifact.key]: artifact }, guideFallbacks:fallbacks });
+    }
+    return true;
+  },
+  setGuideProgress: (key, id, progress) => set((state) => ({
+    guideProgress: { ...state.guideProgress, [key]: { ...state.guideProgress[key], [id]: { ...state.guideProgress[key]?.[id], ...progress } } },
+  })),
   // Initial state
   user: null,
   isLoggedIn: false,
@@ -211,6 +255,8 @@ export const useAppStore = create<AppState>()(
   recordings: {},
   contacts: {},
   courseFingerprints: {},
+  courseSyncCoverage: {},
+  sessionEpoch: 0,
   downloads: [],
   reminderBanner: null,
   settings: defaultSettings,
@@ -228,7 +274,16 @@ export const useAppStore = create<AppState>()(
     const state = get();
     const owner = state.cacheOwnerEmail || state.user?.email;
     if (!owner || owner.trim().toLowerCase() !== user.email.trim().toLowerCase()) get().reset();
-    set({ user, isLoggedIn: true, reauthReason: null, cacheOwnerEmail: user.email, examsAttemptedAt: undefined, examLoadStatus: "idle", examError: null });
+    set((s) => ({ user, isLoggedIn: true, reauthReason: null, signedOut: false, cacheOwnerEmail: user.email, examsAttemptedAt: undefined, examLoadStatus: "idle", examError: null, sessionEpoch: s.sessionEpoch + 1 }));
+  },
+  signOut: (clearData) => {
+    if (clearData) {
+      get().reset();
+      return;
+    }
+    // Keep courses, progress and AI work bound to cacheOwnerEmail: signing back in with
+    // the same account picks them up, a different account still resets (completeLogin).
+    set((s) => ({ isLoggedIn: false, reauthReason: "signedOut", signedOut: true, examsAttemptedAt: undefined, examLoadStatus: "idle", examError: null, sessionEpoch: s.sessionEpoch + 1, syncStatus: { ...s.syncStatus, isRunning: false } }));
   },
   setCourses: (courses) => set({ courses }),
   setCurrentCourse: (currentCourse) => set({ currentCourse }),
@@ -299,7 +354,7 @@ export const useAppStore = create<AppState>()(
     })),
   updateAllSyncedData: (data) =>
     set((state) => {
-      const isFull = Boolean(data.fullRefresh);
+      const isFull = Boolean(data.fullRefresh) && !data.partial;
 
       const mergeCourses = (incoming: Course[] | undefined, existing: Course[]): Course[] => {
         if (!incoming || incoming.length === 0) return existing;
@@ -398,13 +453,27 @@ export const useAppStore = create<AppState>()(
       const newSchedules = { ...state.schedules };
       const newRecordings = { ...state.recordings };
       const newContacts = { ...state.contacts };
+      const now = new Date().toISOString();
+      const newCoverage = { ...state.courseSyncCoverage };
+      const cover = (courseId: number, parts: string[]) => {
+        if (parts.length === 0) return;
+        const entry = { ...(newCoverage[courseId] ?? {}) };
+        for (const part of parts) entry[part] = now;
+        newCoverage[courseId] = entry;
+      };
+      for (const [cid, parts] of Object.entries(data.completed ?? {})) cover(Number(cid), parts);
       if (data.tabs && Array.isArray(data.tabs)) {
         for (const tab of data.tabs) {
+          // With loadedParts the backend says exactly which lists were fetched, so an empty
+          // list is a real "nothing there"; legacy results only replace non-empty lists.
+          const loaded = (part: string, list: unknown[] | undefined) =>
+            tab.loadedParts ? tab.loadedParts.includes(part) : Boolean(list && list.length > 0);
           if (tab.dashboard) newUnitDashboards[tab.courseId] = tab.dashboard;
           if (tab.unitInfo) newUnitInfos[tab.courseId] = tab.unitInfo;
           if (tab.schedule) newSchedules[tab.courseId] = tab.schedule;
-          if (tab.recordings && tab.recordings.length > 0) newRecordings[tab.courseId] = tab.recordings;
-          if (tab.contacts && tab.contacts.length > 0) newContacts[tab.courseId] = tab.contacts;
+          if (loaded("recordings", tab.recordings)) newRecordings[tab.courseId] = tab.recordings ?? [];
+          if (loaded("contacts", tab.contacts)) newContacts[tab.courseId] = tab.contacts ?? [];
+          cover(tab.courseId, tab.loadedParts ?? []);
         }
       }
 
@@ -431,7 +500,7 @@ export const useAppStore = create<AppState>()(
         ? { ...(data.newFingerprints ?? {}) }
         : { ...state.courseFingerprints, ...(data.newFingerprints ?? {}) };
 
-      return {
+      const merged = {
         courses: updatedCourses,
         allResources: updatedResources,
         assignments: finalAssignments,
@@ -442,11 +511,18 @@ export const useAppStore = create<AppState>()(
         schedules: newSchedules,
         recordings: newRecordings,
         contacts: newContacts,
+        courseSyncCoverage: newCoverage,
+      };
+      // Streamed batches leave fingerprints and sync status alone: only the final
+      // result of a completed sync may mark the data fresh.
+      if (data.partial) return merged;
+      return {
+        ...merged,
         courseFingerprints: newFingerprints,
         syncStatus: {
           ...state.syncStatus,
           isRunning: false,
-          lastSync: new Date().toISOString(),
+          lastSync: now,
         },
       };
     }),
@@ -500,16 +576,22 @@ export const useAppStore = create<AppState>()(
       return { aiInsights: { ...state.aiInsights, plans } };
     }),
   reset: () =>
-    set({
+    set((s) => ({
+      sessionEpoch: s.sessionEpoch + 1,
+      courseSyncCoverage: {},
       user: null,
       isLoggedIn: false,
       reauthReason: null,
       cacheOwnerEmail: undefined,
+      signedOut: false,
       courses: [],
       currentCourse: null,
       courseResources: {},
       allResources: [],
       summaries: {},
+      studyGuides: {},
+      guideFallbacks: {},
+      guideProgress: {},
       assignments: [],
       announcements: [],
       readAnnouncementIds: [],
@@ -536,7 +618,7 @@ export const useAppStore = create<AppState>()(
       examError: null,
       downloads: [],
       aiInsights: { priorities: null, plans: {}, prioritiesRunning: false },
-    }),
+    })),
     }),
     {
       name: "muster-settings",
@@ -552,7 +634,7 @@ export const useAppStore = create<AppState>()(
       // Per-course tab data follows the user's fetch strategy: unitInfos / schedules / contacts are
       // semester-fixed content — fetched once and persisted (cache), so regular logins skip them.
       // unitDashboards / recordings are dynamic (the dashboard's "current week" rolls weekly,
-      // recordings appear per week) — fetched live on every login, kept in memory only.
+      // recordings appear per week) — persisted as a last-known copy, refreshed on every login.
       //
       // `user` and `isLoggedIn` are deliberately NOT persisted. The source of truth for auth is the
       // Rust-side keyring session, checked on startup by loadSavedSession(). Persisting the flag made
@@ -574,14 +656,22 @@ export const useAppStore = create<AppState>()(
         examsCheckedAt: state.examsCheckedAt,
         examsSemester: state.examsSemester,
         cacheOwnerEmail: state.cacheOwnerEmail,
+        signedOut: state.signedOut,
         // Semester-fixed tabs (unit info / schedule / contacts) are cached: fetch once,
-        // reuse across launches. The dynamic tabs (dashboard / recordings) are NOT
-        // persisted — they are re-fetched live on every login.
+        // reuse across launches. The dynamic tabs (dashboard / recordings) are persisted
+        // too so the next launch shows the last copy at once; the background sync
+        // refreshes them on every login.
+        unitDashboards: state.unitDashboards,
+        recordings: state.recordings,
+        courseSyncCoverage: state.courseSyncCoverage,
         unitInfos: state.unitInfos,
         schedules: state.schedules,
         contacts: state.contacts,
         courseFingerprints: state.courseFingerprints,
         summaries: state.summaries,
+        studyGuides: state.studyGuides,
+        guideFallbacks: state.guideFallbacks,
+        guideProgress: state.guideProgress,
         aiInsights: { ...state.aiInsights, prioritiesRunning: false },
         settings: state.settings,
       }),
@@ -607,6 +697,9 @@ export const useAppStore = create<AppState>()(
           isLoggedIn: false,
           reauthReason: null,
           examsAttemptedAt: undefined,
+          studyGuides: restoreGuides(p.studyGuides, accountScope(p.cacheOwnerEmail || '')),
+          guideFallbacks: restoreGuides(p.guideFallbacks, accountScope(p.cacheOwnerEmail || '')),
+          guideProgress: restoreProgress(p.guideProgress, accountScope(p.cacheOwnerEmail || '')),
           settings: { ...defaultSettings, ...(p.settings ?? {}) },
           // Pre-portal caches came from the old source and must be revalidated.
           exams: p.examsFetchedAt ? p.exams ?? [] : [],
@@ -634,6 +727,8 @@ export function getSyncOptions(
     allResources: Resource[];
     assignments: Assignment[];
     unitInfos: Record<number, UnitInfo>;
+    schedules?: Record<number, Schedule>;
+    contacts?: Record<number, CourseContact[]>;
     courseFingerprints?: Record<number, string>;
     settings?: {
       hiddenCourseIds?: number[];
@@ -725,9 +820,22 @@ export function getSyncOptions(
     (a) => a.status !== "graded" && a.hasSubmissionStatus !== false && Boolean(a.url)
   );
 
+  // Fixed tabs are fetched once per course, but a course that joined later (or whose
+  // first fetch failed) would otherwise never get them until the user opened that tab.
+  // Back-fill them for the courses being synced that are still missing any of them.
+  const fixedTabCourseIds = hasAnyFixedTabs
+    ? targetCourseIds.filter(
+        (id) =>
+          !state.unitInfos[id] ||
+          (state.schedules !== undefined && !state.schedules[id]) ||
+          (state.contacts !== undefined && state.contacts[id] === undefined)
+      )
+    : [];
+
   return {
     fullRefresh: false,
     includeFixedTabs: !hasAnyFixedTabs,
+    fixedTabCourseIds,
     cachedWeeks,
     completedAssignmentIds,
     targetCourseIds: targetCourseIds.length > 0 ? targetCourseIds : undefined,
