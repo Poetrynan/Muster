@@ -1,3 +1,27 @@
+# Muster v0.5.1
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.1_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/Muster_0.5.1_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.1_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/Muster_0.5.1_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.1_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/Muster_0.5.1_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.1_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/Muster_0.5.1_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.1_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/Muster_0.5.1_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.1_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.1/muster_0.5.1_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.1/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Unsubmitted assignments no longer show as submitted.** A group assignment for a student not yet in a group says "Nothing has been submitted for this assignment", and Muster read that as submitted. Assignments that were wrongly marked are corrected on the next sync.
+- **"Not graded" is no longer read as graded** in the assignment list.
+- **Feedback no longer takes screenshots for now.** They reached the developer as unreadable text. Please describe the problem in words; the optional diagnostic report is still attached.
+
+---
+
 # Muster v0.5.0
 
 ## Download
