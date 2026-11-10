@@ -1191,6 +1191,14 @@ impl MoodleScraper {
                     if let Ok(s) = self.parse_submission_status_from_html(&html, a.id) {
                         if s.submitted {
                             new_status = AssignmentStatus::Submitted;
+                        } else if a.status == AssignmentStatus::Submitted
+                            && !s.graded
+                            && assign_page_confirms_unsubmitted(&html)
+                        {
+                            // The only downgrade allowed: the page's own status table says
+                            // nothing was submitted (repairs caches written by the old
+                            // "Nothing has been submitted" misparse).
+                            new_status = AssignmentStatus::Pending;
                         }
                         if s.graded {
                             new_status = AssignmentStatus::Graded;
@@ -1659,20 +1667,14 @@ impl MoodleScraper {
                         let classes: String = td.value().classes().collect::<Vec<_>>().join(" ");
                         let cell_text = td.text().collect::<String>().trim().to_lowercase();
 
-                        if classes.contains("submissionstatussubmitted")
-                            || cell_text.contains("submitted for grading")
-                            || (cell_text.contains("submitted") && !cell_text.contains("not submitted"))
-                        {
-                            submitted = true;
+                        // Negative wording first: "Nothing has been submitted for this
+                        // assignment" (group assignments) contains the word "submitted".
+                        if classes.contains("submissionstatusdraft") || says_not_submitted(&cell_text) {
+                            submitted = false;
                             determined_from_table = true;
                             break;
-                        } else if classes.contains("submissionstatusdraft")
-                            || cell_text.contains("draft")
-                            || cell_text.contains("no attempt")
-                            || cell_text.contains("no submission")
-                            || cell_text.contains("not submitted")
-                        {
-                            submitted = false;
+                        } else if classes.contains("submissionstatussubmitted") || cell_text.contains("submitted") {
+                            submitted = true;
                             determined_from_table = true;
                             break;
                         }
@@ -1695,10 +1697,7 @@ impl MoodleScraper {
             if let Ok(table_sel) = Selector::parse("div.submissionstatustable, div.submissionsummarytable") {
                 if let Some(tbl) = doc.select(&table_sel).next() {
                     let tbl_text = tbl.text().collect::<String>().to_lowercase();
-                    let has_no_sub = tbl_text.contains("no attempt")
-                        || tbl_text.contains("no submission")
-                        || tbl_text.contains("not submitted")
-                        || tbl_text.contains("draft (not submitted)");
+                    let has_no_sub = says_not_submitted(&tbl_text);
 
                     if !has_no_sub && (
                         tbl_text.contains("submitted for grading")
@@ -1718,8 +1717,7 @@ impl MoodleScraper {
         // 3. Fallback for non-table / raw text input (e.g. minimal unit tests)
         if !determined_from_table {
             let lower = text.to_lowercase();
-            submitted = !lower.contains("no submission")
-                && !lower.contains("not submitted")
+            submitted = !says_not_submitted(&lower)
                 && (lower.contains("submitted")
                     || (lower.contains("submission status") && lower.contains("submitted")));
         }
@@ -5325,9 +5323,56 @@ fn cmid_from_url(url: Option<&str>) -> Option<u64> {
         .ok()
 }
 
+/// Moodle's wordings for "the student has not submitted anything", lower-cased input.
+/// Several of them contain the word "submitted", so callers must check this before
+/// treating "submitted" as a positive signal.
+fn says_not_submitted(lower: &str) -> bool {
+    [
+        "nothing has been submitted",   // group assignments: "Nothing has been submitted for this assignment"
+        "no submissions have been made", // "No submissions have been made yet"
+        "no submission",
+        "no attempt",
+        "not submitted",                 // "Draft (not submitted)", "Not submitted"
+        "draft",
+    ]
+    .iter()
+    .any(|phrase| lower.contains(phrase))
+}
+
+/// The assignment page's own "Submission status" row says nothing has been submitted.
+/// Scoped to the status table so rubric text ("No submission, 0 points") never counts.
+fn assign_page_confirms_unsubmitted(html: &str) -> bool {
+    use scraper::{Html, Selector};
+    let doc = Html::parse_document(html);
+    let (Ok(row_sel), Ok(th_sel), Ok(td_sel)) = (
+        Selector::parse("div.submissionstatustable tr"),
+        Selector::parse("th"),
+        Selector::parse("td"),
+    ) else {
+        return false;
+    };
+    doc.select(&row_sel).any(|row| {
+        let header = row.select(&th_sel).next().map(|th| th.text().collect::<String>().to_lowercase());
+        header.is_some_and(|h| h.trim() == "submission status")
+            && row
+                .select(&td_sel)
+                .last()
+                .is_some_and(|td| says_not_submitted(&td.text().collect::<String>().to_lowercase()))
+    })
+}
+
 /// Determine assignment status from text content.
 fn determine_assignment_status(text: &str) -> AssignmentStatus {
     let lower = text.to_lowercase();
+    // "Not graded" contains "graded" and "Nothing has been submitted" contains
+    // "submitted": strip the negative wordings before looking for positive ones.
+    // Only exact phrases are stripped: an assignment *name* such as "Draft proposal"
+    // must not hide a real "Submitted for grading" in the same row.
+    let lower = lower
+        .replace("not graded", "")
+        .replace("nothing has been submitted", "")
+        .replace("no submissions have been made", "")
+        .replace("not submitted", "");
 
     // Graded takes priority over Submitted: Moodle's rendered table can contain both
     // keywords (e.g. "Submitted for grading" + a graded badge in the same row), and a
@@ -6553,6 +6598,49 @@ mod tests {
         assert!(s.submitted);
         assert!(!s.graded, "'Not graded' must stay ungraded");
         assert_eq!(s.grade, None);
+    }
+
+    /// Regression (user report): a group assignment for a student in no group renders
+    /// "Nothing has been submitted for this assignment", which contains "submitted" and
+    /// was shown as 已提交. Markup mirrors the live Monash page.
+    #[test]
+    fn group_assignment_nothing_submitted_is_not_submitted() {
+        let scraper = test_scraper();
+        let group = r#"<div class="submissionstatustable"><h3>Submission status</h3>
+          <div class="box py-3 boxaligncenter submissionsummarytable">
+          <div class="alert alert-error" role="alert"><div class="alert-content"><h6>Error</h6>
+            <div>This assignment requires submission in groups. You are not a member of any group.</div></div></div>
+          <div class="table-responsive"><table class="generaltable table-bordered"><tbody>
+            <tr><th class="cell c0" scope="row">Group</th><td class="cell c1 lastcol"><div class="alert-content"><h6>Error</h6><div> Not a member of any group </div></div></td></tr>
+            <tr><th class="cell c0" scope="row">Submission status</th><td class="cell c1 lastcol">Nothing has been submitted for this assignment</td></tr>
+            <tr><th class="cell c0" scope="row">Grading status</th><td class="submissionnotgraded cell c1 lastcol">Not graded</td></tr>
+            <tr><th class="cell c0" scope="row">Time remaining</th><td class="timeremaining cell c1 lastcol">73 days 10 hours remaining</td></tr>
+            <tr class="lastrow"><th class="cell c0" scope="row">Last modified</th><td class="cell c1 lastcol">-</td></tr>
+          </tbody></table></div></div></div>"#;
+        let parsed = scraper.parse_submission_status_from_html(group, 1).unwrap();
+        assert!(!parsed.submitted);
+        assert!(!parsed.graded);
+        assert!(assign_page_confirms_unsubmitted(group));
+
+        let individual = group
+            .replace("Nothing has been submitted for this assignment", "No submissions have been made yet");
+        assert!(!scraper.parse_submission_status_from_html(&individual, 2).unwrap().submitted);
+        assert!(assign_page_confirms_unsubmitted(&individual));
+
+        let submitted = group.replace(
+            r#"<td class="cell c1 lastcol">Nothing has been submitted for this assignment</td>"#,
+            r#"<td class="submissionstatussubmitted cell c1 lastcol">Submitted for grading</td>"#,
+        );
+        assert!(scraper.parse_submission_status_from_html(&submitted, 3).unwrap().submitted);
+        assert!(!assign_page_confirms_unsubmitted(&submitted));
+    }
+
+    #[test]
+    fn index_row_status_ignores_negative_wordings() {
+        assert_eq!(determine_assignment_status("A3 Due 22 Jan Nothing has been submitted for this assignment"), AssignmentStatus::Pending);
+        assert_eq!(determine_assignment_status("A1 Not graded No submissions have been made yet Due"), AssignmentStatus::Pending);
+        assert_eq!(determine_assignment_status("Draft proposal Submitted for grading"), AssignmentStatus::Submitted);
+        assert_eq!(determine_assignment_status("Essay Graded 80"), AssignmentStatus::Graded);
     }
 
     /// Regression: an assignment with a marking rubric containing "No submission" level definition

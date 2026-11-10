@@ -404,8 +404,12 @@ export const useAppStore = create<AppState>()(
               ...item,
               // Preserve score and status if incoming skipped detail fetch
               grade: item.grade ?? prev.grade,
+              // Keep a settled status only when this sync could not read the item's own
+              // page (hasSubmissionStatus false). When it did, "pending" is the page's
+              // answer — e.g. it repairs items cached as submitted by an old misparse.
               status:
-                item.status === "pending" && (prev.status === "graded" || prev.status === "submitted")
+                item.status === "pending" &&
+                (prev.status === "graded" || (prev.status === "submitted" && !item.hasSubmissionStatus))
                   ? prev.status
                   : item.status,
               hasSubmissionStatus: item.hasSubmissionStatus || prev.hasSubmissionStatus,
