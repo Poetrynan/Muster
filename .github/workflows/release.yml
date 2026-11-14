@@ -38,6 +38,7 @@ jobs:
     outputs:
       release-id: ${{ steps.release.outputs.release-id }}
       source-sha: ${{ steps.release.outputs.source-sha }}
+      published: ${{ steps.release.outputs.published }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,11 +51,26 @@ jobs:
           set -euo pipefail
           tag_ref="refs/tags/$RELEASE_TAG"
           git check-ref-format "$tag_ref"
+          # Prefer the published release during a repair. If all matches are
+          # drafts from an older run, reuse the one with the most assets.
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp |
+            jq -c --arg tag "$RELEASE_TAG" '
+              flatten | map(select(.tag_name == $tag))
+              | sort_by(.draft, -(.assets | length), .id) | first // empty
+            ')
           source_sha=$(git rev-parse HEAD)
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             remote_tag=$(git ls-remote --refs origin "$tag_ref")
             if [ -n "$remote_tag" ]; then
               git fetch --no-tags origin "$tag_ref"
+              source_sha=$(git rev-parse 'FETCH_HEAD^{commit}')
+            elif [ -n "$release" ]; then
+              target=$(jq -er '.target_commitish' <<< "$release")
+              if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "::error::The draft for $RELEASE_TAG has no fixed commit. Push its intended tag before building again."
+                exit 1
+              fi
+              git fetch --no-tags origin "$target"
               source_sha=$(git rev-parse 'FETCH_HEAD^{commit}')
             fi
           fi
@@ -65,29 +81,24 @@ jobs:
             exit 1
           fi
 
-          # Prefer the published release during a repair. If all matches are
-          # drafts from an older run, reuse the one with the most assets.
-          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp |
-            jq -r --arg tag "$RELEASE_TAG" '
-              flatten | map(select(.tag_name == $tag))
-              | sort_by(.draft, -(.assets | length), .id) | first | .id // empty
-            ')
-          if [ -z "$release_id" ]; then
+          if [ -z "$release" ]; then
             if git cat-file -e "${source_sha}:RELEASE_NOTES.md" 2>/dev/null; then
               git show "${source_sha}:RELEASE_NOTES.md" |
                 awk '/^# Muster v/ { n++ } n <= 1 { print }' > "$RUNNER_TEMP/release-notes.md"
             else
               echo "See the assets below to download Muster for your platform." > "$RUNNER_TEMP/release-notes.md"
             fi
-            release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --method POST \
+            release=$(gh api "repos/$GITHUB_REPOSITORY/releases" --method POST \
               -f tag_name="$RELEASE_TAG" -f target_commitish="$source_sha" \
               -f name="Muster $RELEASE_TAG" -F body="@$RUNNER_TEMP/release-notes.md" \
-              -F draft=true --jq '.id')
+              -F draft=true)
           fi
 
+          release_id=$(jq -er '.id' <<< "$release")
           echo "Building $source_sha for $RELEASE_TAG (release ID $release_id)"
           echo "release-id=$release_id" >> "$GITHUB_OUTPUT"
           echo "source-sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "published=$(jq -r '.draft | not' <<< "$release")" >> "$GITHUB_OUTPUT"
 
   build-and-release:
     needs: prepare-release
@@ -138,14 +149,49 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
+      - name: Protect existing public updater bundles
+        id: public-assets
+        if: ${{ needs.prepare-release.outputs.published == 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release-id }}
+          PLATFORM: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=${RELEASE_TAG#v}
+          case "$PLATFORM" in
+            macos-arm) bundles=("Muster_aarch64.app.tar.gz") ;;
+            macos-intel) bundles=("Muster_x64.app.tar.gz") ;;
+            windows) bundles=("Muster_${version}_x64-setup.exe" "Muster_${version}_x64_en-US.msi") ;;
+            linux) bundles=("Muster_${version}_amd64.AppImage" "Muster_${version}_amd64.deb") ;;
+          esac
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" \
+            --paginate --jq '.[] | select(.state == "uploaded") | .name')
+          present=0
+          for bundle in "${bundles[@]}"; do
+            for name in "$bundle" "$bundle.sig"; do
+              if grep -Fxq "$name" <<< "$names"; then
+                present=$((present + 1))
+              fi
+            done
+          done
+          if [ "$present" -eq "$((${#bundles[@]} * 2))" ]; then
+            echo "Reusing existing public updater bundles for $PLATFORM"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$present" -ne 0 ]; then
+            echo "::error::The public $RELEASE_TAG has incomplete updater assets for $PLATFORM. Restore the matching files from the original build or release a new version."
+            exit 1
+          fi
+
       - name: Checkout repository
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-release.outputs.source-sha }}
 
       - name: Install Linux dependencies
-        if: ${{ runner.os == 'Linux' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && runner.os == 'Linux' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -161,30 +207,30 @@ jobs:
             patchelf
 
       - name: Setup Node.js
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
 
       - name: Install Rust toolchain
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Rust cache
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
       - name: Install dependencies
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         run: npm ci
 
       - name: Build Tauri app
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -202,7 +248,7 @@ jobs:
       # direct than reading the manifest back: it runs in the leg that built it,
       # needs no token, and cannot be confused by draft-release visibility.
       - name: Assert the macOS updater artifact was produced
-        if: ${{ startsWith(matrix.id, 'macos') && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
+        if: ${{ steps.public-assets.outputs.skip != 'true' && startsWith(matrix.id, 'macos') && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.id) }}
         shell: bash
         run: |
           set -euo pipefail

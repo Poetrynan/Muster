@@ -110,6 +110,11 @@ def main():
     release = json.loads(gh_api(release_endpoint))
     pages = json.loads(gh_api(f"{release_endpoint}/assets", "--paginate", "--slurp"))
     assets = [asset for page in pages for asset in page]
+    if not any(asset["name"] == "latest.json" for asset in assets):
+        backup = next((asset for asset in assets if asset["name"] == "latest.json.previous"), None)
+        if backup:
+            gh_api(f"{asset_endpoint}/{backup['id']}", "--method", "PATCH", "-f", "name=latest.json")
+            backup["name"] = "latest.json"
     manifest = generate_manifest(
         release,
         assets,
