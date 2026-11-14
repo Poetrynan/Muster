@@ -1,3 +1,25 @@
+# Muster v0.5.2
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.2_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/Muster_0.5.2_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.2_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/Muster_0.5.2_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.2_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/Muster_0.5.2_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.2_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/Muster_0.5.2_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.2_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/Muster_0.5.2_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.2_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.2/muster_0.5.2_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.2/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **"What's next" on the home page only shows work still ahead.** An item drops off once its deadline passes, once it is submitted or graded on Moodle, or once you tick it done in the study guide. The study guide itself still lists recently overdue work so you can hand it in late.
+
+---
+
 # Muster v0.5.1
 
 ## Download
