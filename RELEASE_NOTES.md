@@ -1,3 +1,26 @@
+# Muster v0.5.3
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.3_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/Muster_0.5.3_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.3_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/Muster_0.5.3_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.3_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/Muster_0.5.3_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.3_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/Muster_0.5.3_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.3_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/Muster_0.5.3_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.3_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.3/muster_0.5.3_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.3/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **A quieter sign-in page.** The login screen keeps its two-panel layout but drops the decorative gradients and feature cards. It now shows a small sample of the home screen and a single sign-in button, with plain wording in all four languages.
+- **More reliable releases.** Each version now has one release and one update manifest, so in-app updates keep working when a build is retried.
+
+---
+
 # Muster v0.5.2
 
 ## Download
