@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Muster app icon (master). An open book whose outline is the letter M; the light
+       line is the spine. Regenerate the icon set with: npx tauri icon src-tauri/icons/source/muster-icon.svg -->
+  <rect width="1024" height="1024" rx="230" fill="#006DAE"/>
+  <path d="M205 747V266L512 512L819 266V747C706 737 594 768 512 819C430 768 318 737 205 747Z"
+        fill="none" stroke="#FFFFFF" stroke-width="66" stroke-linejoin="round"/>
+  <path d="M512 512V819" stroke="#ABF5F9" stroke-width="66" stroke-linecap="round"/>
+</svg>

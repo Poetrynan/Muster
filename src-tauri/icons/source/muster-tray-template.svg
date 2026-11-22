@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 180 724 724">
+  <!-- macOS menu-bar template: black mark on transparent; macOS tints it for light/dark menus. -->
+  <path d="M205 747V266L512 512L819 266V747C706 737 594 768 512 819C430 768 318 737 205 747Z"
+        fill="none" stroke="#000000" stroke-width="84" stroke-linejoin="round"/>
+  <path d="M512 512V819" stroke="#000000" stroke-width="84" stroke-linecap="round"/>
+</svg>

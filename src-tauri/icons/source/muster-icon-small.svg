@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Small-size variant (16-48 px): heavier strokes so the mark stays legible. -->
+  <rect width="1024" height="1024" rx="230" fill="#006DAE"/>
+  <path d="M205 747V266L512 512L819 266V747C706 737 594 768 512 819C430 768 318 737 205 747Z"
+        fill="none" stroke="#FFFFFF" stroke-width="104" stroke-linejoin="round"/>
+</svg>
