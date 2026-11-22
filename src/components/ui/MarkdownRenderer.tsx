@@ -64,17 +64,8 @@ function renderInline(text: string, allowLinks = true): React.ReactNode[] {
             rel="noopener noreferrer"
             onClick={async (e) => {
               e.preventDefault();
-              if (linkHref.startsWith("https://") && linkHref.includes("monash.edu")) {
-                try {
-                  const { invoke } = await import("@tauri-apps/api/core");
-                  await invoke("open_in_app_webview", { url: linkHref, title: linkText || "Monash" });
-                  return;
-                } catch { /* Fall back to the external browser */ }
-              }
-              try {
-                const { openUrl } = await import("@tauri-apps/plugin-opener");
-                await openUrl(linkHref);
-              } catch { /* Silent */ }
+              const { openLink } = await import("../../lib/monashLinks");
+              await openLink(linkHref, linkText || "Monash");
             }}
             className="text-primary underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer"
           >

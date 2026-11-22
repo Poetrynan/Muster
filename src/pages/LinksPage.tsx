@@ -12,7 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openLink } from "../lib/monashLinks";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useTranslation } from "../i18n/useTranslation";
@@ -520,37 +520,6 @@ const SITES: SiteLink[] = [
     },
   },
   {
-    id: "isp-helpdesk",
-    name: {
-      en: "ISP Helpdesk (Student Pass)",
-      zh: "ISP Helpdesk 签证服务台",
-      ja: "ISP Helpdesk（学生パス相談）",
-      ko: "ISP Helpdesk(학생 비자 서비스)",
-    },
-    desc: {
-      en: "Malaysia campus International Student Pass desk: open tickets for visa/pass questions and track their status.",
-      zh: "马来西亚校区国际学生签证（Student Pass）服务台：提交工单咨询签证问题并追踪处理进度。",
-      ja: "マレーシアキャンパスの国際学生パス専用サービスデスク。ビザやパスに関する質問をチケットで申請し、進捗を追跡できます。",
-      ko: "말레이시아 캠퍼스 국제 학생 비자(Student Pass) 전용 서비스 데스크. 비자 문제를 티켓으로 제출하고 진행 상황을 추적할 수 있습니다.",
-    },
-    detail: {
-      en: "The official helpdesk for International Student Pass (visa) matters at Monash Malaysia. Submit a new ticket with your questions, check the status and history of past requests, and browse the FAQ before filing — most pass-related questions are answered there.",
-      zh: "Monash 马来西亚校区国际学生签证（Student Pass）事务官方服务台。提交新工单咨询、查询历史工单状态与回复；建议先查 FAQ，多数签证相关问题都有现成答案。",
-      ja: "Monash マレーシアの国際学生パス（ビザ）関連の公式ヘルプデスク。新しいチケットを提出し、過去のリクエストの状況と履歴を確認できます。多くのパス関連の質問は FAQ に掲載されているため、提出前にまず確認を。",
-      ko: "Monash 말레이시아의 국제 학생 비자(Student Pass) 관련 공식 헬프데스크입니다. 새 티켓을 제출하고 과거 요청의 상태와 이력을 확인할 수 있습니다. 대부분의 비자 관련 질문은 FAQ에 수록되어 있으니 제출 전에 먼저 확인하세요.",
-    },
-    url: "https://isphelpdesk.monash.edu.my/",
-    host: "isphelpdesk.monash.edu.my",
-    faviconDomain: "monash.edu.my",
-    category: "campus",
-    badge: {
-      en: "Malaysia",
-      zh: "马来西亚校区",
-      ja: "マレーシア",
-      ko: "말레이시아 캠퍼스",
-    },
-  },
-  {
     id: "mum-helpdesk",
     name: {
       en: "MUM Helpdesk",
@@ -559,16 +528,16 @@ const SITES: SiteLink[] = [
       ko: "MUM Helpdesk(종합 서비스 데스크)",
     },
     desc: {
-      en: "Monash Malaysia's one-stop helpdesk: submit tickets and browse a rich knowledge base covering fees, library, IT and campus services.",
-      zh: "马来西亚校区一站式服务台：提交工单，并查阅涵盖学费、图书馆、IT 与校园服务的知识库。",
-      ja: "Monash マレーシアのワンストップヘルプデスク。チケット提出に加え、学費・図書館・IT・キャンパスサービスを網羅するナレッジベースを閲覧できます。",
-      ko: "말레이시아 캠퍼스 원스톱 헬프데스크. 티켓 제출과 함께 등록금, 도서관, IT, 캠퍼스 서비스를 다루는 지식 베이스를 제공합니다.",
+      en: "Monash Malaysia's one-stop helpdesk, now including Student Pass (visa) enquiries: submit tickets and browse a knowledge base covering fees, library, IT and campus services.",
+      zh: "马来西亚校区一站式服务台，学生签证（Student Pass）咨询也已并入：提交工单，并查阅涵盖学费、图书馆、IT 与校园服务的知识库。",
+      ja: "Monash マレーシアのワンストップヘルプデスク。学生パス（ビザ）の相談もこちらに統合。チケット提出に加え、学費・図書館・IT・キャンパスサービスを網羅するナレッジベースを閲覧できます。",
+      ko: "말레이시아 캠퍼스 원스톱 헬프데스크. 학생 비자(Student Pass) 문의도 이곳으로 통합되었습니다. 티켓 제출과 함께 등록금, 도서관, IT, 캠퍼스 서비스를 다루는 지식 베이스를 제공합니다.",
     },
     detail: {
-      en: "The general helpdesk for Monash University Malaysia. Submit a ticket for IT and campus service requests and track it under My Ticket; the Knowledge Base also has self-service answers — fee payment dates and instalment plans, refunds, library loans and opening hours, group room bookings and more.",
-      zh: "Monash 马来西亚校区综合服务台。通过 Submit a Ticket 提交工单（My Ticket 追踪进度）；知识库还提供自助答案——学费缴纳日期与分期计划、退费指引、图书馆借阅与开放时间、讨论室预约等。",
-      ja: "Monash マレーシアの総合ヘルプデスク。Submit a Ticket からチケットを提出し（My Ticket で追跡）、IT やキャンパスサービスの要求を処理。ナレッジベースには学費の支払期限や分割プラン、返金ガイド、図書館の貸出・開館時間、グループルーム予約などの自己解決コンテンツが揃っています。",
-      ko: "Monash 말레이시아 종합 헬프데스크입니다. Submit a Ticket으로 티켓을 제출하고(My Ticket에서 추적) IT·캠퍼스 서비스 요청을 처리합니다. 지식 베이스에는 등록금 납부 기한과 분할 납부, 환불 가이드, 도서관 대출·운영 시간, 스터디룸 예약 등 자가 해결 콘텐츠가 있습니다.",
+      en: "The general helpdesk for Monash University Malaysia. International Student Pass (visa) enquiries, previously on the separate ISP Helpdesk, are now handled here too. Submit a ticket for IT and campus service requests and track it under My Ticket; the Knowledge Base also has self-service answers — fee payment dates and instalment plans, refunds, library loans and opening hours, group room bookings and more.",
+      zh: "Monash 马来西亚校区综合服务台。原 ISP Helpdesk 的国际学生签证（Student Pass）咨询现在也在这里处理。通过 Submit a Ticket 提交工单（My Ticket 追踪进度）；知识库还提供自助答案——学费缴纳日期与分期计划、退费指引、图书馆借阅与开放时间、讨论室预约等。",
+      ja: "Monash マレーシアの総合ヘルプデスク。以前は ISP Helpdesk で扱っていた国際学生パス（ビザ）の相談も、現在はこちらで受け付けています。Submit a Ticket からチケットを提出し（My Ticket で追跡）、IT やキャンパスサービスの要求を処理。ナレッジベースには学費の支払期限や分割プラン、返金ガイド、図書館の貸出・開館時間、グループルーム予約などの自己解決コンテンツが揃っています。",
+      ko: "Monash 말레이시아 종합 헬프데스크입니다. 이전에 ISP Helpdesk에서 처리하던 국제 학생 비자(Student Pass) 문의도 이제 이곳에서 처리합니다. Submit a Ticket으로 티켓을 제출하고(My Ticket에서 추적) IT·캠퍼스 서비스 요청을 처리합니다. 지식 베이스에는 등록금 납부 기한과 분할 납부, 환불 가이드, 도서관 대출·운영 시간, 스터디룸 예약 등 자가 해결 콘텐츠가 있습니다.",
     },
     url: "https://helpdesk.monash.edu.my/",
     host: "helpdesk.monash.edu.my",
@@ -895,12 +864,11 @@ export function LinksPage({ onBack }: LinksPageProps) {
     })).filter((g) => g.sites.length > 0);
   }, [query, activeCategory]);
 
-  const handleOpen = async (url: string) => {
-    try {
-      await openUrl(url);
-    } catch {
-      // silent — opening a link is non-critical
-    }
+  // Monash sites open in the in-app window, which already carries the SSO login;
+  // the system browser would ask the student to sign in a second time.
+  const handleOpen = (url: string) => {
+    const site = SITES.find((s) => s.url === url);
+    void openLink(url, site ? pick(lang, site.name) : undefined);
   };
 
   return (

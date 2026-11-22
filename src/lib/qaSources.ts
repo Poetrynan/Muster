@@ -22,14 +22,6 @@ export function resolveQaSources(answer: string, hits: SearchHit[]) {
 export async function openQaSource(source: SearchHit): Promise<void> {
   const url = safeSourceUrl(source.url);
   if (!url) return;
-  const hostname = new URL(url).hostname;
-  if (hostname === "monash.edu" || hostname.endsWith(".monash.edu")) {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("open_in_app_webview", { url, title: source.title });
-      return;
-    } catch { /* Reuse the regular external-browser fallback. */ }
-  }
-  const { openUrl } = await import("@tauri-apps/plugin-opener");
-  await openUrl(url);
+  const { openLink } = await import("./monashLinks");
+  await openLink(url, source.title);
 }

@@ -905,6 +905,15 @@ async fn fetch_exams(state: State<'_, AppState>, has_cache: Option<bool>) -> Res
     student_portal::fetch_exams(&account, has_cache.unwrap_or(false)).await
 }
 
+/// Monash-owned hosts that sign in through Monash SSO (all campuses + the student portal).
+/// Keep in sync with `isMonashHost` in src/lib/monashLinks.ts.
+fn is_monash_host(host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    ["monash.edu", "monash.edu.au", "monash.edu.my", "student.monash"]
+        .iter()
+        .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")))
+}
+
 /// Open a Moodle URL in an in-app WebView window.
 ///
 /// Deliberately *not* the system browser: the app's WebView2 shares the
@@ -933,11 +942,7 @@ async fn open_in_app_webview(
     if parsed.scheme() != "https" {
         return Err("Only https links are supported".to_string());
     }
-    let host_ok = parsed
-        .host_str()
-        .map(|h| h == "monash.edu" || h.ends_with(".monash.edu"))
-        .unwrap_or(false);
-    if !host_ok {
+    if !parsed.host_str().is_some_and(is_monash_host) {
         return Err("Only Monash on-site links are allowed".to_string());
     }
 
@@ -1350,6 +1355,17 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::detect_os_version;
+
+    #[test]
+    fn in_app_window_accepts_every_monash_campus_and_nothing_else() {
+        use super::is_monash_host;
+        for host in ["monash.edu", "learning.monash.edu", "my.monash.edu.au", "attendance.monash.edu.my", "home.student.monash", "WWW.MONASH.EDU."] {
+            assert!(is_monash_host(host), "{host}");
+        }
+        for host in ["notmonash.edu", "monash.edu.evil.com", "edstem.org", "monsu.org", "evilmonash.edu.au"] {
+            assert!(!is_monash_host(host), "{host}");
+        }
+    }
 
     #[tokio::test]
     async fn summary_stream_cancellation_before_start_never_polls_generation() {

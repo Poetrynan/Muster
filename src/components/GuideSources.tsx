@@ -22,8 +22,9 @@ export function GuideSources({ sources, language, includedIds, omittedIds }: {
                     if (!url)
                         return;
                     if ('__TAURI_INTERNALS__' in window) {
-                        const { openUrl } = await import('@tauri-apps/plugin-opener');
-                        await openUrl(url);
+                        // Moodle sources open in the in-app window that already has the login.
+                        const { openLink } = await import('../lib/monashLinks');
+                        await openLink(url, source.title);
                     }
                     else
                         window.open(url, '_blank', 'noopener,noreferrer');
