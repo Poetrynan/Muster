@@ -962,6 +962,9 @@ async fn open_in_app_webview(
         .inner_size(1020.0, 700.0)
         .min_inner_size(560.0, 420.0)
         .center()
+        // Presses "Current students" on the WES chooser page once; WES then goes
+        // straight to Monash Okta, where this window is already signed in.
+        .initialization_script(include_str!("in_app_continue.js"))
         .build()
         .map_err(|e| format!("Failed to open window: {}", e))?;
 

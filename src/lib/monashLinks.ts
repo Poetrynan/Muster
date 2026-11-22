@@ -12,6 +12,15 @@ export function isMonashHost(host: string): boolean {
   return MONASH_SUFFIXES.some((s) => h === s || h.endsWith(`.${s}`));
 }
 
+/**
+ * Allocate+ student timetable for the current teaching year. Monash runs one instance per
+ * calendar year and alternates the path: even years (all 2026 periods, incl. the November
+ * intake and Summer A) under /even, odd years (2027, from Summer B) under /odd.
+ */
+export function allocateStudentUrl(now: Date): string {
+  return `https://my-timetable.monash.edu/${now.getFullYear() % 2 === 0 ? "even" : "odd"}/student`;
+}
+
 /** https link on a Monash host: these open in the in-app window that shares the login. */
 export function opensInApp(url: string): boolean {
   try {

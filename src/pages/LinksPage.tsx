@@ -12,7 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { openLink } from "../lib/monashLinks";
+import { allocateStudentUrl, openLink } from "../lib/monashLinks";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useTranslation } from "../i18n/useTranslation";
@@ -250,8 +250,10 @@ const SITES: SiteLink[] = [
       ja: "Allocate+ はクラス時間割を管理します。学期前にチュートリアル・ラボ・セミナーの希望（Preference）を提出し、割り当て開放後は他の時間帯へ変更、最終的な週間時間割の確認、時間衝突の事前発見ができます。",
       ko: "Allocate+는 수업 시간표를 관리합니다. 학기 시작 전 튜토리얼·랩·세미나 희망(Preference)을 제출하고, 배정이 열리면 다른 시간대로 변경하거나 최종 주간 시간표를 확인하고 시간 충돌을 미리 발견할 수 있습니다.",
     },
-    url: "https://www.monash.edu/students/admin/timetables/allocate/login",
-    host: "monash.edu/students/admin/timetables/allocate",
+    // Straight into the student timetable system (it signs in through Monash Okta on its
+    // own). The info page this used to link to needed an extra click per visit.
+    url: allocateStudentUrl(new Date()),
+    host: "my-timetable.monash.edu",
     faviconDomain: "monash.edu",
     category: "enrol",
   },

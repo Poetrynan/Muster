@@ -1,5 +1,11 @@
 import { expect, it } from "vitest";
-import { isMonashHost, opensInApp } from "./monashLinks";
+import { allocateStudentUrl, isMonashHost, opensInApp } from "./monashLinks";
+
+it("links Allocate+ to the instance for the current teaching year", () => {
+  expect(allocateStudentUrl(new Date(2026, 10, 22))).toBe("https://my-timetable.monash.edu/even/student");
+  expect(allocateStudentUrl(new Date(2027, 0, 10))).toBe("https://my-timetable.monash.edu/odd/student");
+  expect(opensInApp(allocateStudentUrl(new Date(2026, 10, 22)))).toBe(true);
+});
 
 it("treats Monash-owned hosts (all campuses) as signed-in hosts", () => {
   for (const host of [
