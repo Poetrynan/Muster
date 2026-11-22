@@ -1,3 +1,27 @@
+# Muster v0.5.4
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.4_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/Muster_0.5.4_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.4_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/Muster_0.5.4_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.4_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/Muster_0.5.4_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.4_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/Muster_0.5.4_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.4_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/Muster_0.5.4_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.4_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.4/muster_0.5.4_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.4/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **No second sign-in from Campus Links.** Monash sites (student portal, WES, Allocate+, eAssessment and others) now open in Muster's own window, which is already signed in. Non-Monash sites still open in your browser. Study-guide source links work the same way.
+- **A new, lighter logo.** An open book whose outline forms an M, drawn in thin lines on Monash blue. It replaces the app, taskbar, menu-bar and website icons.
+- **ISP Helpdesk merged into the Malaysia helpdesk**, which now also handles Student Pass enquiries.
+
+---
+
 # Muster v0.5.3
 
 ## Download
