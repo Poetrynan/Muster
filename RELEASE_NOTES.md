@@ -1,3 +1,26 @@
+# Muster v0.5.6
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.6_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/Muster_0.5.6_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.6_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/Muster_0.5.6_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.6_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/Muster_0.5.6_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.6_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/Muster_0.5.6_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.6_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/Muster_0.5.6_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.6_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.6/muster_0.5.6_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.6/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Monash sites stay signed in.** Muster now ticks Okta's "Keep me signed in" on Monash sign-in pages, so your Monash sign-in survives restarts and Campus Links such as the student portal, WES and the Malaysia helpdesk open without asking again. You can untick it on the sign-in page. The first time you open one of these sites after updating, you may need to sign in once more.
+- **The Malaysia helpdesk goes straight to Monash sign-in** instead of stopping at its own sign-in choice page.
+
+---
+
 # Muster v0.5.5
 
 ## Download
