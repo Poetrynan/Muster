@@ -763,6 +763,8 @@ async fn start_sso_login_webview_inner(
     .visible(false)
     .on_navigation(on_nav)
     .initialization_script(include_str!("student_portal_capture.js"))
+    // Keep the Okta session across restarts so Campus Links open signed in.
+    .initialization_script(include_str!("okta_keep_signed_in.js"))
     .build()
     .map_err(|e| format!("Failed to open login window: {}", e))?;
     // Silent SSO (existing school session) completes without ever showing a window.
@@ -965,6 +967,8 @@ async fn open_in_app_webview(
         // Presses "Current students" on the WES chooser page once; WES then goes
         // straight to Monash Okta, where this window is already signed in.
         .initialization_script(include_str!("in_app_continue.js"))
+        // If Okta asks to sign in here, keep that session so the next site doesn't ask again.
+        .initialization_script(include_str!("okta_keep_signed_in.js"))
         .build()
         .map_err(|e| format!("Failed to open window: {}", e))?;
 
