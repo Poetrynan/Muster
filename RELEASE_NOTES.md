@@ -1,3 +1,26 @@
+# Muster v0.5.5
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.5_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/Muster_0.5.5_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.5_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/Muster_0.5.5_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.5_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/Muster_0.5.5_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.5_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/Muster_0.5.5_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.5_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/Muster_0.5.5_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [muster_0.5.5_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.5/muster_0.5.5_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.5/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Allocate+ and WES open without an extra click.** Allocate+ now goes straight to the student timetable system for the current year, and WES skips its "Current students" page. Both continue to Monash sign-in, which Muster's window has already completed.
+- **The new icon shows up after updating.** The installer now asks Windows to refresh its icon cache, so the taskbar and Start menu stop showing the old logo.
+
+---
+
 # Muster v0.5.4
 
 ## Download
