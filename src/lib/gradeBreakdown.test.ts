@@ -91,7 +91,7 @@ describe("caches synced before v0.4 (no isCategory / categoryId / gradeMax)", ()
   it("FIT5222: keeps the two 'Project' and two 'Quiz / Test' categories apart by order", () => {
     const g = buildCourseGrade([
       legacy("1. Project", 32, "Project", "pending", undefined, false),
-      legacy("Warm-up", 32, "Project", "pending"), legacy("Challenge", 32, "Project", "graded", "50.00 / 100.00"),
+      legacy("Flatland Challenge WARMUP", 32, "Project", "pending"), legacy("Flatland Challenge", 32, "Project", "graded", "45.55 / 100.00"),
       legacy("2. Project", 32, "Project", "pending", undefined, false),
       legacy("Group project (Weight: 32%)", 32, "Project", "submitted"), legacy("Presentation", 32, "Project", "pending"),
       legacy("3. Quiz / Test", 18, "Quiz / Test", "pending", undefined, false),
@@ -100,10 +100,10 @@ describe("caches synced before v0.4 (no isCategory / categoryId / gradeMax)", ()
       legacy("Test 2 (18%)", 18, "Quiz / Test", "graded", "15.00"),
     ]);
     expect(g.categories.map((c) => [c.name, c.weight, c.items.length])).toEqual([
-      ["Project", 32, 2], ["Project", 32, 2], ["Quiz / Test", 18, 1], ["Quiz / Test", 18, 1],
+      ["Project", 32, 1], ["Project", 32, 2], ["Quiz / Test", 18, 1], ["Quiz / Test", 18, 1],
     ]);
     expect(g.totalWeight).toBe(100);
-    expect(g.earned).toBeCloseTo(8); // 16% share × 50%
+    expect(g.earned).toBeCloseTo(14.576, 3);
     // Bare test scores without a known maximum stay "hidden" until a resync fills gradeMax.
     expect(g.hiddenWeight).toBe(36);
   });
@@ -164,6 +164,44 @@ describe("Master thesis: five copies of the structure, weights in item names", (
 });
 
 describe("edge cases", () => {
+  it("gives the formal Flatland Challenge the full 32% without counting its warm-up", () => {
+    const g = buildCourseGrade([
+      cat(1, "1. Project", "Project", 32),
+      { ...item(1, 32, "pending"), name: "Flatland Challenge WARMUP" },
+      { ...item(1, 32, "graded", "45.55", 100), name: "Flatland Challenge" },
+      cat(2, "2. Project", "Project", 32),
+      { ...item(2, 32, "graded", "78.9%"), name: "Too Many Chefs (Weight: 32%)" },
+      { ...item(2, 32, "pending"), name: "Assignment 2 Presentation" },
+      cat(3, "3. Quiz / Test", "Quiz / Test", 18),
+      item(3, 18, "graded", "26.5%"),
+      cat(4, "4. Quiz / Test", "Quiz / Test", 18),
+      item(4, 18, "graded", "37%"),
+    ]);
+    expect(g.categories[0].items).toMatchObject([
+      { name: "Flatland Challenge", share: 32, percent: 45.55 },
+    ]);
+    expect(g.categories[0].earned).toBeCloseTo(14.576, 3);
+    expect(g.gradedWeight).toBe(100);
+    expect(g.pendingWeight).toBe(0);
+    expect(g.earned).toBeCloseTo(51.254, 3);
+    expect(g.outcome).toBe("passed");
+  });
+
+  it("respects explicit zero weight without assuming all warm-ups are ungraded", () => {
+    const g = buildCourseGrade([
+      cat(1, "1. Project", "Project", 32),
+      { ...item(1, 32, "graded", "100%"), name: "Demo (Weight: 0%)" },
+      { ...item(1, 0, "graded", "100%"), name: "Practice" },
+      { ...item(1, 32, "graded", "50%"), name: "Warm-up Quiz (8%)" },
+      { ...item(1, 32, "pending"), name: "Main Project" },
+    ]);
+    expect(g.categories[0].items.map(({ name, share }) => [name, share])).toEqual([
+      ["Warm-up Quiz (8%)", 8], ["Main Project", 24],
+    ]);
+    expect(g.earned).toBe(4);
+    expect(g.pendingWeight).toBe(24);
+  });
+
   it("keeps graded-but-hidden scores out of both earned and remaining", () => {
     const g = buildCourseGrade([cat(1, "1. Essay", "Essay", 60), item(1, 60, "graded"), cat(2, "2. Exam", "Exam", 40)]);
     expect(g.hiddenWeight).toBe(60);

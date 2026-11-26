@@ -108,7 +108,7 @@ export function CourseGradeRow({ code, name, grade, onOpen }: { code: string | n
 }
 
 function itemStatus(item: ItemScore, t: ReturnType<typeof useTranslation>["t"]) {
-  if (item.state === "graded") return `${fmtPoints(item.percent!)}%`;
+  if (item.state === "graded") return `${fmtPoints(item.percent!, 2)}%`;
   if (item.state === "hidden") return t("grades.itemHidden");
   return item.placeholder ? t("grades.itemUpcoming") : t("grades.itemPending");
 }

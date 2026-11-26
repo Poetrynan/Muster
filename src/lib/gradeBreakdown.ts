@@ -85,6 +85,14 @@ function statedWeight(name: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+export function isNonCountingAssessment(a: Assignment): boolean {
+  const weight = statedWeight(a.name);
+  if (weight != null) return weight === 0;
+  // FIT5222 lists this practice activity under the weighted Project heading.
+  // The widget copies that heading's weight onto the practice activity as well.
+  return a.weight === 0 || /^flatland\s+challenge\s+warm[\s-]*up$/i.test(a.name.trim());
+}
+
 /**
  * Split a category's weight across its items: an item that states its own weight in its
  * name keeps it, and the rest is shared equally by the others. Inconsistent data (stated
@@ -135,12 +143,12 @@ export function buildCourseGrade(assessments: Assignment[]): CourseGrade {
         owner.set(a, a.categoryId != null ? `id:${a.categoryId}` : current ?? keyOf(a));
       }
     });
-    // Widget pages: category weight is authoritative and split equally across its items.
+    // Widget pages: allocate the category weight only among assessments that count.
     for (const cat of cats) {
       const weight = cat.categoryWeight ?? cat.weight ?? 0;
       if (!(weight > 0)) continue; // e.g. "Supplementary assessment"
       const key = catKey.get(cat)!;
-      const children = assessments.filter((a) => owner.get(a) === key);
+      const children = assessments.filter((a) => owner.get(a) === key && !isNonCountingAssessment(a));
       const split = shares(children, weight);
       const items = children.length
         ? children.map((a, i) => scoreItem(a, split[i]))
@@ -152,7 +160,7 @@ export function buildCourseGrade(assessments: Assignment[]): CourseGrade {
     // Older templates: each item carries its own weight; group by category heading for display.
     const groups = new Map<string, Assignment[]>();
     for (const a of assessments) {
-      if (!(a.weight && a.weight > 0)) continue;
+      if (!(a.weight && a.weight > 0) || isNonCountingAssessment(a)) continue;
       const name = a.category?.trim() || "Other";
       groups.set(name, [...(groups.get(name) ?? []), a]);
     }
@@ -194,5 +202,8 @@ export function buildCourseGrade(assessments: Assignment[]): CourseGrade {
   };
 }
 
-/** One decimal, trailing ".0" dropped: 32.40 -> "32.4", 50 -> "50". */
-export const fmtPoints = (n: number) => String(Math.round(n * 10) / 10);
+/** Round for display without adding trailing zeroes. */
+export const fmtPoints = (n: number, digits = 1) => {
+  const scale = 10 ** digits;
+  return String(Math.round(n * scale) / scale);
+};

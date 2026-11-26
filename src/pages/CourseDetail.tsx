@@ -57,7 +57,7 @@ import type {
   UnitDashboard,
 } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
-import { buildCourseGrade } from "../lib/gradeBreakdown";
+import { buildCourseGrade, isNonCountingAssessment } from "../lib/gradeBreakdown";
 import { GradeBreakdownPanel } from "../components/GradeBreakdown";
 import { getEffectiveAssignmentStatus, buildCourseDownloadDir , buildSectionDownloadDir } from "../lib/utils";
 
@@ -892,7 +892,9 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                                   ? t("assignments.dueDate", { date: assignment.dueDate })
                                   : t("assignments.dueDate", { date: t("course.dueUnset") })}
                               </span>
-                              {assignment.weight != null && (
+                              {isNonCountingAssessment(assignment) ? (
+                                <Badge variant="secondary">{t("assignments.nonCounting")}</Badge>
+                              ) : assignment.weight != null && (
                                 <Badge variant="warning">
                                   {t("assignments.weight", { weight: assignment.weight })}
                                 </Badge>

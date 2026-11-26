@@ -25,6 +25,7 @@ import { Progress } from "../components/ui/progress";
 import { Tabs } from "../components/ui/tabs";
 import { useAppStore } from "../stores/useAppStore";
 import { inferActiveSemesterKey, isCourseActiveForSemester } from "../lib/courseHelpers";
+import { isNonCountingAssessment } from "../lib/gradeBreakdown";
 import { getEffectiveAssignmentStatus, parseDueTimestamp, getCalendarDayDiff, getDaysUntilDue } from "../lib/utils";
 
 // Determine whether a course term has ended (Monash: S1 ≈ late Feb - Jun, S2 ≈ late Jul - Nov).
@@ -326,7 +327,9 @@ export function AssignmentsPage({ onBack }: AssignmentsPageProps) {
                         {t("assignments.dueIn", { days: daysUntil })}
                       </span>
                     ))}
-                  {assignment.weight != null && (
+                  {isNonCountingAssessment(assignment) ? (
+                    <Badge variant="secondary">{t("assignments.nonCounting")}</Badge>
+                  ) : assignment.weight != null && (
                     <Badge variant="warning">
                       {t("assignments.weight", { weight: assignment.weight })}
                     </Badge>
