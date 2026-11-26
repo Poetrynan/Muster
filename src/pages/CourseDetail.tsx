@@ -58,6 +58,8 @@ import type {
 } from "../services/api";
 import { useTranslation } from "../i18n/useTranslation";
 import { buildCourseGrade, isNonCountingAssessment } from "../lib/gradeBreakdown";
+import { useAcademicCalendar } from "../lib/academicCalendar";
+import { getLearningWeekNumber, resolveTeachingWeek } from "../lib/unitTeachingWeek";
 import { GradeBreakdownPanel } from "../components/GradeBreakdown";
 import { getEffectiveAssignmentStatus, buildCourseDownloadDir , buildSectionDownloadDir } from "../lib/utils";
 
@@ -73,6 +75,13 @@ interface CourseDetailProps {
 // Object.is is always false -> React thinks the snapshot keeps changing -> infinite re-render (React error #185).
 // So the empty array is hoisted to module scope as a single reusable constant.
 const EMPTY_RESOURCES: Resource[] = [];
+
+const TEACHING_STATUS_LABEL = {
+  before: "course.dashboard.teachingNotStarted",
+  break: "course.dashboard.teachingBreak",
+  ended: "course.dashboard.teachingEnded",
+  unknown: "course.dashboard.noCurrentWeek",
+} as const;
 
 // Moodle section titles use "A | B" separators; render them as " · " for readability.
 function cleanTitle(s: string): string {
@@ -126,6 +135,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   const [recordingsLoaded, setRecordingsLoaded] = useState(cachedRecordings !== undefined);
   // Unit Dashboard (unit overview, section=0)
   const [dashboardData, setDashboardData] = useState<UnitDashboard | null>(cachedDashboard ?? null);
+  const academicCalendar = useAcademicCalendar();
   const [fetchingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const loadingContacts = fetchingContacts || (awaitingSync && cachedContacts === undefined);
@@ -143,6 +153,13 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
   const [submissionForId, setSubmissionForId] = useState<number | null>(null);
 
   const course = courses.find((c) => c.id === courseId);
+  const teaching = resolveTeachingWeek(course, dashboardData?.currentWeek, academicCalendar);
+  const teachingWeek = teaching.status === "teaching" ? teaching.number : null;
+  const teachingFocus = teaching.status === "teaching" ? teaching.focus : null;
+  const teachingModule = teachingWeek == null ? undefined : dashboardData?.learningNav.find(
+    (item) => getLearningWeekNumber(item.weekLabel) === teachingWeek,
+  );
+  const teachingTitle = teachingFocus?.title || teachingModule?.moduleTitle;
 
   // Write one tab's freshly fetched data back into the in-memory store (merged with
   // whatever the full sync fetched), so later tab switches render without refetching.
@@ -1256,22 +1273,24 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                     </button>
                   </div>
                 )}
-                {dashboardData && (
+                {(dashboardData || teaching.status !== "unknown") && (
                   <>
-                    {dashboardData.currentWeek && (
+                    {teaching.status === "teaching" ? (
                       <Card className="border-primary/30">
                         <CardContent className="p-5">
                           <p className="text-xs font-semibold text-primary uppercase mb-1">
-                            {t("course.dashboard.currentWeek")} · Week {dashboardData.currentWeek.num}
+                            {t("course.dashboard.currentWeek")} · Week {teaching.number}
                           </p>
-                          <h3 className="text-xl font-bold">{cleanTitle(dashboardData.currentWeek.title)}</h3>
-                          {dashboardData.currentWeek.dates && (
-                            <p className="text-sm text-muted-foreground mt-1">{dashboardData.currentWeek.dates}</p>
+                          {teachingTitle && <h3 className="text-xl font-bold">{cleanTitle(teachingTitle)}</h3>}
+                          {teachingFocus?.dates && (
+                            <p className="text-sm text-muted-foreground mt-1">{teachingFocus.dates}</p>
                           )}
                         </CardContent>
                       </Card>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{t(TEACHING_STATUS_LABEL[teaching.status])}</p>
                     )}
-                    {dashboardData.learningObjectives.map((obj, oi) => (
+                    {teachingFocus && dashboardData?.learningObjectives.map((obj, oi) => (
                       <Card key={oi} className="border-l-4 border-l-primary">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-2 mb-2">
@@ -1294,7 +1313,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                         </CardContent>
                       </Card>
                     ))}
-                    {dashboardData.learningNav.length > 0 && (
+                    {!!dashboardData?.learningNav.length && (
                       <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-2">
                           {t("course.dashboard.learningPath")}
@@ -1306,7 +1325,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                               type="button"
                               onClick={() => handleOpenSection(item.section)}
                               className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all hover:bg-muted/50 ${
-                                item.isCurrent ? "border-primary/40 bg-primary/5" : "bg-card"
+                                item === teachingModule ? "border-primary/40 bg-primary/5" : "bg-card"
                               }`}
                             >
                               <span
@@ -1319,7 +1338,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                               <span className="flex-1 min-w-0 text-sm truncate">
                                 {cleanTitle(item.moduleTitle)}
                               </span>
-                              {item.isCurrent && (
+                              {item === teachingModule && (
                                 <Badge variant="default">{t("course.dashboard.currentBadge")}</Badge>
                               )}
                               <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -1328,7 +1347,7 @@ export function CourseDetail({ courseId, onBack, initialTab }: CourseDetailProps
                         </div>
                       </div>
                     )}
-                    {dashboardData.weeks.length > 0 && (
+                    {!!dashboardData?.weeks.length && (
                       <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-2">{t("course.dashboard.weeks")}</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

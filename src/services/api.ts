@@ -449,6 +449,15 @@ export interface UnitWeek {
   dates?: string | null;
 }
 
+/** Local calendar dates from Monash's published standard semester table. */
+export interface AcademicTerm {
+  key: string;
+  teachingStart: string;
+  teachingEnd: string;
+  breakStart: string;
+  breakEnd: string;
+}
+
 export interface LearningObjective {
   title: string;
   description: string;
@@ -585,6 +594,10 @@ export async function fetchUnitDashboard(courseId: number): Promise<UnitDashboar
   const invoke = getInvoke();
   if (!invoke) return { courseId, weeks: [], learningObjectives: [], learningNav: [] };
   return invoke<UnitDashboard>("fetch_course_unit_dashboard", { courseId });
+}
+
+export async function fetchAcademicCalendar(): Promise<AcademicTerm[]> {
+  return getInvoke()?.<AcademicTerm[]>("fetch_academic_calendar") ?? [];
 }
 
 /// Fetch exam schedule from the authenticated Monash student portal.

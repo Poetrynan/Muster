@@ -4,6 +4,8 @@ import { guideCopy } from '../lib/studyGuide/copy';
 import { buildGuideFacts } from '../lib/studyGuide/facts';
 import { accountScope, localDay, selectGuideSources, weekStart } from '../lib/studyGuide/sources';
 import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from '../lib/courseHelpers';
+import { useAcademicCalendar } from '../lib/academicCalendar';
+import { resolveTeachingWeek } from '../lib/unitTeachingWeek';
 /** "What's next" lists only work still ahead. Recently overdue items stay in the study
  *  guide (marked overdue there), but at the top of the home page they read as the next step. */
 export function isUpcomingDue(due: string, now: Date): boolean {
@@ -21,10 +23,12 @@ export function doneActionIds(progress: Record<string, Record<string, { done?: b
 /** Local rules only: opening the dashboard never incurs an AI request. */
 export function StudyGuideOverview() {
     const state = useAppStore(), c = guideCopy(state.settings.language), now = new Date(), timezone = Intl.DateTimeFormat().resolvedOptions().timeZone, day = localDay(now, timezone);
+    const academicCalendar = useAcademicCalendar();
     const done = doneActionIds(state.guideProgress);
     const courses = state.courses.filter(c => !c.isPortal && !state.settings.hiddenCourseIds?.includes(c.id)), semester = inferActiveSemesterKey(courses);
     const actions = courses.filter(c => { const s = parseSemester(c.fullName || c.shortName); return s.key !== 'other' && isCourseInSemester(s, semester); }).flatMap(course => {
-        const scope = { accountScope: accountScope(state.cacheOwnerEmail || ''), courseId: course.id, weekId: weekStart(day), selectedWeek: state.unitDashboards[course.id]?.currentWeek?.num ?? null, timezone, now: now.toISOString(), localDate: day, language: state.settings.language, model: state.settings.aiModel, availableMinutes: 120 };
+        const teaching = resolveTeachingWeek(course, state.unitDashboards[course.id]?.currentWeek, academicCalendar, now);
+        const scope = { accountScope: accountScope(state.cacheOwnerEmail || ''), courseId: course.id, weekId: weekStart(day), selectedWeek: teaching.status === 'teaching' ? teaching.number : null, timezone, now: now.toISOString(), localDate: day, language: state.settings.language, model: state.settings.aiModel, availableMinutes: 120 };
         const sources = selectGuideSources({ resources: [], assignments: state.assignments, announcements: state.announcements, events: state.calendarEvents }, scope);
         const facts = buildGuideFacts(sources.included, scope);
         return facts.actions.filter(a => a.priority !== 'normal').map(action => ({ action, course, due: String(facts.facts.find(f => action.factIds.includes(f.id) && f.field === 'dueAt')?.value ?? '') }));

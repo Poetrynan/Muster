@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod moodle;
+mod academic_calendar;
 mod student_portal;
 mod student_portal_session;
 #[cfg(test)]
@@ -1333,6 +1334,7 @@ pub fn run() {
             fetch_course_quizzes,
             fetch_course_gradebook,
             fetch_course_unit_dashboard,
+            academic_calendar::fetch_academic_calendar,
             fetch_grade_overview,
             fetch_exams,
             read_portal_diagnostics,

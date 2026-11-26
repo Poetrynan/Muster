@@ -9,6 +9,8 @@ import { buildGuideContext, buildGuideFacts, buildGuideScore } from '../lib/stud
 import type { FactRecord, GuideScope } from '../lib/studyGuide/types';
 import { guideCopy } from '../lib/studyGuide/copy';
 import { humanizeAiError } from '../lib/aiError';
+import { useAcademicCalendar } from '../lib/academicCalendar';
+import { resolveTeachingWeek } from '../lib/unitTeachingWeek';
 import { useTranslation } from '../i18n/useTranslation';
 import { GuideCard } from './GuideCard';
 import { GuideSources } from './GuideSources';
@@ -21,10 +23,14 @@ export function StudyGuidePanel({ course }: {
     const [clock, setClock] = useState(() => new Date());
     useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 60000); return () => window.clearInterval(timer); }, []);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', localDate = localDay(clock, timezone), currentWeekId = weekStart(localDate);
-    const [weekId, setWeekId] = useState(currentWeekId), [selectedWeek, setSelectedWeek] = useState<number | null>(state.unitDashboards[course.id]?.currentWeek?.num ?? null), [hours, setHours] = useState(2);
-    const scope: GuideScope = { accountScope: accountScope(state.cacheOwnerEmail || state.user?.email || ''), courseId: course.id, weekId, selectedWeek, localDate, timezone, now: clock.toISOString(), language: settings.language, model: settings.aiModel, availableMinutes: Math.round(hours * 60), provider: fingerprint([settings.aiBaseUrl, settings.aiFormat, settings.aiCompatType]) };
+    const academicCalendar = useAcademicCalendar();
+    const teaching = resolveTeachingWeek(course, state.unitDashboards[course.id]?.currentWeek, academicCalendar, clock);
+    const teachingWeek = teaching.status === 'teaching' ? teaching.number : null;
+    const [weekId, setWeekId] = useState(currentWeekId), [selectedWeek, setSelectedWeek] = useState<number | null | undefined>(undefined), [hours, setHours] = useState(2);
+    const effectiveWeek = selectedWeek === undefined ? teachingWeek : selectedWeek;
+    const scope: GuideScope = { accountScope: accountScope(state.cacheOwnerEmail || state.user?.email || ''), courseId: course.id, weekId, selectedWeek: effectiveWeek, localDate, timezone, now: clock.toISOString(), language: settings.language, model: settings.aiModel, availableMinutes: Math.round(hours * 60), provider: fingerprint([settings.aiBaseUrl, settings.aiFormat, settings.aiCompatType]) };
     const resources = state.courseResources[course.id] ?? state.allResources.filter(r => r.courseId === course.id);
-    const selection = useMemo(() => selectGuideSources({ resources, assignments: state.assignments, announcements: state.announcements, events: state.calendarEvents, unitInfo: state.unitInfos[course.id], schedule: state.schedules[course.id], syncedAt: state.syncStatus.lastSync }, scope), [resources, state.assignments, state.announcements, state.calendarEvents, state.unitInfos, state.schedules, state.syncStatus.lastSync, course.id, scope.accountScope, weekId, selectedWeek, localDate, timezone, settings.language, settings.aiModel, settings.aiBaseUrl, settings.aiFormat, settings.aiCompatType, hours]);
+    const selection = useMemo(() => selectGuideSources({ resources, assignments: state.assignments, announcements: state.announcements, events: state.calendarEvents, unitInfo: state.unitInfos[course.id], schedule: state.schedules[course.id], syncedAt: state.syncStatus.lastSync }, scope), [resources, state.assignments, state.announcements, state.calendarEvents, state.unitInfos, state.schedules, state.syncStatus.lastSync, course.id, scope.accountScope, weekId, effectiveWeek, localDate, timezone, settings.language, settings.aiModel, settings.aiBaseUrl, settings.aiFormat, settings.aiCompatType, hours]);
     const facts = buildGuideFacts(selection.included, scope), context = buildGuideContext(selection, facts, scope), key = guideKey(scope), artifact = state.studyGuides[key], progress = state.guideProgress[key] ?? {};
     const requestIdentity = `${key}:${context.inputHash}:${settings.aiBaseUrl}:${settings.aiFormat}:${settings.aiApiKey}`;
     const identity = useRef(requestIdentity);
@@ -37,7 +43,7 @@ export function StudyGuidePanel({ course }: {
         setWeekId(weekStart(value));
         setSelectedWeek(null);
     };
-    const availableWeeks = [...new Set([...resources.flatMap(r => r.weekNum == null ? [] : [r.weekNum]), ...(selectedWeek == null ? [] : [selectedWeek])])].sort((a, b) => a - b);
+    const availableWeeks = [...new Set([...resources.flatMap(r => r.weekNum == null ? [] : [r.weekNum]), ...(effectiveWeek == null ? [] : [effectiveWeek])])].sort((a, b) => a - b);
     const hasKey = !!settings.aiApiKey && !!settings.aiBaseUrl;
     const stale = !!artifact && artifact.inputHash !== context.inputHash;
     const fallback = state.guideFallbacks[key];
@@ -76,15 +82,15 @@ export function StudyGuidePanel({ course }: {
     <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="grid min-w-0 gap-4 sm:grid-cols-3">
         <label className="min-w-0 text-sm font-medium">{c.week}<input type="date" value={weekId} onChange={e => changeWeek(e.target.value)} className="mt-2 block w-full min-w-0 rounded-lg border border-border bg-background p-2.5"/></label>
-        <label className="min-w-0 text-sm font-medium">{c.teachingWeek}<select aria-label={c.teachingWeek} value={selectedWeek ?? ''} onChange={e => setSelectedWeek(e.target.value === '' ? null : Number(e.target.value))} className="mt-2 block w-full rounded-lg border border-border bg-background p-2.5"><option value="">{c.unknownWeek}</option>{availableWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select></label>
+        <label className="min-w-0 text-sm font-medium">{c.teachingWeek}<select aria-label={c.teachingWeek} value={effectiveWeek ?? ''} onChange={e => setSelectedWeek(e.target.value === '' ? null : Number(e.target.value))} className="mt-2 block w-full rounded-lg border border-border bg-background p-2.5"><option value="">{c.unknownWeek}</option>{availableWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select></label>
         <label className="min-w-0 text-sm font-medium">{c.hours}<input type="number" min={0.5} max={40} step={0.5} value={hours} onChange={e => {
             const n = Number(e.target.value);
             if (Number.isFinite(n))
                 setHours(Math.max(.5, Math.min(40, n)));
         }} className="mt-2 block w-full rounded-lg border border-border bg-background p-2.5"/></label>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-1"><Button variant="ghost" size="sm" aria-label={c.previous} onClick={() => changeWeek(shiftDate(weekId, -7))}><ArrowLeft className="h-4 w-4"/></Button><Button variant="ghost" size="sm" onClick={() => { setWeekId(currentWeekId); setSelectedWeek(state.unitDashboards[course.id]?.currentWeek?.num ?? null); }}>{c.current}</Button><Button variant="ghost" size="sm" aria-label={c.next} onClick={() => changeWeek(shiftDate(weekId, 7))}><ArrowRight className="h-4 w-4"/></Button><span className="ml-2 text-xs text-muted-foreground">{weekId} – {shiftDate(weekId, 6)} · {timezone}</span></div>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{c.scopeHint} {weekId === currentWeekId ? c.currentWindow : c.selectedWindow} {selectedWeek == null ? c.unknownWeekHint : ""}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-1"><Button variant="ghost" size="sm" aria-label={c.previous} onClick={() => changeWeek(shiftDate(weekId, -7))}><ArrowLeft className="h-4 w-4"/></Button><Button variant="ghost" size="sm" onClick={() => { setWeekId(currentWeekId); setSelectedWeek(undefined); }}>{c.current}</Button><Button variant="ghost" size="sm" aria-label={c.next} onClick={() => changeWeek(shiftDate(weekId, 7))}><ArrowRight className="h-4 w-4"/></Button><span className="ml-2 text-xs text-muted-foreground">{weekId} – {shiftDate(weekId, 6)} · {timezone}</span></div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{c.scopeHint} {weekId === currentWeekId ? c.currentWindow : c.selectedWindow} {effectiveWeek == null ? c.unknownWeekHint : ""}</p>
     </section>
     <section aria-labelledby="guide-overview" className="space-y-3"><h2 id="guide-overview" className="text-lg font-semibold">{c.overview}</h2><div className="grid gap-3 sm:grid-cols-3">{[[c.facts, facts.facts.filter(f => f.field === 'status').length], [c.sources, selection.included.length], [c.titleOnly, selection.coverage.titleOnly]].map(([label, count]) => <div key={label} className="rounded-xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{count}</p></div>)}</div><p className="text-xs leading-relaxed text-muted-foreground">{c.updated}: {state.syncStatus.lastSync ? dateText(state.syncStatus.lastSync) : c.notSynced} · {c.coverageHint}</p></section>
     {facts.conflicts.length > 0 && <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm"><p className="mb-3">{c.conflicts}</p><GuideSources sources={currentSources([...new Set(facts.conflicts.flat())])} language={settings.language}/></div>}
