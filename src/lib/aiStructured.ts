@@ -208,6 +208,18 @@ function appendixBoundary(source: string, start: number): { end: number; next: n
 }
 
 /**
+ * Remove reasoning a model wrote inline in its answer (`<think>…</think>`, used by some
+ * DeepSeek / Qwen deployments instead of a separate reasoning field), so it is never shown
+ * or parsed as part of the answer.
+ */
+export function stripThinking(text: string): string {
+  // Closed blocks anywhere, then an opened block that is still streaming (no close tag yet).
+  const closed = String(text ?? "").replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, "");
+  const open = closed.search(/<(think|thinking|reasoning)>/i);
+  return (open >= 0 ? closed.slice(0, open) : closed).replace(/^\s+/, "");
+}
+
+/**
  * Streaming guard: while chunks are still arriving the appendix may be partially
  * transmitted. Hide closed/open appendices and even a split marker prefix.
  * Keep raw chunks separately so completion parsing still has the full payload.

@@ -3,7 +3,7 @@ import type { GenerationStatus, GuideArtifact, GuideContext, GuideFacts, GuideSc
 import { GUIDE_PROMPT, GUIDE_SCHEMA } from '../lib/studyGuide/types';
 import { guideKey } from '../lib/studyGuide/sources';
 import { parseGuideOutput, validateGuide } from '../lib/studyGuide/validate';
-import { stripPartialAppendix } from '../lib/aiStructured';
+import { stripPartialAppendix, stripThinking } from '../lib/aiStructured';
 interface GuideInput {
     scope: GuideScope;
     selection: SourceSelection;
@@ -30,7 +30,7 @@ export async function generateGuide(input: GuideInput, onText: (s: string) => vo
                 if (!active() || done || error || thinking)
                     return;
                 accumulated += text;
-                onText(stripPartialAppendix(accumulated));
+                onText(stripPartialAppendix(stripThinking(accumulated)));
             },
             onDone: () => {
                 if (active() && !error)
@@ -45,7 +45,7 @@ export async function generateGuide(input: GuideInput, onText: (s: string) => vo
     catch (e) {
         error = e instanceof Error ? e.message : String(e);
     }
-    const { markdown, payload } = parseGuideOutput(accumulated);
+    const { markdown, payload } = parseGuideOutput(stripThinking(accumulated));
     if (!active())
         return { status: 'failed', markdown: '', error: 'aborted' };
     if (error || !done)

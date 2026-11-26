@@ -1,5 +1,6 @@
 import { restoreGuides,restoreProgress } from '../lib/studyGuide/cache';
 import type { GuideArtifact, GuideProgress } from '../lib/studyGuide/types';
+import type { QuickAnswer } from '../lib/studyGuide/quick';
 import { accountScope, guideKey } from '../lib/studyGuide/sources';
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -7,6 +8,9 @@ import { idbStorage } from "../services/idbStorage";
 import type { AppSettings, SyncStatus, Summary, AiPriorities, AiPlan, ExamSchedule } from "../types";
 import type { Course, Resource, Assignment, Announcement, User, DownloadItem, CalendarEvent, GradeOverviewRow, UnitDashboard, UnitInfo, Schedule, Recording, CourseContact, CourseTabData, SyncOptions } from "../services/api";
 import { inferActiveSemesterKey, isCourseInSemester, parseSemester } from "../lib/courseHelpers";
+
+/** First element of a quickKey is the account scope. */
+const quickOwner = (key: string): string | undefined => { try { const v = JSON.parse(key); return Array.isArray(v) ? v[0] : undefined; } catch { return undefined; } };
 
 interface AppState {
   // User state
@@ -29,6 +33,9 @@ interface AppState {
   guideFallbacks: Record<string, GuideArtifact>;
   guideProgress: Record<string, Record<string, GuideProgress>>;
   saveStudyGuide: (artifact: GuideArtifact) => boolean;
+  /** Validated quick-action answers, keyed by quickKey (account, unit, action, week/assessment). */
+  quickAnswers: Record<string, QuickAnswer>;
+  saveQuickAnswer: (answer: QuickAnswer) => boolean;
   setGuideProgress: (key: string, id: string, progress: GuideProgress) => void;
 
   // Summary state
@@ -215,6 +222,15 @@ export const useAppStore = create<AppState>()(
   studyGuides: {},
   guideFallbacks: {},
   guideProgress: {},
+  quickAnswers: {},
+  saveQuickAnswer: (answer) => {
+    const state = get();
+    const owner = state.cacheOwnerEmail || state.user?.email;
+    // Only the signed-in account's answers are kept; a late reply for another account is dropped.
+    if (!state.isLoggedIn || !owner || quickOwner(answer.key) !== accountScope(owner)) return false;
+    set({ quickAnswers: { ...state.quickAnswers, [answer.key]: answer } });
+    return true;
+  },
   saveStudyGuide: (artifact) => {
     const state = get();
     const owner = state.cacheOwnerEmail || state.user?.email;
@@ -594,6 +610,7 @@ export const useAppStore = create<AppState>()(
       allResources: [],
       summaries: {},
       studyGuides: {},
+      quickAnswers: {},
       guideFallbacks: {},
       guideProgress: {},
       assignments: [],
@@ -674,6 +691,7 @@ export const useAppStore = create<AppState>()(
         courseFingerprints: state.courseFingerprints,
         summaries: state.summaries,
         studyGuides: state.studyGuides,
+        quickAnswers: state.quickAnswers,
         guideFallbacks: state.guideFallbacks,
         guideProgress: state.guideProgress,
         aiInsights: { ...state.aiInsights, prioritiesRunning: false },
@@ -703,6 +721,7 @@ export const useAppStore = create<AppState>()(
           examsAttemptedAt: undefined,
           studyGuides: restoreGuides(p.studyGuides, accountScope(p.cacheOwnerEmail || '')),
           guideFallbacks: restoreGuides(p.guideFallbacks, accountScope(p.cacheOwnerEmail || '')),
+          quickAnswers: Object.fromEntries(Object.entries(p.quickAnswers ?? {}).filter(([k]) => p.cacheOwnerEmail && quickOwner(k) === accountScope(p.cacheOwnerEmail))),
           guideProgress: restoreProgress(p.guideProgress, accountScope(p.cacheOwnerEmail || '')),
           settings: { ...defaultSettings, ...(p.settings ?? {}) },
           // Pre-portal caches came from the old source and must be revalidated.

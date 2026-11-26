@@ -108,6 +108,30 @@ pub struct Assignment {
     /// converted to a percentage.
     #[serde(default)]
     pub grade_max: Option<f64>,
+    /// The assessment's own task description (`#intro` on its Moodle page), as plain text.
+    /// Captured while the detail page is already open for the submission status, so it
+    /// costs no extra request. Lets the AI Assistant explain requirements from the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Marking rubric shown on the assessment page ("Grading criteria"), if any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rubric: Vec<RubricCriterion>,
+}
+
+/// One criterion of a Moodle marking rubric, with its levels from lowest to highest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RubricCriterion {
+    pub criterion: String,
+    pub levels: Vec<RubricLevel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RubricLevel {
+    pub definition: String,
+    /// Score text as shown, e.g. "0 to 14" or "5".
+    pub score: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

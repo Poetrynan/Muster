@@ -73,6 +73,15 @@ export interface Assignment {
   categoryId?: number;
   /** Max score from the gradebook range, to convert a bare score into a percentage. */
   gradeMax?: number;
+  /** The assessment's own task description (plain text from its Moodle page). */
+  description?: string;
+  /** Marking rubric from the assessment page, levels lowest to highest. */
+  rubric?: RubricCriterion[];
+}
+
+export interface RubricCriterion {
+  criterion: string;
+  levels: { definition: string; score?: string | null }[];
 }
 
 /** Unit handbook (Unit Information section, `&section=1`). Structures MST's CMS blocks into individual sections. */
