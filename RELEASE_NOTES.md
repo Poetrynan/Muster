@@ -1,3 +1,26 @@
+# Muster v0.5.8
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.8_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.8_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.8_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.8_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.8_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [Muster_0.5.8_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.8/Muster_0.5.8_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.8/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Teaching weeks now follow Monash's academic calendar.** The course overview and study guide count standard semester teaching weeks, skip the mid-semester break, and stop showing a current week when teaching ends.
+- Muster caches the calendar for offline use. Courses outside standard semesters can still use dated Moodle module information.
+
+---
+
 # Muster v0.5.7
 
 ## Download
