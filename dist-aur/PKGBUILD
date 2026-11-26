@@ -3,7 +3,7 @@
 
 pkgname=muster-bin
 _pkgname=muster
-pkgver=0.5.6
+pkgver=0.5.7
 pkgrel=1
 pkgdesc="Unofficial desktop companion that collects your own Moodle course materials and deadlines"
 arch=('x86_64')
@@ -19,7 +19,7 @@ depends=(
 provides=("${_pkgname}")
 conflicts=("${_pkgname}")
 source_x86_64=(
-    "${pkgname}-${pkgver}.deb::https://github.com/Poetrynan/Muster/releases/download/v${pkgver}/muster_${pkgver}_amd64.deb"
+    "${pkgname}-${pkgver}.deb::https://github.com/Poetrynan/Muster/releases/download/v${pkgver}/Muster_${pkgver}_amd64.deb"
     "https://raw.githubusercontent.com/Poetrynan/Muster/v${pkgver}/LICENSE"
 )
 noextract=("${pkgname}-${pkgver}.deb")

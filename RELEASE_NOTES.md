@@ -1,3 +1,26 @@
+# Muster v0.5.7
+
+## Download
+
+| Platform | File |
+|---|---|
+| 🪟 Windows (recommended) | [Muster_0.5.7_x64-setup.exe](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_x64-setup.exe) |
+| 🪟 Windows (MSI) | [Muster_0.5.7_x64_en-US.msi](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_x64_en-US.msi) |
+| 🍏 macOS Apple Silicon | [Muster_0.5.7_aarch64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_aarch64.dmg) |
+| 🍏 macOS Intel | [Muster_0.5.7_x64.dmg](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_x64.dmg) |
+| 🐧 Linux (AppImage) | [Muster_0.5.7_amd64.AppImage](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_amd64.AppImage) |
+| 🐧 Linux (Debian/Ubuntu) | [Muster_0.5.7_amd64.deb](https://github.com/Poetrynan/Muster/releases/download/v0.5.7/Muster_0.5.7_amd64.deb) |
+| 🏹 Arch Linux (AUR) | [dist-aur/PKGBUILD](https://github.com/Poetrynan/Muster/tree/v0.5.7/dist-aur) |
+
+On Windows prefer the `-setup.exe`. On macOS you will need to allow the app on first launch (it is not notarised). On Linux, download the `.AppImage` (make executable and run) or install the `.deb` package.
+
+## Changes
+
+- **Corrected the FIT5222 Project grade breakdown.** Flatland Challenge WARMUP stays in your assignments as a practice activity and no longer uses any of the Project's 32% weight.
+- Grade breakdowns now show weighted points separately from each assessment's score percentage.
+
+---
+
 # Muster v0.5.6
 
 ## Download
